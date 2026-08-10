@@ -7,6 +7,7 @@
 - [x] サイドバー設定画面 (Webview View) の基盤構築
   - 説明: ユーザーがPainマトリクスを設定するためのReact製サイドバーの通信基盤。
   - Jules Memo: vscode.WebviewViewProviderを実装し、ViteでビルドしたReactアプリ(dist/assets)を読み込む形で疎通確認完了
+  - [x] (修正) Viteビルド後のアセット読み込み時に404エラーになる問題を修正（HTMLの `<base href>` タグ追加、Webview用URI変換、CSP/Nonce追加による相対パス解決の正常化）。
 - [x] エディタリアルタイム支援 (Hover / QuickFix) の基盤構築
   - 説明: 特定のキーワードに対してVS CodeのネイティブUIを出す基盤。
   - Jules Memo: vscode.HoverProviderとCodeActionProviderを`*`で登録し、functon等のTypo置換を行う基盤を作成完了
