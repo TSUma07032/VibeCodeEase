@@ -1,0 +1,4 @@
+﻿timestamp,user_id,group,category,action,target_id,value,payload
+2026-08-10T06:34:06.284Z,182094b2-cb44-4d47-bcdf-004656abc385,experiment,SYSTEM,SESSION_START,,,"Extension Activated"
+2026-08-10T06:34:10.911Z,182094b2-cb44-4d47-bcdf-004656abc385,experiment,EDITOR,WINDOW_BLUR,,0,""
+2026-08-10T06:34:13.564Z,182094b2-cb44-4d47-bcdf-004656abc385,experiment,EDITOR,WINDOW_FOCUS,,1,""
