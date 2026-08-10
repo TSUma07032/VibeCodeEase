@@ -4,8 +4,6 @@ import { VibeHoverProvider } from './core/HoverProvider';
 import { VibeCodeActionProvider } from './core/CodeActionProvider';
 
 export function activate(context: vscode.ExtensionContext) {
-	console.log('Congratulations, your extension "vibecodeease" is now active!');
-
 	const sidebarProvider = new SidebarProvider(context.extensionUri);
 	context.subscriptions.push(
 		vscode.window.registerWebviewViewProvider(
