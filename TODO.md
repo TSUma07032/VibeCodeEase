@@ -1,9 +1,9 @@
 # 開発ロードマップ & タスク状況
 
 ## 🧱 1. 基盤・ひな形作成
-- [ ] Jules用型定義の作成 (`src/types/index.ts`)
+- [x] Jules用型定義の作成 (`src/types/index.ts`)
   - 説明: PainCategory, InterventionLevel, UserPreferenceProfile, AnalysisResult 等のシステム全体で使う型定義。
-  - Jules Memo: (未着手)
+  - Jules Memo: `src/types/` 配下の複数のファイルに型定義を分割し、`index.ts` から一括エクスポートすることで保守性を向上させました。`vscode` パッケージの型に依存せず独立した型定義としたため、将来的な再利用性が高まっています。また、不正な値からの復帰をサポートするユーティリティ（クランプ関数等）を追加し、Mochaでテストを記述しました。
 - [x] サイドバー設定画面 (Webview View) の基盤構築
   - 説明: ユーザーがPainマトリクスを設定するためのReact製サイドバーの通信基盤。
   - Jules Memo: vscode.WebviewViewProviderを実装し、ViteでビルドしたReactアプリ(dist/assets)を読み込む形で疎通確認完了

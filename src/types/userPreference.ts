@@ -1,17 +1,10 @@
 import { PainCategory } from './painCategory';
-import { InterventionLevel } from './interventionLevel';
 
 /**
- * カテゴリごとの設定（介入レベルと閾値）
- */
-export interface CategoryPreference {
-  level: InterventionLevel;
-  threshold?: number; // 例: 0〜100など
-}
-
-/**
- * 将来的に「楽しい/わずらわしいの1次元ベクトル（行列）」を表現するための設定用インターフェース
+ * 各 PainCategory に対するユーザーの嗜好値
+ * 0.0 (とても楽しいので介入不要) 〜 1.0 (とてもわずらわしいので自動介入希望)
+ * 1次元ベクトルとして表現される
  */
 export interface UserPreferenceProfile {
-  preferences: Record<PainCategory, CategoryPreference>;
+  preferences: Record<PainCategory, number>;
 }
