@@ -6,9 +6,13 @@ export class VibeHoverProvider implements vscode.HoverProvider {
         if (range) {
             const word = document.getText(range);
             if (word === 'functon') {
-                return new vscode.Hover('Did you mean `function`?');
+                const md = new vscode.MarkdownString('$(lightbulb) **Did you mean:** `function`?');
+                md.supportThemeIcons = true;
+                return new vscode.Hover(md);
             } else if (word === 'if condtion:') {
-                return new vscode.Hover('Did you mean `if condition:`?');
+                const md = new vscode.MarkdownString('$(lightbulb) **Did you mean:** `if condition:`?');
+                md.supportThemeIcons = true;
+                return new vscode.Hover(md);
             }
         }
         return null;
