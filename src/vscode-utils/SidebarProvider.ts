@@ -19,8 +19,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     webviewView.webview.onDidReceiveMessage((data) => {
       switch (data.command) {
         case "UPDATE_PREFERENCE": {
-          vscode.window.showInformationMessage(
-            `Preference updated: ${data.data?.message || ""}`
+          vscode.window.setStatusBarMessage(
+            `$(check) Preference updated: ${data.data?.message || ""}`, 3000
           );
           break;
         }
