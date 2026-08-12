@@ -1,8 +1,18 @@
 /**
- * システムが検知する「わずらわしさ」の種類
+ * システムが検知する「わずらわしさ」のカテゴリ
  */
 export type PainCategory =
-  | 'SYNTAX_RIGOR'       // 構文の厳密さ
-  | 'FORMATTING'         // インデントや整形
-  | 'NAMING_MANAGEMENT'  // 変数名や関数名の管理
-  | 'SYNTAX_ERROR';      // 構文エラー
+  | 'SYNTAX_TYPO'              // タイポや細かい構文ミス
+  | 'INDENTATION_FORMATTING'   // インデントや整形
+  | 'VAR_FUNC_MANAGEMENT'      // 変数や関数の管理（命名、宣言など）
+  | 'SYNTAX_ERROR_HANDLING';   // ブロック構文などの重大な構文エラー
+
+/**
+ * 有効な PainCategory のリスト
+ */
+export const PAIN_CATEGORIES: PainCategory[] = [
+  'SYNTAX_TYPO',
+  'INDENTATION_FORMATTING',
+  'VAR_FUNC_MANAGEMENT',
+  'SYNTAX_ERROR_HANDLING'
+];
