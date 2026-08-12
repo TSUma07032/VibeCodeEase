@@ -19,8 +19,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     webviewView.webview.onDidReceiveMessage((data) => {
       switch (data.command) {
         case "UPDATE_PREFERENCE": {
+          // 🛡️ Sentinel: Sanitize user input to prevent UI spoofing via VS Code icon syntax $(icon-name)
+          const rawMessage = typeof data.data?.message === 'string' ? data.data.message : "";
+          const sanitizedMessage = rawMessage.replace(/\$\([^)]*\)/g, '');
+
           vscode.window.setStatusBarMessage(
-            `$(check) Preference updated: ${data.data?.message || ""}`, 3000
+            `$(check) Preference updated: ${sanitizedMessage}`, 3000
           );
           break;
         }
