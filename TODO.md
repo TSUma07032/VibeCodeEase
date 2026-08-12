@@ -11,9 +11,9 @@
 - [x] エディタリアルタイム支援 (Hover / QuickFix) の基盤構築
   - 説明: 特定のキーワードに対してVS CodeのネイティブUIを出す基盤。
   - Jules Memo: vscode.HoverProviderとCodeActionProviderを`*`で登録し、functon等のTypo置換を行う基盤を作成完了
-- [ ] VS Code ステータスバー（画面下部）への動作モード表示基盤
+- [x] VS Code ステータスバー（画面下部）への動作モード表示基盤
   - 説明: 現在の介入モード（例: `Assist: Silent`, `Assist: Suggestions Panel` 等）を非侵入型でリアルタイム表示するUI基盤。
-  - Jules Memo: (未着手)
+  - Jules Memo: `VibeStatusBar`クラスを実装し、ステータスバーへの非侵入なモード表示を実現しました。次は他の機能からのモード切り替えの連動を実装する必要があります。
 
 ## ⚙️ 2. コアロジック (Jules担当)
 - [ ] タイポ・構文エラーの検出ロジック (`src/core/analyzer.ts`)
