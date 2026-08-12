@@ -18,6 +18,7 @@ export class VibeCodeActionProvider implements vscode.CodeActionProvider {
         const functonIndex = line.text.indexOf('functon');
         if (functonIndex !== -1) {
             const fix = new vscode.CodeAction(`Change to 'function'`, vscode.CodeActionKind.QuickFix);
+            fix.isPreferred = true;
             fix.edit = new vscode.WorkspaceEdit();
             const typoRange = new vscode.Range(
                 range.start.line, functonIndex,
@@ -31,6 +32,7 @@ export class VibeCodeActionProvider implements vscode.CodeActionProvider {
         const conditionIndex = line.text.indexOf('if condtion:');
         if (conditionIndex !== -1) {
             const fix = new vscode.CodeAction(`Change to 'if condition:'`, vscode.CodeActionKind.QuickFix);
+            fix.isPreferred = true;
             fix.edit = new vscode.WorkspaceEdit();
             const typoRange = new vscode.Range(
                 range.start.line, conditionIndex,
