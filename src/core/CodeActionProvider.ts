@@ -17,7 +17,7 @@ export class VibeCodeActionProvider implements vscode.CodeActionProvider {
         // ⚡ Bolt: Replaced Regex match with indexOf for faster string matching on hot path
         const functonIndex = line.text.indexOf('functon');
         if (functonIndex !== -1) {
-            const fix = new vscode.CodeAction(`Change to 'function'`, vscode.CodeActionKind.QuickFix);
+            const fix = new vscode.CodeAction(`Change 'functon' to 'function'`, vscode.CodeActionKind.QuickFix);
             fix.isPreferred = true;
             fix.edit = new vscode.WorkspaceEdit();
             const typoRange = new vscode.Range(
@@ -31,7 +31,7 @@ export class VibeCodeActionProvider implements vscode.CodeActionProvider {
         // ⚡ Bolt: Replaced Regex match with indexOf for faster string matching on hot path
         const conditionIndex = line.text.indexOf('if condtion:');
         if (conditionIndex !== -1) {
-            const fix = new vscode.CodeAction(`Change to 'if condition:'`, vscode.CodeActionKind.QuickFix);
+            const fix = new vscode.CodeAction(`Change 'if condtion:' to 'if condition:'`, vscode.CodeActionKind.QuickFix);
             fix.isPreferred = true;
             fix.edit = new vscode.WorkspaceEdit();
             const typoRange = new vscode.Range(
