@@ -11,7 +11,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.options = {
       enableScripts: true,
-      localResourceRoots: [this._extensionUri],
+      // 🛡️ Sentinel: Restrict webview resource access to only the built dist directory,
+      // preventing arbitrary extension file access (Principle of Least Privilege).
+      localResourceRoots: [vscode.Uri.joinPath(this._extensionUri, "webview-ui", "dist")],
     };
 
     webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
