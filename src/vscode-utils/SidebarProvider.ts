@@ -25,9 +25,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           const rawMessage = typeof data.data?.message === 'string' ? data.data.message : "";
           const sanitizedMessage = rawMessage.replace(/\$\([^)]*\)/g, '');
 
+          // 🛡️ Sentinel: Limit string length to prevent UI freezing DoS attacks
+          const limitedMessage = sanitizedMessage.length > 200 ? sanitizedMessage.substring(0, 200) + "..." : sanitizedMessage;
+
           vscode.window.setStatusBarMessage(
-            `$(check) Preference updated: ${sanitizedMessage}`, 3000
+            `$(check) Preference updated: ${limitedMessage}`, 3000
           );
+          break;
+        }
+        default: {
+          // 🛡️ Sentinel: Safely ignore unrecognized commands to prevent unhandled processing
           break;
         }
       }
