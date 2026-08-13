@@ -7,3 +7,6 @@
 ## 2024-08-12 - Fast array lookups with Set
 **学び:** `parsePainCategory` のように、$O(n)$ の Array.includes を使用して頻繁に呼び出される文字列の妥当性検証ロジックがある場合、事前に Set を作成し $O(1)$ の Set.has を使用する方が高速である。
 **アクション:** 配列を用いた頻繁な静的文字列の探索においては、事前に Set を構築して参照する方法を優先する。
+## 2024-08-13 - Fast Clamping with Math.min and Math.max
+**学び:** TypeScript / V8 エンジンにおいて、数値のクランプ（範囲内に収める処理）を行う際、複数の `if` 条件式を用いて比較するよりも、`Math.min` と `Math.max` を組み合わせた組み込み関数を使用する方が大幅に高速である。
+**アクション:** 数値を特定の範囲に制限（クランプ）する処理では、条件分岐（`if (val < min) ...`）を避けて、可読性を損なわない `Math.min(Math.max(value, min), max)` パターンを優先的に使用する。
