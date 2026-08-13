@@ -4,3 +4,6 @@
 ## 2024-08-11 - Early Returns in Code Action Providers
 **Learning:** In VS Code extensions, `CodeActionProvider`s execute very frequently, and their logic runs even when the user requests an action kind that the provider does not support (e.g., requesting 'Refactor' when the provider only does 'QuickFix').
 **Action:** Always implement an early return check on `context.only.contains(vscode.CodeActionKind.YourKind)` at the beginning of `provideCodeActions` to skip unnecessary text parsing on hot paths.
+## 2024-08-12 - Fast array lookups with Set
+**学び:** `parsePainCategory` のように、$O(n)$ の Array.includes を使用して頻繁に呼び出される文字列の妥当性検証ロジックがある場合、事前に Set を作成し $O(1)$ の Set.has を使用する方が高速である。
+**アクション:** 配列を用いた頻繁な静的文字列の探索においては、事前に Set を構築して参照する方法を優先する。
