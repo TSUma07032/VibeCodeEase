@@ -20,9 +20,9 @@
   - 説明: 入力された不完全なコードからエラーの種類（PAIN 1: 構文・タイポ、PAIN 4: ブロック構文エラー等）と箇所を特定する。
   - Jules Memo: CodeAnalyzerを作成し、`functon`や`if condtion:`のタイポを検出してAnalysisResultの形式で返す基盤を実装しました。
 
-- [ ] 介入判定エンジン (サイレント修正 vs ポップアップ提案)
+- [x] 介入判定エンジン (サイレント修正 vs ポップアップ提案)
   - 説明: ユーザー設定（1次元ベクトル）とエラー内容に基づき、介入レベル（自動サイレント修正 / サジェストパネル提案 / スキップ）を動的に決定する。
-  - Jules Memo: (未着手)
+  - Jules Memo: `src/core/interventionEngine.ts` に `InterventionEngine` クラスを実装し、ユーザーの好みベクトルとPainCategoryから介入レベル (IGNORE, SUGGESTION, SILENT) を判定する処理を作成しました。関連するユニットテストも `src/test/interventionEngine.test.ts` に Mocha で追加しています。
 - [ ] AST（抽象構文木）操作・修正案生成ロジック
   - 説明: コード構造を解析し、PAIN 2（インデント自動調整）、PAIN 3（命名規則 camelCase 補正）、PAIN 4（ブロック外 return 等の移動案）などの具体的修正案テキストを生成する。
   - Jules Memo: (未着手)
@@ -52,3 +52,4 @@
 <!-- Julesへ: 作業中に気づいた課題、将来追加すべき機能、技術的負債、考慮漏れのエッジケースなどを発見した場合は、メインのロードマップは直接書き換えずに、以下に箇条書きで追記してください -->
 - [ ] VibeStatusBar に対して、介入判定エンジンやユーザー設定画面（Webview）からのモード変更イベントを連携させる処理を実装する。
 - [ ] CodeAnalyzerの検出結果をHoverProviderに統合する。
+- [ ] 実装した `InterventionEngine` をエディタ基盤（HoverやQuickFix）および CodeAnalyzer のフローと連携させる。
