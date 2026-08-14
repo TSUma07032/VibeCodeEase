@@ -10,3 +10,6 @@
 ## 2024-08-13 - Make CodeAction titles specific
 **Learning:** Generic QuickFix titles like "Change to 'function'" are ambiguous when there might be multiple typos or contexts on a line. Specific titles like "Change 'functon' to 'function'" provide immediate clarity.
 **Action:** Always make CodeAction titles concrete and specific, including the exact variable or text being changed, to improve clarity and developer confidence before applying the fix.
+## 2024-08-14 - 情報通知をステータスバーメッセージに変更
+**学び:** 単純な情報表示(`helloWorld`コマンドなど)において、`showInformationMessage`によるポップアップ表示はユーザーの作業を中断させる要因となる。
+**アクション:** 今後、軽微な情報通知はユーザーの集中を妨げないように、`setStatusBarMessage`（標準アイコンやタイムアウトを併用）を用いて控えめに表示する。
