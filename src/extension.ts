@@ -23,13 +23,31 @@ export function activate(context: vscode.ExtensionContext) {
 		})
 	);
 
+	const statusBar = new VibeStatusBar();
+	context.subscriptions.push(statusBar);
+
 	const disposable = vscode.commands.registerCommand('vibecodeease.helloWorld', () => {
-		vscode.window.showInformationMessage('Hello World from vibeCodeEase!');
+		vscode.window.setStatusBarMessage('$(check) Hello World from vibeCodeEase!', 3000);
 	});
 	context.subscriptions.push(disposable);
 
-	const statusBar = new VibeStatusBar();
-	context.subscriptions.push(statusBar);
+	const changeModeDisposable = vscode.commands.registerCommand('vibecodeease.changeMode', async () => {
+		const options: vscode.QuickPickItem[] = [
+			{ label: '$(lightbulb) SUGGESTION', description: 'Suggest fixes (Default)' },
+			{ label: '$(zap) SILENT', description: 'Silently fix issues' },
+			{ label: '$(eye-closed) IGNORE', description: 'Pause assistance' }
+		];
+		const selection = await vscode.window.showQuickPick(options, {
+			placeHolder: 'Select vibeCodeEase intervention mode...'
+		});
+
+		if (selection) {
+			const mode = selection.label.replace(/\$\([^)]*\)\s*/, '') as 'SUGGESTION' | 'SILENT' | 'IGNORE';
+			statusBar.updateMode(mode);
+			vscode.window.setStatusBarMessage(`$(check) Mode changed to ${mode}`, 3000);
+		}
+	});
+	context.subscriptions.push(changeModeDisposable);
 }
 
 export function deactivate() {}
