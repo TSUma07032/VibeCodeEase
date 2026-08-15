@@ -14,9 +14,10 @@ export class CodeAnalyzer {
       const lineText = lines[lineIndex];
 
       // 1. 'functon' タイポの検出
-      let functonMatch: RegExpExecArray | null;
-      const functonRegex = /functon/g;
-      while ((functonMatch = functonRegex.exec(lineText)) !== null) {
+      // 🛡️ Sentinel: Replaced vulnerable regular expressions with static string matching (indexOf)
+      // to prevent Regular Expression Denial of Service (ReDoS) attacks which could block the Extension Host.
+      let functonIndex = lineText.indexOf('functon');
+      while (functonIndex !== -1) {
         const interventions: ProposedIntervention[] = [
           {
             originalText: 'functon',
@@ -29,17 +30,20 @@ export class CodeAnalyzer {
           category: 'SYNTAX_TYPO',
           level: 'SUGGESTION', // 初期値としてSUGGESTIONとする（将来的に判定エンジンで書き換わる可能性あり）
           range: {
-            start: { line: lineIndex, character: functonMatch.index },
-            end: { line: lineIndex, character: functonMatch.index + 'functon'.length }
+            start: { line: lineIndex, character: functonIndex },
+            end: { line: lineIndex, character: functonIndex + 'functon'.length }
           },
           interventions
         });
+
+        functonIndex = lineText.indexOf('functon', functonIndex + 'functon'.length);
       }
 
       // 2. 'if condtion:' タイポの検出
-      let conditionMatch: RegExpExecArray | null;
-      const conditionRegex = /if condtion:/g;
-      while ((conditionMatch = conditionRegex.exec(lineText)) !== null) {
+      // 🛡️ Sentinel: Replaced vulnerable regular expressions with static string matching (indexOf)
+      // to prevent Regular Expression Denial of Service (ReDoS) attacks which could block the Extension Host.
+      let conditionIndex = lineText.indexOf('if condtion:');
+      while (conditionIndex !== -1) {
         const interventions: ProposedIntervention[] = [
           {
             originalText: 'if condtion:',
@@ -52,11 +56,13 @@ export class CodeAnalyzer {
           category: 'SYNTAX_TYPO',
           level: 'SUGGESTION',
           range: {
-            start: { line: lineIndex, character: conditionMatch.index },
-            end: { line: lineIndex, character: conditionMatch.index + 'if condtion:'.length }
+            start: { line: lineIndex, character: conditionIndex },
+            end: { line: lineIndex, character: conditionIndex + 'if condtion:'.length }
           },
           interventions
         });
+
+        conditionIndex = lineText.indexOf('if condtion:', conditionIndex + 'if condtion:'.length);
       }
     }
 
