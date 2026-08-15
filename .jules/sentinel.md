@@ -10,3 +10,7 @@
 **Vulnerability:** The extension set `localResourceRoots: [this._extensionUri]`, which allowed the Webview to request and access any file within the entire extension root directory (including source code, `package.json`, tests, logs, etc.).
 **Learning:** `localResourceRoots` defines the directories from which a webview can load local resources (using `vscode-resource:` or `asWebviewUri`). Exposing the entire extension root violates the Principle of Least Privilege and risks data exfiltration if the webview is compromised (e.g., via XSS).
 **Prevention:** Always restrict `localResourceRoots` to the most specific directories necessary, such as only the compiled UI assets directory (e.g., `webview-ui/dist`), preventing the webview from accessing arbitrary sensitive files within the extension workspace.
+## 2026-08-15 - [Medium] Fix Regular Expression Denial of Service (ReDoS) vulnerability
+**Vulnerability:** The extension used `RegExp.exec()` sequentially across all lines and string combinations in the `CodeAnalyzer`, potentially blocking the Extension Host thread and causing ReDoS.
+**Learning:** Sequential regular expression execution on uncontrolled input without bounds or timeouts can lead to severe performance degradation and potential denial of service, particularly in the single-threaded Extension Host environment of VS Code.
+**Prevention:** Avoid regular expressions for simple static string matching. Always prefer highly optimized, built-in string methods like `String.prototype.indexOf()` when matching exact literal strings.
