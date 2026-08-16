@@ -10,3 +10,6 @@
 ## 2024-08-13 - Make CodeAction titles specific
 **Learning:** Generic QuickFix titles like "Change to 'function'" are ambiguous when there might be multiple typos or contexts on a line. Specific titles like "Change 'functon' to 'function'" provide immediate clarity.
 **Action:** Always make CodeAction titles concrete and specific, including the exact variable or text being changed, to improve clarity and developer confidence before applying the fix.
+## 2024-08-14 - Smooth mode switching with showQuickPick and setStatusBarMessage
+**Learning:** For actions like changing the extension's mode, using `showQuickPick` with standard icons (`$(zap)`, `$(lightbulb)`) and a helpful placeholder provides a smooth, native selection experience. Confirming the selection with a subtle `setStatusBarMessage` instead of a popup avoids interrupting the developer's flow.
+**Action:** Always prefer `showQuickPick` for mode/list selections and confirm changes with non-intrusive feedback like `setStatusBarMessage` to maintain context and avoid disruptive UI.
