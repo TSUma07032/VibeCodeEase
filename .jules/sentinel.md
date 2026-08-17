@@ -10,3 +10,7 @@
 **Vulnerability:** The extension set `localResourceRoots: [this._extensionUri]`, which allowed the Webview to request and access any file within the entire extension root directory (including source code, `package.json`, tests, logs, etc.).
 **Learning:** `localResourceRoots` defines the directories from which a webview can load local resources (using `vscode-resource:` or `asWebviewUri`). Exposing the entire extension root violates the Principle of Least Privilege and risks data exfiltration if the webview is compromised (e.g., via XSS).
 **Prevention:** Always restrict `localResourceRoots` to the most specific directories necessary, such as only the compiled UI assets directory (e.g., `webview-ui/dist`), preventing the webview from accessing arbitrary sensitive files within the extension workspace.
+## 2024-08-13 - [Medium] テキストアナライザーのReDoS脆弱性を修正
+**脆弱性:** `src/core/analyzer.ts` において、巨大なユーザー入力のループ内で `RegExp.exec` (`/functon/g` および `/if condtion:/g`) が使用されていました。
+**学び:** ホットパス内での単純な静的文字列のマッチングにおいて、正規表現エンジンはパフォーマンスのオーバーヘッドを招き、ReDoS（Regular Expression Denial of Service）のリスクを引き起こす可能性があり、Extension Host をフリーズさせる危険があります。
+**予防策:** 単純な静的文字列のマッチングでは、正規表現エンジンに依存しない `String.prototype.indexOf` をループ内で使用することを常に優先します。
