@@ -10,3 +10,6 @@
 ## 2024-08-13 - Make CodeAction titles specific
 **Learning:** Generic QuickFix titles like "Change to 'function'" are ambiguous when there might be multiple typos or contexts on a line. Specific titles like "Change 'functon' to 'function'" provide immediate clarity.
 **Action:** Always make CodeAction titles concrete and specific, including the exact variable or text being changed, to improve clarity and developer confidence before applying the fix.
+## 2026-08-17 - Use QuickPick for explicit mode toggles
+**学び:** `showQuickPick` with standard VS Code icons (`$(zap)`, `$(lightbulb)`) and a helpful placeholder provides a smooth way to toggle modes without cluttering the UI, especially when confirmed via a non-intrusive `setStatusBarMessage`.
+**アクション:** When a quick mode toggle is needed, prefer `showQuickPick` with standard icons over disruptive popups or adding new UI dependencies.

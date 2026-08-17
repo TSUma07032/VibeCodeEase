@@ -7,6 +7,7 @@ export class VibeStatusBar {
     constructor() {
         this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
         this.statusBarItem.name = 'vibeCodeEase Mode';
+        this.statusBarItem.command = 'vibecodeease.toggleMode';
 
         // Initial state
         this.updateMode('SUGGESTION');

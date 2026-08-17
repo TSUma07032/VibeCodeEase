@@ -18,6 +18,10 @@
       {
         "command": "vibecodeease.helloWorld",
         "title": "Hello World"
+      },
+      {
+        "command": "vibecodeease.toggleMode",
+        "title": "vibeCodeEase: Toggle Mode"
       }
     ],
     "viewsContainers": {
