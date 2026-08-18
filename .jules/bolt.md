@@ -10,3 +10,6 @@
 ## 2024-08-13 - Fast Clamping with Math.min and Math.max
 **学び:** TypeScript / V8 エンジンにおいて、数値のクランプ（範囲内に収める処理）を行う際、複数の `if` 条件式を用いて比較するよりも、`Math.min` と `Math.max` を組み合わせた組み込み関数を使用する方が大幅に高速である。
 **アクション:** 数値を特定の範囲に制限（クランプ）する処理では、条件分岐（`if (val < min) ...`）を避けて、可読性を損なわない `Math.min(Math.max(value, min), max)` パターンを優先的に使用する。
+## 2026-08-18 - String Match Optimization in Loops
+**学び:** ループ内で毎回 `RegExp.exec()` を生成・実行するのは、静的な文字列検索の場合、極めて非効率である。
+**アクション:** 静的な部分文字列の検索には、常に `String.prototype.indexOf()` を使用し、正規表現エンジンのオーバーヘッドを回避する。
