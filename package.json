@@ -18,6 +18,10 @@
       {
         "command": "vibecodeease.helloWorld",
         "title": "Hello World"
+      },
+      {
+        "command": "vibecodeease.changeMode",
+        "title": "vibeCodeEase: Change Assistance Mode"
       }
     ],
     "viewsContainers": {
