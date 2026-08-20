@@ -51,4 +51,6 @@
 ## 💡 Julesからの提案 (Backlog)
 <!-- Julesへ: 作業中に気づいた課題、将来追加すべき機能、技術的負債、考慮漏れのエッジケースなどを発見した場合は、メインのロードマップは直接書き換えずに、以下に箇条書きで追記してください -->
 - [ ] VibeStatusBar に対して、介入判定エンジンやユーザー設定画面（Webview）からのモード変更イベントを連携させる処理を実装する。
-- [ ] CodeAnalyzerの検出結果をHoverProviderに統合する。
+- [x] CodeAnalyzerの検出結果をHoverProviderに統合する。
+  - Jules Memo: `VibeHoverProvider` で `CodeAnalyzer` を利用するように変更し、ハードコードされていたタイポ判定を排除しました。また、Hoverは頻繁に実行されるため、documentのURIとバージョンを利用した解析結果のキャッシュ機構を実装し、パフォーマンス低下を防いでいます。
+- [ ] CodeAnalyzerの検出結果をCodeActionProviderにも統合し、ハードコードを完全に排除する。
