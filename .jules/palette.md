@@ -10,3 +10,6 @@
 ## 2024-08-13 - Make CodeAction titles specific
 **Learning:** Generic QuickFix titles like "Change to 'function'" are ambiguous when there might be multiple typos or contexts on a line. Specific titles like "Change 'functon' to 'function'" provide immediate clarity.
 **Action:** Always make CodeAction titles concrete and specific, including the exact variable or text being changed, to improve clarity and developer confidence before applying the fix.
+## 2026-08-20 - Add clickable status bar with intuitive mode switching via QuickPick
+**学び:** StatusBarItemにコマンドを紐付け、`showQuickPick`を使用することで、目立たず直感的に設定変更を行える。QuickPickのアイテムに標準のThemeIconを使用することで、視覚的な手がかりを提供できる。
+**アクション:** ユーザーの作業フローを妨げずにグローバル設定やモードを切り替える際には、クリック可能なStatusBarItemと`showQuickPick`を組み合わせるパターンを活用する。
