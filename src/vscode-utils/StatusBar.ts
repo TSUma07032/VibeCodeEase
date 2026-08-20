@@ -7,6 +7,7 @@ export class VibeStatusBar {
     constructor() {
         this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
         this.statusBarItem.name = 'vibeCodeEase Mode';
+        this.statusBarItem.command = 'vibecodeease.switchMode';
 
         // Initial state
         this.updateMode('SUGGESTION');
@@ -17,15 +18,16 @@ export class VibeStatusBar {
         switch (level) {
             case 'SILENT':
                 this.statusBarItem.text = '$(zap) Assist: Silent';
-                this.statusBarItem.tooltip = 'vibeCodeEase is silently fixing issues in the background';
+                this.statusBarItem.tooltip = 'vibeCodeEase is silently fixing issues in the background (Click to change)';
                 break;
             case 'SUGGESTION':
                 this.statusBarItem.text = '$(lightbulb) Assist: Suggest';
-                this.statusBarItem.tooltip = 'vibeCodeEase is suggesting fixes for issues';
+                this.statusBarItem.tooltip = 'vibeCodeEase is suggesting fixes for issues (Click to change)';
                 break;
             case 'IGNORE':
-                this.statusBarItem.text = '$(eye-closed) Assist: Off';
-                this.statusBarItem.tooltip = 'vibeCodeEase assistance is currently paused';
+                // Note: since we can't use $(eye-closed), we'll use a different valid standard icon like $(circle-slash) or simply text
+                this.statusBarItem.text = '$(chrome-close) Assist: Off';
+                this.statusBarItem.tooltip = 'vibeCodeEase assistance is currently paused (Click to change)';
                 break;
         }
     }
