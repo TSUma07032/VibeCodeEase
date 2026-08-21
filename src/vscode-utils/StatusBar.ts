@@ -3,10 +3,33 @@ import { InterventionLevel } from '../types';
 
 export class VibeStatusBar {
     private statusBarItem: vscode.StatusBarItem;
+    private commandDisposable: vscode.Disposable;
 
     constructor() {
         this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
         this.statusBarItem.name = 'vibeCodeEase Mode';
+        this.statusBarItem.command = 'vibecodeease.switchMode';
+
+        this.commandDisposable = vscode.commands.registerCommand('vibecodeease.switchMode', async () => {
+            interface ModeQuickPickItem extends vscode.QuickPickItem {
+                mode: InterventionLevel;
+            }
+
+            const options: ModeQuickPickItem[] = [
+                { label: '$(zap) SILENT', description: 'Silently fix issues in the background', mode: 'SILENT' },
+                { label: '$(lightbulb) SUGGESTION', description: 'Suggest fixes for issues', mode: 'SUGGESTION' },
+                { label: '$(eye-closed) IGNORE', description: 'Turn off assistance', mode: 'IGNORE' }
+            ];
+
+            const selected = await vscode.window.showQuickPick(options, {
+                placeHolder: 'Select vibeCodeEase intervention mode'
+            });
+
+            if (selected) {
+                this.updateMode(selected.mode);
+                vscode.window.setStatusBarMessage(`$(check) vibeCodeEase mode changed to ${selected.mode}`, 3000);
+            }
+        });
 
         // Initial state
         this.updateMode('SUGGESTION');
@@ -32,5 +55,6 @@ export class VibeStatusBar {
 
     public dispose() {
         this.statusBarItem.dispose();
+        this.commandDisposable.dispose();
     }
 }
