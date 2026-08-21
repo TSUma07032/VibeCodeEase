@@ -10,3 +10,6 @@
 ## 2024-08-13 - Make CodeAction titles specific
 **Learning:** Generic QuickFix titles like "Change to 'function'" are ambiguous when there might be multiple typos or contexts on a line. Specific titles like "Change 'functon' to 'function'" provide immediate clarity.
 **Action:** Always make CodeAction titles concrete and specific, including the exact variable or text being changed, to improve clarity and developer confidence before applying the fix.
+## 2024-08-14 - Mode switching via Status Bar and QuickPick
+**Learning:** Assigning a command to a Status Bar item (`.command`) allows it to become an interactive entry point. Using `showQuickPick` with a helpful `placeHolder` and standard theme icons is a non-intrusive way to present configuration choices without taking developers out of their flow. Confirming changes via a subtle `setStatusBarMessage` reinforces a positive UX.
+**Action:** When implementing mode switches or simple configuration options, leverage the Status Bar with QuickPick menus instead of intrusive modal dialogs or new Webview panels, ensuring proper `placeHolder` strings are set.
