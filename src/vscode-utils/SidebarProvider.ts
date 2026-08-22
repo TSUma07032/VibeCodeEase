@@ -19,6 +19,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
     webviewView.webview.onDidReceiveMessage((data) => {
+      // 🛡️ Sentinel: Validate structural payload to prevent Extension Host crashes (DoS)
+      if (!data || typeof data !== 'object' || typeof data.command !== 'string') {
+        return;
+      }
+
       switch (data.command) {
         case "UPDATE_PREFERENCE": {
           // 🛡️ Sentinel: Sanitize user input to prevent UI spoofing via VS Code icon syntax $(icon-name)
