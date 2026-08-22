@@ -10,3 +10,8 @@
 **Vulnerability:** The extension set `localResourceRoots: [this._extensionUri]`, which allowed the Webview to request and access any file within the entire extension root directory (including source code, `package.json`, tests, logs, etc.).
 **Learning:** `localResourceRoots` defines the directories from which a webview can load local resources (using `vscode-resource:` or `asWebviewUri`). Exposing the entire extension root violates the Principle of Least Privilege and risks data exfiltration if the webview is compromised (e.g., via XSS).
 **Prevention:** Always restrict `localResourceRoots` to the most specific directories necessary, such as only the compiled UI assets directory (e.g., `webview-ui/dist`), preventing the webview from accessing arbitrary sensitive files within the extension workspace.
+
+## 2024-05-24 - Webview メッセージの構造的検証の欠如
+**脆弱性:** `onDidReceiveMessage` が受け取るペイロードの構造 (`null` やオブジェクトでない場合、または `command` プロパティが文字列でない場合) が検証されておらず、Extension Host がクラッシュ (DoS) する可能性があった。
+**学び:** Webview からのデータは信頼できない入力として扱うべきであり、`typeof data === 'object'` やプロパティの型チェックなどを怠ると、予期せぬ例外が発生する。
+**予防策:** `onDidReceiveMessage` の先頭で、ペイロードが期待される構造 (`object` かつ `command` が `string` かなど) であるか必ず検証し、不正な場合は早期リターンする (Fail Securely) ようにする。
