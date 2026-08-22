@@ -30,6 +30,27 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const statusBar = new VibeStatusBar();
 	context.subscriptions.push(statusBar);
+
+	interface ModeQuickPickItem extends vscode.QuickPickItem {
+		mode: 'SILENT' | 'SUGGESTION' | 'IGNORE';
+	}
+
+	const switchModeCommand = vscode.commands.registerCommand('vibecodeease.switchMode', async () => {
+		const items: ModeQuickPickItem[] = [
+			{ label: '$(zap) Silent', description: 'Silently fix issues in the background', mode: 'SILENT' },
+			{ label: '$(lightbulb) Suggestion', description: 'Suggest fixes for issues', mode: 'SUGGESTION' },
+			{ label: '$(eye-closed) Ignore', description: 'Pause assistance', mode: 'IGNORE' }
+		];
+		const selected = await vscode.window.showQuickPick(items, {
+			placeHolder: 'Select vibeCodeEase assistance mode'
+		});
+
+		if (selected) {
+			statusBar.updateMode(selected.mode);
+			vscode.window.setStatusBarMessage(`$(check) Mode switched to ${selected.label.replace(/^\$\([\w-]+\)\s*/, '')}`, 3000);
+		}
+	});
+	context.subscriptions.push(switchModeCommand);
 }
 
 export function deactivate() {}
