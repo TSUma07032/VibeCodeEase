@@ -3,6 +3,11 @@ import { SidebarProvider } from './vscode-utils/SidebarProvider';
 import { VibeHoverProvider } from './core/HoverProvider';
 import { VibeCodeActionProvider } from './core/CodeActionProvider';
 import { VibeStatusBar } from './vscode-utils/StatusBar';
+import { InterventionLevel } from './types';
+
+interface ModeQuickPickItem extends vscode.QuickPickItem {
+    mode: InterventionLevel;
+}
 
 export function activate(context: vscode.ExtensionContext) {
 	const sidebarProvider = new SidebarProvider(context.extensionUri);
@@ -30,6 +35,36 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const statusBar = new VibeStatusBar();
 	context.subscriptions.push(statusBar);
+
+	const switchModeDisposable = vscode.commands.registerCommand('vibecodeease.switchMode', async () => {
+		const options: ModeQuickPickItem[] = [
+			{
+				label: '$(zap) Assist: Silent',
+				description: 'Silently fixing issues in the background',
+				mode: 'SILENT'
+			},
+			{
+				label: '$(lightbulb) Assist: Suggest',
+				description: 'Suggesting fixes for issues',
+				mode: 'SUGGESTION'
+			},
+			{
+				label: '$(eye-closed) Assist: Off',
+				description: 'Assistance is currently paused',
+				mode: 'IGNORE'
+			}
+		];
+
+		const selection = await vscode.window.showQuickPick(options, {
+			placeHolder: 'Select vibeCodeEase assistance mode'
+		});
+
+		if (selection) {
+			statusBar.updateMode(selection.mode);
+			vscode.window.setStatusBarMessage(`$(check) vibeCodeEase mode changed to: ${selection.mode}`, 3000);
+		}
+	});
+	context.subscriptions.push(switchModeDisposable);
 }
 
 export function deactivate() {}
