@@ -10,3 +10,6 @@
 ## 2024-08-13 - Make CodeAction titles specific
 **Learning:** Generic QuickFix titles like "Change to 'function'" are ambiguous when there might be multiple typos or contexts on a line. Specific titles like "Change 'functon' to 'function'" provide immediate clarity.
 **Action:** Always make CodeAction titles concrete and specific, including the exact variable or text being changed, to improve clarity and developer confidence before applying the fix.
+## 2024-08-14 - Use showQuickPick and interactive Status Bar for mode switching
+**学び:** 開発者の作業を中断させないために、ポップアップを避けてステータスバーをクリック可能（`command`プロパティ）にし、設定変更には`vscode.window.showQuickPick`（適切なテーマアイコンやプレースホルダー付き）を活用することで、シームレスなモード変更と状態表示が可能になった。
+**アクション:** 拡張機能のモードや設定を切り替える際は、常にクリック可能なステータスバーと`showQuickPick`を組み合わせ、選択後のフィードバックには`setStatusBarMessage`（タイムアウト付き）を使用する。
