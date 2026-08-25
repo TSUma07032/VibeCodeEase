@@ -10,3 +10,7 @@
 **Vulnerability:** The extension set `localResourceRoots: [this._extensionUri]`, which allowed the Webview to request and access any file within the entire extension root directory (including source code, `package.json`, tests, logs, etc.).
 **Learning:** `localResourceRoots` defines the directories from which a webview can load local resources (using `vscode-resource:` or `asWebviewUri`). Exposing the entire extension root violates the Principle of Least Privilege and risks data exfiltration if the webview is compromised (e.g., via XSS).
 **Prevention:** Always restrict `localResourceRoots` to the most specific directories necessary, such as only the compiled UI assets directory (e.g., `webview-ui/dist`), preventing the webview from accessing arbitrary sensitive files within the extension workspace.
+## 2026-08-25 - Fix Permissive Activation Events
+**Vulnerability:** `package.json` had `"activationEvents": ["*"]`, forcing the extension to activate immediately upon VS Code startup.
+**Learning:** Using `*` blocks the critical startup path of the editor and degrades performance/security. For VS Code versions ^1.125.0, explicit activation for commands and views is no longer needed (implicit activation). However, global language features (Hover, CodeActions) require an event like `onStartupFinished` so they become active after the initial editor startup.
+**Prevention:** Avoid `"activationEvents": ["*"]`. Use `"onStartupFinished"` for background tasks or rely on implicit activation for user-triggered features (commands/views).
