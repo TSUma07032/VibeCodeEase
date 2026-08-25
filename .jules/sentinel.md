@@ -14,3 +14,7 @@
 **Vulnerability:** `package.json` had `"activationEvents": ["*"]`, forcing the extension to activate immediately upon VS Code startup.
 **Learning:** Using `*` blocks the critical startup path of the editor and degrades performance/security. For VS Code versions ^1.125.0, explicit activation for commands and views is no longer needed (implicit activation). However, global language features (Hover, CodeActions) require an event like `onStartupFinished` so they become active after the initial editor startup.
 **Prevention:** Avoid `"activationEvents": ["*"]`. Use `"onStartupFinished"` for background tasks or rely on implicit activation for user-triggered features (commands/views).
+## 2026-08-25 - [Medium] Prevent DoS via Unvalidated Webview Payloads
+**Vulnerability:** The `onDidReceiveMessage` callback assumed that the incoming `data` object was a non-null object with a string `command` property, missing explicit structural validation.
+**Learning:** Sending unexpected payload types from a compromised or buggy Webview could cause unhandled exceptions and potentially crash the Extension Host (DoS) if property access on null/undefined is attempted further down the line.
+**Prevention:** Implement strict structural payload validation in Webview message handlers (e.g., verifying `typeof data === 'object'`, checking for `null`, and ensuring `typeof data.command === 'string'`) before attempting to process the message.
