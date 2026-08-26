@@ -1,6 +1,21 @@
 import * as vscode from 'vscode';
+import { CodeAnalyzer } from './analyzer';
+import { AnalysisResult } from '../types';
+
+interface CachedAnalysis {
+    version: number;
+    results: AnalysisResult[];
+}
 
 export class VibeCodeActionProvider implements vscode.CodeActionProvider {
+    private analyzer: CodeAnalyzer;
+    private cache: Map<string, CachedAnalysis>;
+
+    constructor() {
+        this.analyzer = new CodeAnalyzer();
+        this.cache = new Map<string, CachedAnalysis>();
+    }
+
     provideCodeActions(document: vscode.TextDocument, range: vscode.Range | vscode.Selection, context: vscode.CodeActionContext, token: vscode.CancellationToken): vscode.ProviderResult<(vscode.CodeAction | vscode.Command)[]> {
         // ⚡ Bolt: Early return if the requested code action kind does not intersect with QuickFix.
         // Benchmark: Skipping unnecessary line parsing for non-QuickFix requests (e.g., refactor)
@@ -9,37 +24,43 @@ export class VibeCodeActionProvider implements vscode.CodeActionProvider {
             return [];
         }
 
-        const actions: vscode.CodeAction[] = [];
+        // Cache logic
+        const uri = document.uri.toString();
+        let cached = this.cache.get(uri);
 
-        // Also check if the whole line has the typo, as CodeActions are usually requested on a line/selection
-        const line = document.lineAt(range.start.line);
-
-        // ⚡ Bolt: Replaced Regex match with indexOf for faster string matching on hot path
-        const functonIndex = line.text.indexOf('functon');
-        if (functonIndex !== -1) {
-            const fix = new vscode.CodeAction(`Change 'functon' to 'function'`, vscode.CodeActionKind.QuickFix);
-            fix.isPreferred = true;
-            fix.edit = new vscode.WorkspaceEdit();
-            const typoRange = new vscode.Range(
-                range.start.line, functonIndex,
-                range.start.line, functonIndex + 'functon'.length
-            );
-            fix.edit.replace(document.uri, typoRange, 'function');
-            actions.push(fix);
+        if (!cached || cached.version !== document.version) {
+            const results = this.analyzer.analyze(document.getText());
+            cached = {
+                version: document.version,
+                results: results
+            };
+            this.cache.set(uri, cached);
         }
 
-        // ⚡ Bolt: Replaced Regex match with indexOf for faster string matching on hot path
-        const conditionIndex = line.text.indexOf('if condtion:');
-        if (conditionIndex !== -1) {
-            const fix = new vscode.CodeAction(`Change 'if condtion:' to 'if condition:'`, vscode.CodeActionKind.QuickFix);
-            fix.isPreferred = true;
-            fix.edit = new vscode.WorkspaceEdit();
-            const typoRange = new vscode.Range(
-                range.start.line, conditionIndex,
-                range.start.line, conditionIndex + 'if condtion:'.length
+        const actions: vscode.CodeAction[] = [];
+
+        for (const result of cached.results) {
+            const resultRange = new vscode.Range(
+                result.range.start.line, result.range.start.character,
+                result.range.end.line, result.range.end.character
             );
-            fix.edit.replace(document.uri, typoRange, 'if condition:');
-            actions.push(fix);
+
+            // Check if the code action requested range intersects with our finding
+            // When user triggers code action (e.g. Cmd+.), the range is usually the cursor position or selection
+            // We provide the action if the cursor is anywhere on the line of the error to be more forgiving,
+            // or if the cursor explicitly touches the result range.
+            if (range.contains(resultRange.start) || range.contains(resultRange.end) || range.intersection(resultRange) || range.start.line === resultRange.start.line) {
+                for (const intervention of result.interventions) {
+                    if (intervention.replacementText) {
+                        const title = `Change '${intervention.originalText}' to '${intervention.replacementText}'`;
+                        const fix = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
+                        fix.isPreferred = true;
+                        fix.edit = new vscode.WorkspaceEdit();
+                        fix.edit.replace(document.uri, resultRange, intervention.replacementText);
+                        actions.push(fix);
+                    }
+                }
+            }
         }
 
         return actions;

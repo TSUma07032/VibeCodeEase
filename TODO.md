@@ -53,4 +53,7 @@
 - [ ] VibeStatusBar に対して、介入判定エンジンやユーザー設定画面（Webview）からのモード変更イベントを連携させる処理を実装する。
 - [x] CodeAnalyzerの検出結果をHoverProviderに統合する。
   - Jules Memo: HoverProviderにCodeAnalyzerを組み込み、ハードコードされたタイポ判定から動的な解析結果に基づく表示に変更しました。パフォーマンスのためにドキュメントURIとバージョンによるキャッシュを導入しました。
-- [ ] CodeAnalyzerの検出結果をCodeActionProviderに統合する。
+- [x] CodeAnalyzerの検出結果をCodeActionProviderに統合する。
+  - Jules Memo: CodeAnalyzerをCodeActionProviderに組み込み、ハードコードされていたロジックを削除しました。HoverProviderと同様のキャッシュ機構(ドキュメントURIとバージョンベース)を導入し、パフォーマンスを維持しています。
+
+- [ ] 介入判定エンジン (サイレント修正 vs ポップアップ提案) を実装し、ユーザー設定に基づいて CodeAction と Hover の表示を動的に制御する。
