@@ -10,3 +10,9 @@
 ## 2024-08-13 - Make CodeAction titles specific
 **Learning:** Generic QuickFix titles like "Change to 'function'" are ambiguous when there might be multiple typos or contexts on a line. Specific titles like "Change 'functon' to 'function'" provide immediate clarity.
 **Action:** Always make CodeAction titles concrete and specific, including the exact variable or text being changed, to improve clarity and developer confidence before applying the fix.
+## 2026-08-25 - Make Status Bar item clickable and integrate mode switching
+**学び:** StatusBarItem に `command` を割り当てることで、ステータスバーをクリッカブルなUIとして活用し、関連するアクション（モード切替など）を `showQuickPick` で提供できる。これにより、モード切り替えのための設定画面を開く手間が省け、開発者のフローが改善される。
+**アクション:** 拡張機能の現在の状態やモードを示す StatusBarItem には、可能であればその状態を切り替えたり詳細を設定したりするためのコマンドを割り当て、クリッカブルにすることで、より直感的でシームレスなUXを提供する。
+## 2026-08-25 - Sync UI with Global State
+**学び:** StatusBar などの UI コンポーネントを更新する際、単に表示を更新するだけでは不十分であり、拡張機能の実際の状態（GlobalState など）と同期させないと、ユーザーを誤認させ、機能的に不完全な体験を提供してしまう。
+**アクション:** ユーザーインターフェースの状態を変更するアクション（モード切り替えなど）を実装する際は、常に基礎となる状態管理機構（GlobalState、workspace configurationなど）への更新も含め、UIとバックエンドの状態を確実に同期させる。
