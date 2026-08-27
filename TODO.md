@@ -22,29 +22,55 @@
 
 - [ ] 介入判定エンジン (サイレント修正 vs ポップアップ提案)
   - 説明: ユーザー設定（1次元ベクトル）とエラー内容に基づき、介入レベル（自動サイレント修正 / サジェストパネル提案 / スキップ）を動的に決定する。
-  - Jules Memo: (未着手)
+  - Jules Memo: 型定義（`InterventionLevel` と `UserPreferenceProfile`）およびモード永続化（`GlobalState`）は実装済み。判定ロジックとProviderへの接続は未実装。
+  - [ ] PainCategoryごとの嗜好値から介入レベルを決定する純粋関数を実装する。
+  - [ ] `SILENT` / `SUGGESTION` / `IGNORE` の境界値と不正値の扱いを定義する。
+  - [ ] 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。
+  - [ ] `SILENT` 時の自動適用処理と、適用失敗時の通知方針を定義する。
 - [ ] AST（抽象構文木）操作・修正案生成ロジック
   - 説明: コード構造を解析し、PAIN 2（インデント自動調整）、PAIN 3（命名規則 camelCase 補正）、PAIN 4（ブロック外 return 等の移動案）などの具体的修正案テキストを生成する。
-  - Jules Memo: (未着手)
+  - Jules Memo: 現在はルールベースのタイポ検出と文字列置換案のみ。構文木を使った修正案生成は未実装。
+  - [ ] 対応言語と解析失敗時のフォールバック方針を決める。
+  - [ ] 検出結果と修正案（範囲・置換文字列・説明）の共通形式を整理する。
+  - [ ] インデント、命名、ブロック構文の順に修正案生成器を追加する。
+  - [ ] 既存の `CodeAction` へ安全に変換できる範囲編集を検証する。
 - [ ] LLM API連携による動的介入・解説生成:
   - 説明:静的なルールベース（タイポ等）に加え、ユーザーの状況や文脈に応じた解説や修正案をLLM経由で動的に生成する機能。
-  - Jules Memo: (未着手)
+  - Jules Memo: VS Code Language Model APIに加え、Gemini APIを使った「現在ファイルの解析 → 介入プラン提案 → 承認後の編集適用」まで実装済み。GeminiキーはSecretStorageに保存する。
+  - [x] APIキー等の機密情報をVS CodeのSecretStorageで管理する。
+  - [ ] 送信するコード範囲、同意、タイムアウト、キャンセルを定義する。
+  - [x] LLM応答のスキーマ検証と、無効な修正案の拒否処理を追加する。
 
 ## 🎨 3. フロントエンド UI (React) & インタラクション
 - [ ] Painマトリクス設定画面のUI実装
   - 説明: ユーザーが作業項目ごとの「楽しい/わずらわしい」の度合いをスライダー等で設定できる1次元ベクトルUI。
-  - Jules Memo: (未着手)
+  - Jules Memo: React画面は表示確認用の仮ボタンのみ。`PainCategory`ごとの入力UIは未実装。
+  - [ ] `PainCategory`一覧と表示名をUIで扱えるようにする。
+  - [ ] 0.0（楽しい）〜1.0（わずらわしい）の範囲入力、初期値、保存状態を表示する。
+  - [ ] 不正値を送信前にクランプまたは拒否する。
 - [ ] 拡張機能本体とのメッセージ同期処理
   - 説明: UIで変更した設定値をNode.js側に送信し、リアルタイムに反映させる処理。
-  - Jules Memo: (未着手)
+  - Jules Memo: Webviewの疎通と受信バリデーションはあるが、設定値の保存・取得処理は未実装。
+  - [ ] `WebviewMessage` の `type` / `payload` 契約を具体化する。
+  - [ ] `GET_PREFERENCE` と `UPDATE_PREFERENCE` の送受信を実装する。
+  - [ ] `GlobalState` にユーザー嗜好値を保存し、Webview初期表示へ返す。
+  - [ ] 受信値の型・カテゴリ・数値範囲をNode.js側でも検証する。
+  - [ ] 保存成功・失敗をUIへ通知する。
 - [ ] ワンタッチ適用インタラクション (`Tab to Apply`)
   - 説明: 提案パネルやHoverからTabキー1つで修正案をコードにワンタッチ適用するキーバインド・コマンド処理。
-  - Jules Memo: (未着手)
+  - Jules Memo: 現在はQuickFixを選択して適用する基盤まで。Tabキーによる適用フローは未実装。
+  - [ ] 提案のプレビューと適用を分離したコマンドを定義する。
+  - [ ] Tabキーの既存エディタ操作と競合しない起動条件を決める。
+  - [ ] 適用前後のドキュメントバージョンとUndo単位を検証する。
 
 ## 🧪 4. テスト & 品質
 - [ ] テキスト解析・介入判定ロジックのユニットテスト (Jest)
   - 説明: 不完全な入力やエッジケースに対する挙動を、VS Code APIをMock化してテスト。
-  - Jules Memo: (未着手)
+  - Jules Memo: Analyzer・型ユーティリティのMochaテストは存在する。介入判定、設定保存、Providerのモード別挙動は未検証。
+  - [ ] 介入判定の各モード、境界値、カテゴリ未定義時をテストする。
+  - [ ] `SILENT` / `SUGGESTION` / `IGNORE` ごとのHover・CodeActionをテストする。
+  - [ ] Webviewメッセージの不正payload、範囲外数値、未知typeをテストする。
+  - [ ] 実際のテストランナーをMocha/Jestのどちらに統一するか決め、スクリプトを整理する。
 
 ---
 
@@ -57,3 +83,10 @@
   - Jules Memo: CodeAnalyzerをCodeActionProviderに組み込み、ハードコードされていたロジックを削除しました。HoverProviderと同様のキャッシュ機構(ドキュメントURIとバージョンベース)を導入し、パフォーマンスを維持しています。
 
 - [ ] 介入判定エンジン (サイレント修正 vs ポップアップ提案) を実装し、ユーザー設定に基づいて CodeAction と Hover の表示を動的に制御する。
+- [ ] LLM Structured Outputs（Zod + JSON Schema）を導入する。
+  - 説明: LLMの介入プランをアプリケーション側の型定義から生成したJSON Schemaに拘束し、構造化された応答を型安全に受け取る。
+  - [ ] `LlmInterventionPlan` / `LlmEdit` に対応するZodスキーマを定義する。
+  - [ ] ZodスキーマからJSON Schemaを自動生成し、OpenAI等の直接APIのStructured Outputs（`strict: true`）へ渡す。
+  - [ ] 直接API用のLLMプロバイダー抽象化を追加し、VS Code Language Model APIと切り替え可能にする。
+  - [ ] Zodによるレスポンス再検証と、スキーマ不一致・拒否応答・タイムアウト時のエラー処理を追加する。
+  - [ ] 送信範囲、ユーザー同意、個人情報・秘密情報の除外方針を明文化する。

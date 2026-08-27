@@ -4,4 +4,5 @@ export * from './common';
 export * from './userPreference';
 export * from './analysisResult';
 export * from './webviewMessage';
+export * from './llmIntervention';
 export * from './utils';

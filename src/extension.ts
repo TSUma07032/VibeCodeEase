@@ -13,7 +13,7 @@ interface ModeQuickPickItem extends vscode.QuickPickItem {
 export function activate(context: vscode.ExtensionContext) {
 	GlobalState.getInstance().initialize(context);
 
-	const sidebarProvider = new SidebarProvider(context.extensionUri);
+	const sidebarProvider = new SidebarProvider(context.extensionUri, context.secrets);
 	context.subscriptions.push(
 		vscode.window.registerWebviewViewProvider(
 			"vibecodeease.sidebarView",
@@ -35,6 +35,26 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.showInformationMessage('Hello World from vibeCodeEase!');
 	});
 	context.subscriptions.push(disposable);
+
+	const configureGeminiKey = vscode.commands.registerCommand('vibecodeease.configureGeminiKey', async () => {
+		const apiKey = await vscode.window.showInputBox({
+			prompt: 'Gemini APIキーを入力してください。キーはVS CodeのSecretStorageに保存されます。',
+			password: true,
+			ignoreFocusOut: true,
+			placeHolder: 'AIza...'
+		});
+		if (apiKey === undefined) {
+			return;
+		}
+		if (!apiKey.trim()) {
+			await context.secrets.delete('vibecodeease.geminiApiKey');
+			vscode.window.showInformationMessage('Gemini APIキーを削除しました。');
+			return;
+		}
+		await context.secrets.store('vibecodeease.geminiApiKey', apiKey.trim());
+		vscode.window.showInformationMessage('Gemini APIキーを安全に保存しました。');
+	});
+	context.subscriptions.push(configureGeminiKey);
 
 	const statusBar = new VibeStatusBar();
 	context.subscriptions.push(statusBar);

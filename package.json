@@ -22,6 +22,10 @@
       {
         "command": "vibecodeease.switchMode",
         "title": "Switch vibeCodeEase Mode"
+      },
+      {
+        "command": "vibecodeease.configureGeminiKey",
+        "title": "vibeCodeEase: Configure Gemini API Key"
       }
     ],
     "viewsContainers": {
