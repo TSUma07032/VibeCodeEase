@@ -18,3 +18,7 @@
 **Vulnerability:** The `onDidReceiveMessage` callback assumed that the incoming `data` object was a non-null object with a string `command` property, missing explicit structural validation.
 **Learning:** Sending unexpected payload types from a compromised or buggy Webview could cause unhandled exceptions and potentially crash the Extension Host (DoS) if property access on null/undefined is attempted further down the line.
 **Prevention:** Implement strict structural payload validation in Webview message handlers (e.g., verifying `typeof data === 'object'`, checking for `null`, and ensuring `typeof data.command === 'string'`) before attempting to process the message.
+## 2024-08-25 - [High] Prevent Sensitive File Leakage and Prompt Injection
+**脆弱性:** LLMへのプロンプト構築時に、ファイルパス（例: `.env`, `.git`）のチェックが行われておらず、ユーザーの機密ファイルの内容が平文でLLMへ送信されるリスクがありました。また、ユーザーコードがサニタイズされずに直接プロンプトに埋め込まれていたため、ユーザーコード内のバッククォートによってプロンプトインジェクションが発生し、LLMの指示が上書きされる可能性がありました。
+**学び:** 拡張機能がエディタ上で任意のファイルにアクセスできる場合、LLMへ送信する内容に機密情報が含まれないよう、ファイルレベルでの事前検証が不可欠です。また、LLMの入力となるテキストは、プロンプト構造を破壊する特殊文字（例: ```）を無害化しなければなりません。
+**予防策:** `document.getText()` を呼び出してLLMに送信する前に、`document.fileName` が `.env` 等の機密パターンに一致しないかを検証し、アクセスをブロックします。さらに、コード内容に含まれるバッククォート（```）をエスケープまたは無害化して、プロンプトのデリミタとして認識されないようにします。
