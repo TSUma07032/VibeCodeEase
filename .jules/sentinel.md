@@ -18,3 +18,7 @@
 **Vulnerability:** The `onDidReceiveMessage` callback assumed that the incoming `data` object was a non-null object with a string `command` property, missing explicit structural validation.
 **Learning:** Sending unexpected payload types from a compromised or buggy Webview could cause unhandled exceptions and potentially crash the Extension Host (DoS) if property access on null/undefined is attempted further down the line.
 **Prevention:** Implement strict structural payload validation in Webview message handlers (e.g., verifying `typeof data === 'object'`, checking for `null`, and ensuring `typeof data.command === 'string'`) before attempting to process the message.
+## 2024-05-24 - [High] Prevent Data Leakage and Prompt Injection
+**脆弱性:** 未検証の機密ファイル（.env、.pemなど）がLLMに送信されるリスク、およびLLMプロンプトへのユーザーコード埋め込み時にデリミタが不足しており、プロンプトインジェクションの危険があった。
+**学び:** `document.fileName` の検証を怠ると、機密データが外部プロバイダに漏洩する。また、LLMのシステムプロンプトとユーザー入力の間に明確な境界線（デリミタ）がないと、ユーザー入力が指示として解釈される恐れがある。
+**予防策:** LLM呼び出し前に `validateDocument` 等を用いてファイルパス・名前を検証し、許可されていないファイルの送信をブロックする。さらに、LLMのプロンプトではユーザー入力部分を ``` などのMarkdownコードフェンスで囲み、システム指示とユーザーデータを明確に分離する。

@@ -38,7 +38,15 @@ interface GeminiModelsResponse {
 }
 
 export class LlmInterventionService {
+    private validateDocument(document: vscode.TextDocument): void {
+        const fileName = document.fileName.toLowerCase();
+        if (fileName.includes('.env') || fileName.includes('.pem') || fileName.includes('.key') || fileName.includes('.git')) {
+            throw new Error(`セキュリティ違反: 機密ファイル (${document.fileName}) はLLMに送信できません。`);
+        }
+    }
+
     public async createGeminiPlan(document: vscode.TextDocument, token: vscode.CancellationToken, apiKey: string): Promise<LlmInterventionPlan> {
+        this.validateDocument(document);
         const prompt = this.createPrompt(document);
 
             const modelsResponse = await this.request(
@@ -98,6 +106,7 @@ export class LlmInterventionService {
     }
 
     public async createPlan(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<LlmInterventionPlan> {
+        this.validateDocument(document);
         // Providerやモデル名を固定せず、現在のVS Code環境で利用可能なモデルを選ぶ。
         const models = await vscode.lm.selectChatModels();
         if (models.length === 0) {
@@ -130,7 +139,9 @@ export class LlmInterventionService {
             `File: ${document.fileName}`,
             `Language: ${document.languageId}`,
             'Content:',
-            document.getText()
+            '```',
+            document.getText(),
+            '```'
         ].join('\n');
     }
 
