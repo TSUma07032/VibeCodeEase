@@ -5,4 +5,5 @@ export * from './userPreference';
 export * from './analysisResult';
 export * from './webviewMessage';
 export * from './llmIntervention';
+export * from './preset';
 export * from './utils';

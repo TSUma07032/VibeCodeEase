@@ -13,6 +13,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         this.messageHandler = new WebviewMessageHandler(secrets);
     }
 
+    public getMessageHandler(): WebviewMessageHandler {
+        return this.messageHandler;
+    }
+
     public resolveWebviewView(webviewView: vscode.WebviewView): void {
         this._view = webviewView;
 

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { LlmInterventionService } from '../core/llmInterventionService';
-import { LlmInterventionPlan } from '../types';
+import { LlmInterventionPlan, PainCategory, PresetMode, PRESET_DEFINITIONS } from '../types';
+import { GlobalState } from '../state/globalState';
 
 export interface PendingPlan {
     documentUri: string;
@@ -8,13 +9,20 @@ export interface PendingPlan {
     plan: LlmInterventionPlan;
 }
 
+export type ActionCallback = (action: 'APPLY' | 'REJECT', plan: LlmInterventionPlan, documentUri: string) => void;
+
 export class WebviewMessageHandler {
     private pendingPlan?: PendingPlan;
+    private actionCallback?: ActionCallback;
 
     constructor(
         private readonly secrets: vscode.SecretStorage,
         private readonly llmService: LlmInterventionService = new LlmInterventionService()
     ) {}
+
+    public setActionCallback(callback: ActionCallback): void {
+        this.actionCallback = callback;
+    }
 
     public getPendingPlan(): PendingPlan | undefined {
         return this.pendingPlan;
@@ -29,9 +37,29 @@ export class WebviewMessageHandler {
             return;
         }
 
-        const message = data as { command: string; data?: { message?: unknown } };
+        const message = data as { command: string; payload?: unknown };
 
         switch (message.command) {
+            case 'GET_SETTINGS': {
+                this.sendCurrentSettings(webview);
+                break;
+            }
+            case 'SET_PRESET': {
+                const preset = message.payload as PresetMode;
+                if (preset === 'LEARNING' || preset === 'FLOW' || preset === 'ZEN' || preset === 'CUSTOM') {
+                    await GlobalState.getInstance().setPresetMode(preset);
+                    this.sendCurrentSettings(webview);
+                }
+                break;
+            }
+            case 'UPDATE_PREFERENCE_VALUE': {
+                const { category, value } = message.payload as { category: PainCategory; value: number };
+                if (typeof category === 'string' && typeof value === 'number') {
+                    await GlobalState.getInstance().updatePreference(category, value);
+                    this.sendCurrentSettings(webview);
+                }
+                break;
+            }
             case 'ANALYZE_CURRENT_FILE': {
                 await this.handleAnalyzeCurrentFile(webview);
                 break;
@@ -41,19 +69,29 @@ export class WebviewMessageHandler {
                 break;
             }
             case 'REJECT_PLAN': {
+                if (this.pendingPlan && this.actionCallback) {
+                    this.actionCallback('REJECT', this.pendingPlan.plan, this.pendingPlan.documentUri);
+                }
                 this.pendingPlan = undefined;
                 webview.postMessage({ type: 'PLAN_REJECTED' });
                 break;
             }
-            case 'UPDATE_PREFERENCE': {
-                this.handleUpdatePreference(message.data?.message);
-                break;
-            }
             default: {
-                // 🛡️ Sentinel: Safely ignore unrecognized commands to prevent unhandled processing
                 break;
             }
         }
+    }
+
+    public sendCurrentSettings(webview: vscode.Webview): void {
+        const state = GlobalState.getInstance();
+        webview.postMessage({
+            type: 'SETTINGS_DATA',
+            payload: {
+                presetMode: state.presetMode,
+                preferences: state.preferences.preferences,
+                presetDefinitions: PRESET_DEFINITIONS
+            }
+        });
     }
 
     private async handleAnalyzeCurrentFile(webview: vscode.Webview): Promise<void> {
@@ -76,7 +114,13 @@ export class WebviewMessageHandler {
                 documentVersion: editor.document.version,
                 plan
             };
-            webview.postMessage({ type: 'INTERVENTION_PLAN', payload: plan });
+            webview.postMessage({
+                type: 'INTERVENTION_PLAN',
+                payload: {
+                    plan,
+                    currentPreset: GlobalState.getInstance().presetMode
+                }
+            });
         } catch (error) {
             const message = error instanceof Error ? error.message : 'LLMによる解析に失敗しました。';
             webview.postMessage({ type: 'ERROR', payload: message });
@@ -105,21 +149,10 @@ export class WebviewMessageHandler {
         }
 
         const applied = await vscode.workspace.applyEdit(edit);
+        if (applied && this.actionCallback) {
+            this.actionCallback('APPLY', pending.plan, pending.documentUri);
+        }
         this.pendingPlan = undefined;
         webview.postMessage({ type: applied ? 'PLAN_APPLIED' : 'ERROR', payload: applied ? undefined : '変更を適用できませんでした。' });
-    }
-
-    private handleUpdatePreference(rawMessageInput: unknown): void {
-        // 🛡️ Sentinel: Sanitize user input to prevent UI spoofing via VS Code icon syntax $(icon-name)
-        const rawMessage = typeof rawMessageInput === 'string' ? rawMessageInput : '';
-        const sanitizedMessage = rawMessage.replace(/\$\([^)]*\)/g, '');
-
-        // 🛡️ Sentinel: Limit string length to prevent UI freezing DoS attacks
-        const limitedMessage = sanitizedMessage.length > 200 ? sanitizedMessage.substring(0, 200) + '...' : sanitizedMessage;
-
-        vscode.window.setStatusBarMessage(
-            `$(check) Preference updated: ${limitedMessage}`,
-            3000
-        );
     }
 }
