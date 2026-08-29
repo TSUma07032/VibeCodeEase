@@ -16,3 +16,6 @@
 ## 2026-08-25 - Sync UI with Global State
 **学び:** StatusBar などの UI コンポーネントを更新する際、単に表示を更新するだけでは不十分であり、拡張機能の実際の状態（GlobalState など）と同期させないと、ユーザーを誤認させ、機能的に不完全な体験を提供してしまう。
 **アクション:** ユーザーインターフェースの状態を変更するアクション（モード切り替えなど）を実装する際は、常に基礎となる状態管理機構（GlobalState、workspace configurationなど）への更新も含め、UIとバックエンドの状態を確実に同期させる。
+## 2024-08-27 - Add progress indicator for asynchronous LLM calls
+**学び:** 時間のかかる非同期処理（LLM API呼び出しなど）中にUIのフィードバックがないと、ユーザーは処理が動いているのかフリーズしているのか分からず不安になる。`vscode.window.withProgress` と `ProgressLocation.Window` を使うことで、邪魔にならずに進行状況を伝えることができる。
+**アクション:** 拡張機能内で実行に時間がかかる（数秒以上）API呼び出しや重い処理を行う際は、常に `vscode.window.withProgress` などの進捗インジケータを実装し、開発者に適切なフィードバックを提供する。
