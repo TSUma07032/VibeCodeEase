@@ -34,12 +34,13 @@
   - [ ] 検出結果と修正案（範囲・置換文字列・説明）の共通形式を整理する。
   - [ ] インデント、命名、ブロック構文の順に修正案生成器を追加する。
   - [ ] 既存の `CodeAction` へ安全に変換できる範囲編集を検証する。
-- [ ] LLM API連携による動的介入・解説生成:
+- [x] LLM API連携による動的介入・解説生成:
   - 説明:静的なルールベース（タイポ等）に加え、ユーザーの状況や文脈に応じた解説や修正案をLLM経由で動的に生成する機能。
   - Jules Memo: VS Code Language Model APIに加え、Gemini APIを使った「現在ファイルの解析 → 介入プラン提案 → 承認後の編集適用」まで実装済み。GeminiキーはSecretStorageに保存する。
   - [x] APIキー等の機密情報をVS CodeのSecretStorageで管理する。
+  - [x] LLM連携層のモジュール化・責務分離（PromptBuilder, PlanValidator, GeminiClient, VscodeLmClient, LlmInterventionService ファサード）。
+  - [x] LLM応答のスキーマ検証、oldText探索・改行オフセット変換、および無効な修正案の拒否処理を追加する。
   - [ ] 送信するコード範囲、同意、タイムアウト、キャンセルを定義する。
-  - [x] LLM応答のスキーマ検証と、無効な修正案の拒否処理を追加する。
 
 ## 🎨 3. フロントエンド UI (React) & インタラクション
 - [ ] Painマトリクス設定画面のUI実装
@@ -50,7 +51,7 @@
   - [ ] 不正値を送信前にクランプまたは拒否する。
 - [ ] 拡張機能本体とのメッセージ同期処理
   - 説明: UIで変更した設定値をNode.js側に送信し、リアルタイムに反映させる処理。
-  - Jules Memo: Webviewの疎通と受信バリデーションはあるが、設定値の保存・取得処理は未実装。
+  - Jules Memo: Webviewのメッセージ処理を `WebviewMessageHandler` に分離し、解析実行・プラン適用・サニタイズ処理を抽出完了。設定値の永続化同期は今後実装。
   - [ ] `WebviewMessage` の `type` / `payload` 契約を具体化する。
   - [ ] `GET_PREFERENCE` と `UPDATE_PREFERENCE` の送受信を実装する。
   - [ ] `GlobalState` にユーザー嗜好値を保存し、Webview初期表示へ返す。
@@ -64,13 +65,13 @@
   - [ ] 適用前後のドキュメントバージョンとUndo単位を検証する。
 
 ## 🧪 4. テスト & 品質
-- [ ] テキスト解析・介入判定ロジックのユニットテスト (Jest)
+- [ ] テキスト解析・介入判定ロジックのユニットテスト
   - 説明: 不完全な入力やエッジケースに対する挙動を、VS Code APIをMock化してテスト。
-  - Jules Memo: Analyzer・型ユーティリティのMochaテストは存在する。介入判定、設定保存、Providerのモード別挙動は未検証。
+  - Jules Memo: Analyzer・型ユーティリティに加え、PromptBuilder（スキーマ/プロンプト生成）および PlanValidator（CRLF改行オフセット解決、プラン検証、スキーマ不一致拒否）のMocha単体テストを整備済み（全22件合格）。
+  - [x] PromptBuilder / PlanValidator の単体テストを整備する。
   - [ ] 介入判定の各モード、境界値、カテゴリ未定義時をテストする。
   - [ ] `SILENT` / `SUGGESTION` / `IGNORE` ごとのHover・CodeActionをテストする。
   - [ ] Webviewメッセージの不正payload、範囲外数値、未知typeをテストする。
-  - [ ] 実際のテストランナーをMocha/Jestのどちらに統一するか決め、スクリプトを整理する。
 
 ---
 
