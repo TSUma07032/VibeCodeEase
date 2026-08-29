@@ -24,6 +24,7 @@
   - 説明: ユーザー設定（1次元ベクトル）とエラー内容に基づき、介入レベル（自動サイレント修正 / サジェストパネル提案 / スキップ）を動的に決定する。
   - Jules Memo: 型定義（`InterventionLevel` と `UserPreferenceProfile`）およびモード永続化（`GlobalState`）は実装済み。判定ロジックとProviderへの接続は未実装。
   - Jules Memo: `InterventionEngine`クラスを実装し、嗜好値に基づき介入レベルを決定するロジック（SILENT > 0.8, SUGGESTION > 0.3, 以外IGNORE）を追加しました。
+    - 2024-08-28 追記: `src/core/interventionEngine.ts`にて介入判定の純粋関数(`determineInterventionLevel`)を実装し、テストを記述しました。次はProvider側でこの関数を利用する必要があります。
   - [x] PainCategoryごとの嗜好値から介入レベルを決定する純粋関数を実装する。
   - [x] `SILENT` / `SUGGESTION` / `IGNORE` の境界値と不正値の扱いを定義する。
   - [ ] 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。
@@ -68,7 +69,7 @@
 - [ ] テキスト解析・介入判定ロジックのユニットテスト (Jest)
   - 説明: 不完全な入力やエッジケースに対する挙動を、VS Code APIをMock化してテスト。
   - Jules Memo: Analyzer・型ユーティリティのMochaテストは存在する。介入判定、設定保存、Providerのモード別挙動は未検証。
-  - [ ] 介入判定の各モード、境界値、カテゴリ未定義時をテストする。
+  - [x] 介入判定の各モード、境界値、カテゴリ未定義時をテストする。
   - [ ] `SILENT` / `SUGGESTION` / `IGNORE` ごとのHover・CodeActionをテストする。
   - [ ] Webviewメッセージの不正payload、範囲外数値、未知typeをテストする。
   - [ ] 実際のテストランナーをMocha/Jestのどちらに統一するか決め、スクリプトを整理する。
@@ -92,3 +93,4 @@
   - [ ] Zodによるレスポンス再検証と、スキーマ不一致・拒否応答・タイムアウト時のエラー処理を追加する。
   - [ ] 送信範囲、ユーザー同意、個人情報・秘密情報の除外方針を明文化する。
 - [ ] 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。
+- [ ] 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。(次にやるべきこと)
