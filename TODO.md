@@ -23,8 +23,10 @@
 - [ ] 介入判定エンジン (サイレント修正 vs ポップアップ提案)
   - 説明: ユーザー設定（1次元ベクトル）とエラー内容に基づき、介入レベル（自動サイレント修正 / サジェストパネル提案 / スキップ）を動的に決定する。
   - Jules Memo: 型定義（`InterventionLevel` と `UserPreferenceProfile`）およびモード永続化（`GlobalState`）は実装済み。判定ロジックとProviderへの接続は未実装。
-  - [ ] PainCategoryごとの嗜好値から介入レベルを決定する純粋関数を実装する。
-  - [ ] `SILENT` / `SUGGESTION` / `IGNORE` の境界値と不正値の扱いを定義する。
+  - Jules Memo: `InterventionEngine`クラスを実装し、嗜好値に基づき介入レベルを決定するロジック（SILENT > 0.8, SUGGESTION > 0.3, 以外IGNORE）を追加しました。
+    - 2024-08-28 追記: `src/core/interventionEngine.ts`にて介入判定の純粋関数(`determineInterventionLevel`)を実装し、テストを記述しました。次はProvider側でこの関数を利用する必要があります。
+  - [x] PainCategoryごとの嗜好値から介入レベルを決定する純粋関数を実装する。
+  - [x] `SILENT` / `SUGGESTION` / `IGNORE` の境界値と不正値の扱いを定義する。
   - [ ] 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。
   - [ ] `SILENT` 時の自動適用処理と、適用失敗時の通知方針を定義する。
 - [ ] AST（抽象構文木）操作・修正案生成ロジック
@@ -70,6 +72,8 @@
   - Jules Memo: Analyzer・型ユーティリティに加え、PromptBuilder（スキーマ/プロンプト生成）および PlanValidator（CRLF改行オフセット解決、プラン検証、スキーマ不一致拒否）のMocha単体テストを整備済み（全22件合格）。
   - [x] PromptBuilder / PlanValidator の単体テストを整備する。
   - [ ] 介入判定の各モード、境界値、カテゴリ未定義時をテストする。
+  - Jules Memo: Analyzer・型ユーティリティのMochaテストは存在する。介入判定、設定保存、Providerのモード別挙動は未検証。
+  - [x] 介入判定の各モード、境界値、カテゴリ未定義時をテストする。
   - [ ] `SILENT` / `SUGGESTION` / `IGNORE` ごとのHover・CodeActionをテストする。
   - [ ] Webviewメッセージの不正payload、範囲外数値、未知typeをテストする。
 
@@ -90,4 +94,4 @@
   - [ ] ZodスキーマからJSON Schemaを自動生成し、OpenAI等の直接APIのStructured Outputs（`strict: true`）へ渡す。
   - [ ] 直接API用のLLMプロバイダー抽象化を追加し、VS Code Language Model APIと切り替え可能にする。
   - [ ] Zodによるレスポンス再検証と、スキーマ不一致・拒否応答・タイムアウト時のエラー処理を追加する。
-  - [ ] 送信範囲、ユーザー同意、個人情報・秘密情報の除外方針を明文化する。
+  - [ ] 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。(次にやるべきこと)

@@ -12,6 +12,16 @@ export class LlmInterventionService {
     ) {}
 
     /**
+     * 機密ファイルへのアクセスを拒否するセキュリティ検証
+     */
+    private validateDocument(document: vscode.TextDocument): void {
+        const fileName = document.fileName.toLowerCase();
+        if (fileName.includes('.env') || fileName.includes('.pem') || fileName.includes('.key') || fileName.includes('.git') || fileName.includes('secrets') || fileName.includes('credentials')) {
+            throw new Error(`セキュリティ違反: 機密ファイル (${document.fileName}) はLLMに送信できません。`);
+        }
+    }
+
+    /**
      * Gemini REST API を使用してファイルの介入プラン（修正案）を作成する
      */
     public async createGeminiPlan(
@@ -19,6 +29,7 @@ export class LlmInterventionService {
         token: vscode.CancellationToken,
         apiKey: string
     ): Promise<LlmInterventionPlan> {
+        this.validateDocument(document);
         const prompt = buildInterventionPrompt(document);
         const rawResult = await this.geminiClient.generate(prompt, apiKey, token);
         return validatePlan(rawResult, document);
@@ -31,6 +42,7 @@ export class LlmInterventionService {
         document: vscode.TextDocument,
         token: vscode.CancellationToken
     ): Promise<LlmInterventionPlan> {
+        this.validateDocument(document);
         const prompt = buildInterventionPrompt(document);
         const rawResult = await this.vscodeLmClient.generate(prompt, token);
         return validatePlan(rawResult, document);
