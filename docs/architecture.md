@@ -7,10 +7,16 @@
 ## 1. プロジェクト概要
 
 - **名称**: `vibeCodeEase`
-- **目的**: 開発者の作業ストレス（Pain）の傾向に合わせ、タイポ修正やコード整形などの介入レベル（サイレント修正・サジェスト提案・スキップ）を動的に最適化するAIアシスタント拡張機能。
+- **目的**: 開発者の作業ストレス（Pain）傾向や学習ニーズに合わせ、タイポ修正や構文エラーなどの介入レベル（サイレント自動修正・サジェスト提案・自力解決スキップ）を動的に最適化する、AIアシスタント・学習支援拡張機能。
+- **主要機能**:
+  - **プリセットモード**: 🎓 学習モード (Learning), ⚡ フローモード (Flow), 🛠️ 職人モード (Zen), ⚙️ カスタム調整 (Custom)
+  - **介入判定エンジン**: ユーザーの嗜好値（0.0〜1.0）に基づき、エディタUIの介入レベルを動的に制御
+  - **言語不問のリアルタイム検知**: VS Code Diagnostics（言語サーバーの赤波線）をフックし、全言語のエラーを分類
+  - **保存時サイレント修正**: `onWillSaveTextDocument` によるタイポ等の安全な自動修正
+  - **行動ログ & 適応型提案**: ユーザーの受容パターンを分析し、最適なモード変更をプロアクティブに提案
 - **技術スタック**:
   - **Extension Host**: TypeScript, VS Code API (`vscode.lm`, `vscode.languages`, `SecretStorage`, `WebviewView`)
-  - **フロントエンド UI**: React, Vite, TypeScript, Vanilla CSS
+  - **フロントエンド UI**: React 19, Vite, TypeScript, Vanilla CSS (VS Code Native Theme variables)
   - **LLM連携**: Google Generative Language API (Gemini REST API), VS Code Language Model API
   - **テスト環境**: Mocha, `@vscode/test-cli`, `@vscode/test-electron`
 
@@ -22,19 +28,28 @@
 graph TB
     subgraph VS Code Editor Native
         DOC[Active TextDocument]
-        EDIT[WorkspaceEdit]
+        EDIT[WorkspaceEdit / TextEdit]
         HOVER_UI[Hover Tooltip]
         QUICKFIX_UI[QuickFix Menu]
         STATUS_UI[Status Bar]
+        DIAG[VS Code Diagnostics]
     end
 
     subgraph vibeCodeEase Extension Host
         EXT[extension.ts]
         
-        subgraph Core Analyzers & Providers
-            HP[HoverProvider]
-            CAP[CodeActionProvider]
+        subgraph Core Analyzers & Engine
+            IE[InterventionEngine]
             CA[CodeAnalyzer]
+            DS[DiagnosticsService]
+            SFS[SilentFixService]
+            HP[VibeHoverProvider]
+            CAP[VibeCodeActionProvider]
+        end
+
+        subgraph Research & Adaptive
+            ALS[ActionLogService]
+            AE[AdaptiveEngine]
         end
 
         subgraph LLM Integration Subsystem
@@ -54,11 +69,12 @@ graph TB
         subgraph State & Storage
             GS[GlobalState]
             SEC[SecretStorage]
+            CSV[(research_action_log.csv)]
         end
     end
 
     subgraph Webview UI (React)
-        REACT_APP[React App / Settings Panel]
+        REACT_APP[React App / Presets & Sliders]
     end
 
     subgraph External LLM APIs
@@ -72,6 +88,10 @@ graph TB
     EXT --> CAP
     EXT --> SB
     EXT --> GS
+    EXT --> DS
+    EXT --> SFS
+    EXT --> ALS
+    EXT --> AE
 
     SP --> WMH
     WMH <--> REACT_APP
@@ -81,9 +101,19 @@ graph TB
     EDIT --> DOC
 
     HP --> CA
+    HP --> IE
     CAP --> CA
+    CAP --> IE
     HP --> HOVER_UI
     CAP --> QUICKFIX_UI
+
+    DS --> DIAG
+    SFS --> DOC
+    SFS --> EDIT
+
+    WMH --> ALS
+    WMH --> AE
+    ALS --> CSV
 
     LIS --> PB
     LIS --> PV

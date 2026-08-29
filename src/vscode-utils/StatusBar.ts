@@ -1,38 +1,51 @@
 import * as vscode from 'vscode';
-import { InterventionLevel } from '../types';
 import { GlobalState } from '../state/globalState';
 
 export class VibeStatusBar {
     private statusBarItem: vscode.StatusBarItem;
+    private disposables: vscode.Disposable[] = [];
 
     constructor() {
         this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
         this.statusBarItem.name = 'vibeCodeEase Mode';
         this.statusBarItem.command = 'vibecodeease.switchMode';
 
-        // Initial state
-        this.updateMode(GlobalState.getInstance().mode);
+        this.updateState();
         this.statusBarItem.show();
+
+        // GlobalState の変更をリッスンして自動更新
+        const sub = GlobalState.getInstance().onDidChangeState(() => {
+            this.updateState();
+        });
+        this.disposables.push(sub);
     }
 
-    public updateMode(level: InterventionLevel) {
-        switch (level) {
-            case 'SILENT':
-                this.statusBarItem.text = '$(zap) Assist: Silent';
-                this.statusBarItem.tooltip = 'vibeCodeEase is silently fixing issues in the background (Click to change mode)';
+    public updateState() {
+        const state = GlobalState.getInstance();
+        const preset = state.presetMode;
+
+        switch (preset) {
+            case 'LEARNING':
+                this.statusBarItem.text = '$(mortar-board) Vibe: Learning';
+                this.statusBarItem.tooltip = 'vibeCodeEase: 学習モード (解説ヒント中心) - クリックで変更';
                 break;
-            case 'SUGGESTION':
-                this.statusBarItem.text = '$(lightbulb) Assist: Suggest';
-                this.statusBarItem.tooltip = 'vibeCodeEase is suggesting fixes for issues (Click to change mode)';
+            case 'FLOW':
+                this.statusBarItem.text = '$(zap) Vibe: Flow';
+                this.statusBarItem.tooltip = 'vibeCodeEase: フローモード (自動修正中心) - クリックで変更';
                 break;
-            case 'IGNORE':
-                this.statusBarItem.text = '$(eye-closed) Assist: Off';
-                this.statusBarItem.tooltip = 'vibeCodeEase assistance is currently paused (Click to change mode)';
+            case 'ZEN':
+                this.statusBarItem.text = '$(eye-closed) Vibe: Zen';
+                this.statusBarItem.tooltip = 'vibeCodeEase: 職人モード (介入最小) - クリックで変更';
+                break;
+            case 'CUSTOM':
+                this.statusBarItem.text = '$(settings) Vibe: Custom';
+                this.statusBarItem.tooltip = 'vibeCodeEase: カスタム設定 - クリックで変更';
                 break;
         }
     }
 
     public dispose() {
         this.statusBarItem.dispose();
+        this.disposables.forEach(d => d.dispose());
     }
 }

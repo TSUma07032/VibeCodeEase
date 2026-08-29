@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { CodeAnalyzer } from './analyzer';
 import { AnalysisResult } from '../types';
+import { GlobalState } from '../state/globalState';
 
 interface CachedAnalysis {
     version: number;
@@ -16,10 +17,12 @@ export class VibeCodeActionProvider implements vscode.CodeActionProvider {
         this.cache = new Map<string, CachedAnalysis>();
     }
 
-    provideCodeActions(document: vscode.TextDocument, range: vscode.Range | vscode.Selection, context: vscode.CodeActionContext, token: vscode.CancellationToken): vscode.ProviderResult<(vscode.CodeAction | vscode.Command)[]> {
-        // ⚡ Bolt: Early return if the requested code action kind does not intersect with QuickFix.
-        // Benchmark: Skipping unnecessary line parsing for non-QuickFix requests (e.g., refactor)
-        // reduces function execution time from ~19ms to ~10ms per 100,000 calls.
+    provideCodeActions(
+        document: vscode.TextDocument,
+        range: vscode.Range | vscode.Selection,
+        context: vscode.CodeActionContext,
+        _token: vscode.CancellationToken
+    ): vscode.ProviderResult<(vscode.CodeAction | vscode.Command)[]> {
         if (context.only && !context.only.contains(vscode.CodeActionKind.QuickFix)) {
             return [];
         }
@@ -37,6 +40,7 @@ export class VibeCodeActionProvider implements vscode.CodeActionProvider {
             this.cache.set(uri, cached);
         }
 
+        const globalState = GlobalState.getInstance();
         const actions: vscode.CodeAction[] = [];
 
         for (const result of cached.results) {
@@ -46,19 +50,23 @@ export class VibeCodeActionProvider implements vscode.CodeActionProvider {
                 break;
             }
 
+            // 介入判定: IGNORE の場合はQuickFixを抑制
+            const level = globalState.getInterventionLevel(result.category);
+            if (level === 'IGNORE') {
+                continue;
+            }
+
             const resultRange = new vscode.Range(
                 result.range.start.line, result.range.start.character,
                 result.range.end.line, result.range.end.character
             );
 
-            // Check if the code action requested range intersects with our finding
-            // When user triggers code action (e.g. Cmd+.), the range is usually the cursor position or selection
-            // We provide the action if the cursor is anywhere on the line of the error to be more forgiving,
-            // or if the cursor explicitly touches the result range.
             if (range.contains(resultRange.start) || range.contains(resultRange.end) || range.intersection(resultRange) || range.start.line === resultRange.start.line) {
                 for (const intervention of result.interventions) {
                     if (intervention.replacementText) {
-                        const title = `Change '${intervention.originalText}' to '${intervention.replacementText}'`;
+                        const isLearning = globalState.presetMode === 'LEARNING';
+                        const titlePrefix = isLearning ? '$(mortar-board) [学習ヒント] ' : '$(zap) ';
+                        const title = `${titlePrefix}Change '${intervention.originalText}' to '${intervention.replacementText}'`;
                         const fix = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
                         fix.isPreferred = true;
                         fix.edit = new vscode.WorkspaceEdit();

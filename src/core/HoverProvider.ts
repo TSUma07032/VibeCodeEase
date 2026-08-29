@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { CodeAnalyzer } from './analyzer';
 import { AnalysisResult } from '../types';
+import { GlobalState } from '../state/globalState';
+import { InterventionEngine } from './interventionEngine';
 
 interface CachedAnalysis {
     version: number;
@@ -16,7 +18,7 @@ export class VibeHoverProvider implements vscode.HoverProvider {
         this.cache = new Map<string, CachedAnalysis>();
     }
 
-    provideHover(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): vscode.ProviderResult<vscode.Hover> {
+    provideHover(document: vscode.TextDocument, position: vscode.Position, _token: vscode.CancellationToken): vscode.ProviderResult<vscode.Hover> {
         // Cache logic
         const uri = document.uri.toString();
         let cached = this.cache.get(uri);
@@ -30,10 +32,10 @@ export class VibeHoverProvider implements vscode.HoverProvider {
             this.cache.set(uri, cached);
         }
 
+        const globalState = GlobalState.getInstance();
+
         // Find intersecting result
         for (const result of cached.results) {
-            // ⚡ Bolt: ホバー位置より後方の解析結果に対する不要なループ処理をスキップする早期ブレークを追加
-            // Benchmark: 無駄な vscode.Range オブジェクトの生成と包含判定をスキップし、実行時間を約 8ms から 1ms に削減
             if (result.range.start.line > position.line) {
                 break;
             }
@@ -44,13 +46,24 @@ export class VibeHoverProvider implements vscode.HoverProvider {
             );
 
             if (resultRange.contains(position)) {
+                // 介入判定: IGNORE の場合はユーザーの自力解決を尊重してホバーを出さない
+                const level = globalState.getInterventionLevel(result.category);
+                if (level === 'IGNORE') {
+                    return null;
+                }
+
                 if (result.interventions.length > 0) {
                     const intervention = result.interventions[0];
-                    if (intervention.message) {
-                        const md = new vscode.MarkdownString(intervention.message);
-                        md.supportThemeIcons = true;
-                        return new vscode.Hover(md);
-                    }
+                    const hintText = InterventionEngine.getEducationalHint(
+                        result.category,
+                        intervention.originalText,
+                        intervention.replacementText ?? '',
+                        globalState.presetMode
+                    );
+
+                    const md = new vscode.MarkdownString(hintText);
+                    md.supportThemeIcons = true;
+                    return new vscode.Hover(md);
                 }
             }
         }

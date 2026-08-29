@@ -9,15 +9,17 @@ export class LlmInterventionService {
     constructor(
         private readonly geminiClient = new GeminiClient(),
         private readonly vscodeLmClient = new VscodeLmClient()
-    ) {}
+    ) { }
 
     /**
-     * 機密ファイルへのアクセスを拒否するセキュリティ検証
+     * 🛡️ Sentinel: 機密ファイル（.env, .pem, .key, credentials等）がLLMに送信されるのを防ぐ
      */
     private validateDocument(document: vscode.TextDocument): void {
         const fileName = document.fileName.toLowerCase();
-        if (fileName.includes('.env') || fileName.includes('.pem') || fileName.includes('.key') || fileName.includes('.git') || fileName.includes('secrets') || fileName.includes('credentials')) {
-            throw new Error(`セキュリティ違反: 機密ファイル (${document.fileName}) はLLMに送信できません。`);
+        const sensitivePatterns = [/\.env/i, /\.pem/i, /\.key/i, /\.git/i, /secrets/i, /credentials/i];
+        if (sensitivePatterns.some(pattern => pattern.test(fileName))) {
+            const fileNameOnly = document.uri.path.split('/').pop() || document.fileName;
+            throw new Error(`セキュリティ違反: 機密ファイル (${fileNameOnly}) はLLMに送信できません。`);
         }
     }
 

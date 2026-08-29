@@ -3,50 +3,54 @@ import { getNonce } from './getNonce';
 import { WebviewMessageHandler } from './WebviewMessageHandler';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
-    _view?: vscode.WebviewView;
-    private readonly messageHandler: WebviewMessageHandler;
+  _view?: vscode.WebviewView;
+  private readonly messageHandler: WebviewMessageHandler;
 
-    constructor(
-        private readonly _extensionUri: vscode.Uri,
-        secrets: vscode.SecretStorage
-    ) {
-        this.messageHandler = new WebviewMessageHandler(secrets);
-    }
+  constructor(
+    private readonly _extensionUri: vscode.Uri,
+    secrets: vscode.SecretStorage
+  ) {
+    this.messageHandler = new WebviewMessageHandler(secrets);
+  }
 
-    public resolveWebviewView(webviewView: vscode.WebviewView): void {
-        this._view = webviewView;
+  public getMessageHandler(): WebviewMessageHandler {
+    return this.messageHandler;
+  }
 
-        webviewView.webview.options = {
-            enableScripts: true,
-            // 🛡️ Sentinel: Restrict webview resource access to only the built dist directory,
-            // preventing arbitrary extension file access (Principle of Least Privilege).
-            localResourceRoots: [vscode.Uri.joinPath(this._extensionUri, 'webview-ui', 'dist')],
-        };
+  public resolveWebviewView(webviewView: vscode.WebviewView): void {
+    this._view = webviewView;
 
-        webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+    webviewView.webview.options = {
+      enableScripts: true,
+      // 🛡️ Sentinel: Restrict webview resource access to only the built dist directory,
+      // preventing arbitrary extension file access (Principle of Least Privilege).
+      localResourceRoots: [vscode.Uri.joinPath(this._extensionUri, 'webview-ui', 'dist')],
+    };
 
-        webviewView.webview.onDidReceiveMessage(async (data) => {
-            await this.messageHandler.handleMessage(data, webviewView.webview);
-        });
-    }
+    webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
-    private _getHtmlForWebview(webview: vscode.Webview): string {
-        // webview内のベースとなるパス
-        const baseUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'webview-ui', 'dist')
-        );
+    webviewView.webview.onDidReceiveMessage(async (data) => {
+      await this.messageHandler.handleMessage(data, webviewView.webview);
+    });
+  }
 
-        const scriptUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'webview-ui', 'dist', 'assets', 'index.js')
-        );
+  private _getHtmlForWebview(webview: vscode.Webview): string {
+    // webview内のベースとなるパス
+    const baseUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this._extensionUri, 'webview-ui', 'dist')
+    );
 
-        const styleUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'webview-ui', 'dist', 'assets', 'index.css')
-        );
+    const scriptUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this._extensionUri, 'webview-ui', 'dist', 'assets', 'index.js')
+    );
 
-        const nonce = getNonce();
+    const styleUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this._extensionUri, 'webview-ui', 'dist', 'assets', 'index.css')
+    );
 
-        return `<!DOCTYPE html>
+    const nonce = getNonce();
+
+    return `<!DOCTYPE html>
       <html lang="en">
       <head>
         <meta charset="UTF-8">
@@ -61,5 +65,5 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
       </body>
       </html>`;
-    }
+  }
 }
