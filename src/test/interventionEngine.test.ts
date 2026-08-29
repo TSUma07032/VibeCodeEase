@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { InterventionEngine, INTERVENTION_THRESHOLDS } from '../core/interventionEngine';
+import { InterventionEngine, determineInterventionLevel, INTERVENTION_THRESHOLDS, THRESHOLDS } from '../core/interventionEngine';
 import { PRESET_DEFINITIONS, UserPreferenceProfile } from '../types';
 
 suite('InterventionEngine Test Suite', () => {
@@ -20,6 +20,14 @@ suite('InterventionEngine Test Suite', () => {
             assert.strictEqual(InterventionEngine.determineLevel(0.39), 'IGNORE');
             assert.strictEqual(InterventionEngine.determineLevel(0.1), 'IGNORE');
             assert.strictEqual(InterventionEngine.determineLevel(0.0), 'IGNORE');
+        });
+
+        test('負の値はクランプされ IGNORE を返すこと', () => {
+            assert.strictEqual(InterventionEngine.determineLevel(-1.0), 'IGNORE');
+        });
+
+        test('1.0を超える値はクランプされ SILENT を返すこと', () => {
+            assert.strictEqual(InterventionEngine.determineLevel(2.5), 'SILENT');
         });
     });
 
@@ -46,6 +54,56 @@ suite('InterventionEngine Test Suite', () => {
             };
             assert.strictEqual(InterventionEngine.getLevelForCategory('SYNTAX_TYPO', learningProfile), 'SILENT');
             assert.strictEqual(InterventionEngine.getLevelForCategory('VAR_FUNC_MANAGEMENT', learningProfile), 'IGNORE');
+        });
+
+        test('未定義カテゴリや空プロファイルはデフォルト値(0.5 -> SUGGESTION)を返すこと', () => {
+            const emptyProfile = { preferences: {} } as any;
+            assert.strictEqual(InterventionEngine.getLevelForCategory('SYNTAX_TYPO', emptyProfile), 'SUGGESTION');
+            assert.strictEqual(InterventionEngine.getLevelForCategory('SYNTAX_TYPO', undefined), 'SUGGESTION');
+        });
+    });
+
+    suite('determineInterventionLevel (関数版)', () => {
+        const defaultProfile: UserPreferenceProfile = {
+            preferences: {
+                SYNTAX_TYPO: 0.5,
+                INDENTATION_FORMATTING: 0.5,
+                VAR_FUNC_MANAGEMENT: 0.5,
+                SYNTAX_ERROR_HANDLING: 0.5
+            }
+        };
+
+        test('しきい値未満は IGNORE を返すこと', () => {
+            const profile: UserPreferenceProfile = {
+                preferences: {
+                    ...defaultProfile.preferences,
+                    SYNTAX_TYPO: THRESHOLDS.IGNORE_MAX - 0.1 // 0.3
+                }
+            };
+            const level = determineInterventionLevel('SYNTAX_TYPO', profile);
+            assert.strictEqual(level, 'IGNORE');
+        });
+
+        test('しきい値境界値 (IGNORE_MAX) では SUGGESTION を返すこと', () => {
+            const profile: UserPreferenceProfile = {
+                preferences: {
+                    ...defaultProfile.preferences,
+                    SYNTAX_TYPO: THRESHOLDS.IGNORE_MAX // 0.4
+                }
+            };
+            const level = determineInterventionLevel('SYNTAX_TYPO', profile);
+            assert.strictEqual(level, 'SUGGESTION');
+        });
+
+        test('しきい値境界値 (SUGGESTION_MAX) では SILENT を返すこと', () => {
+            const profile: UserPreferenceProfile = {
+                preferences: {
+                    ...defaultProfile.preferences,
+                    SYNTAX_TYPO: THRESHOLDS.SUGGESTION_MAX // 0.75
+                }
+            };
+            const level = determineInterventionLevel('SYNTAX_TYPO', profile);
+            assert.strictEqual(level, 'SILENT');
         });
     });
 

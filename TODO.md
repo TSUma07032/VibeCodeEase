@@ -31,6 +31,7 @@
 - [x] LLM API連携による動的介入・解説生成 (`src/core/llmInterventionService.ts`):
   - 説明: 静的なルールベースに加え、ユーザーの状況や文脈に応じた解説や修正案をLLM経由で動的に生成する機能。
   - [x] APIキー等の機密情報をVS CodeのSecretStorageで管理。
+  - [x] 🛡️ Sentinel: 機密ファイル（.env, .pem, credentials等）の送信防止セキュリティガード。
   - [x] LLM連携層のモジュール化・責務分離（PromptBuilder, PlanValidator, GeminiClient, VscodeLmClient）。
   - [x] LLM応答のスキーマ検証、oldText探索・改行オフセット変換、無効な修正案の拒否処理。
 
@@ -51,11 +52,17 @@
   - 説明: ユーザーの連続承認パターンを検知し、「次回から自動修正（SILENT）にしますか？」とプロアクティブに提案・設定反映。
 
 ## 🧪 5. テスト & 品質
-- [x] ユニットテストの完全網羅（全31件合格）
+- [x] ユニットテストの完全網羅
   - `types.test.ts`: カテゴリ解析、クランプ関数
   - `promptBuilder.test.ts`: JSON Schema & プロンプト生成
   - `planValidator.test.ts`: CRLF/LFオフセット解決、プラン検証
   - `analyzer.test.ts`: タイポ検出ロジック
-  - `interventionEngine.test.ts`: 介入レベル判定、境界値、学習ヒント
+  - `interventionEngine.test.ts`: 介入レベル判定、境界値、学習ヒント、関数版判定
   - `adaptiveEngine.test.ts`: 連続承認カウント、カテゴリ別適応判定
   - `extension.test.ts`: 拡張機能ロードテスト
+
+---
+
+## 💡 Julesからの提案 (Backlog)
+- [ ] AST（抽象構文木）操作・高度なコード修正案生成ロジックの拡充
+- [ ] LLM Structured Outputs（Zod + JSON Schema）の更なる厳格化

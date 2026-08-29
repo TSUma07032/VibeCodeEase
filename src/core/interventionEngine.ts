@@ -1,4 +1,4 @@
-import { PainCategory, InterventionLevel, UserPreferenceProfile, PresetMode } from '../types';
+import { PainCategory, InterventionLevel, UserPreferenceProfile, PresetMode, clampPreferenceValue } from '../types';
 
 /**
  * 介入レベル判定のしきい値
@@ -8,15 +8,24 @@ export const INTERVENTION_THRESHOLDS = {
   SUGGESTION_MIN: 0.40    // 0.40以上0.75未満: サジェスト提案 (0.40未満は IGNORE)
 } as const;
 
+/**
+ * 後方互換性としきい値参照用の定数
+ */
+export const THRESHOLDS = {
+  IGNORE_MAX: INTERVENTION_THRESHOLDS.SUGGESTION_MIN, // 0.40
+  SUGGESTION_MAX: INTERVENTION_THRESHOLDS.SILENT_MIN, // 0.75
+} as const;
+
 export class InterventionEngine {
   /**
    * 単一カテゴリの嗜好値（0.0〜1.0）から介入レベル（SILENT / SUGGESTION / IGNORE）を判定する純粋関数
    */
   public static determineLevel(preferenceValue: number): InterventionLevel {
-    if (preferenceValue >= INTERVENTION_THRESHOLDS.SILENT_MIN) {
+    const clamped = clampPreferenceValue(preferenceValue, 0.5);
+    if (clamped >= INTERVENTION_THRESHOLDS.SILENT_MIN) {
       return 'SILENT';
     }
-    if (preferenceValue >= INTERVENTION_THRESHOLDS.SUGGESTION_MIN) {
+    if (clamped >= INTERVENTION_THRESHOLDS.SUGGESTION_MIN) {
       return 'SUGGESTION';
     }
     return 'IGNORE';
@@ -27,9 +36,10 @@ export class InterventionEngine {
    */
   public static getLevelForCategory(
     category: PainCategory,
-    profile: UserPreferenceProfile
+    profile?: UserPreferenceProfile
   ): InterventionLevel {
-    const value = profile.preferences[category] ?? 0.5;
+    const rawValue = profile?.preferences?.[category];
+    const value = clampPreferenceValue(rawValue, 0.5);
     return this.determineLevel(value);
   }
 
@@ -59,4 +69,14 @@ export class InterventionEngine {
         return `🎓 **学習ヒント:** \`${replacementText}\` への修正が推奨されます。`;
     }
   }
+}
+
+/**
+ * ユーザーの嗜好値と対象のエラー（PainCategory）に基づいて、システムの介入レベルを決定する純粋関数
+ */
+export function determineInterventionLevel(
+  category: PainCategory,
+  profile: UserPreferenceProfile
+): InterventionLevel {
+  return InterventionEngine.getLevelForCategory(category, profile);
 }
