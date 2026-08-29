@@ -40,11 +40,8 @@ export class VibeCodeActionProvider implements vscode.CodeActionProvider {
         const actions: vscode.CodeAction[] = [];
 
         for (const result of cached.results) {
-            // ⚡ Bolt: CodeActionの要求範囲外の解析結果に対する不要なループ処理をスキップ
-            // Benchmark: 無駄な vscode.Range オブジェクトの生成と包含判定をスキップし、実行時間を約 15ms から 2ms に削減
-            if (result.range.end.line < range.start.line) {
-                continue;
-            }
+            // ⚡ Bolt: 選択範囲より後方の解析結果に対する不要なループ処理をスキップする早期ブレークを追加
+            // Benchmark: 無駄な vscode.Range オブジェクトの生成と包含判定をスキップし、実行時間を削減
             if (result.range.start.line > range.end.line) {
                 break;
             }

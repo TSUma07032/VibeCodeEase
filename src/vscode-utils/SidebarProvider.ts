@@ -79,10 +79,19 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     webview.postMessage({ type: "ANALYSIS_STARTED" });
     const source = new vscode.CancellationTokenSource();
     try {
-      const apiKey = await this.secrets.get('vibecodeease.geminiApiKey');
-      const plan = apiKey
-        ? await this.llmService.createGeminiPlan(editor.document, source.token, apiKey)
-        : await this.llmService.createPlan(editor.document, source.token);
+      const plan = await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Window,
+          title: "vibeCodeEase: Analyzing with LLM...",
+          cancellable: false
+        },
+        async (progress) => {
+          const apiKey = await this.secrets.get('vibecodeease.geminiApiKey');
+          return apiKey
+            ? await this.llmService.createGeminiPlan(editor.document, source.token, apiKey)
+            : await this.llmService.createPlan(editor.document, source.token);
+        }
+      );
       this.pendingPlan = {
         documentUri: editor.document.uri.toString(),
         documentVersion: editor.document.version,
