@@ -129,6 +129,15 @@ export class LlmInterventionService {
     }
 
     private createPrompt(document: vscode.TextDocument): string {
+        const sensitivePatterns = [/\.env/i, /\.git/i, /secrets/i, /credentials/i];
+        if (sensitivePatterns.some(pattern => pattern.test(document.fileName))) {
+            const fileNameOnly = document.uri.path.split('/').pop();
+            throw new Error(`セキュリティエラー: 機密ファイル(${fileNameOnly})へのアクセスは禁止されています。`);
+        }
+
+        const rawCode = document.getText();
+        const sanitizedCode = rawCode.replace(/```/g, '\\`\\`\\`');
+
         return [
             'You are a code review assistant.',
             'Analyze the file below and propose only concrete, minimal edits that improve correctness or remove obvious friction.',
@@ -141,6 +150,7 @@ export class LlmInterventionService {
             'Content:',
             '```',
             document.getText(),
+            sanitizedCode,
             '```'
         ].join('\n');
     }
