@@ -18,7 +18,7 @@ export class WebviewMessageHandler {
     constructor(
         private readonly secrets: vscode.SecretStorage,
         private readonly llmService: LlmInterventionService = new LlmInterventionService()
-    ) {}
+    ) { }
 
     public setActionCallback(callback: ActionCallback): void {
         this.actionCallback = callback;
@@ -76,7 +76,12 @@ export class WebviewMessageHandler {
                 webview.postMessage({ type: 'PLAN_REJECTED' });
                 break;
             }
+            case 'UPDATE_PREFERENCE': {
+                this.handleUpdatePreference(message.data?.message);
+                break;
+            }
             default: {
+                // 🛡️ Sentinel: Safely ignore unrecognized commands to prevent unhandled processing
                 break;
             }
         }
@@ -158,10 +163,21 @@ export class WebviewMessageHandler {
         }
 
         const applied = await vscode.workspace.applyEdit(edit);
-        if (applied && this.actionCallback) {
-            this.actionCallback('APPLY', pending.plan, pending.documentUri);
-        }
         this.pendingPlan = undefined;
         webview.postMessage({ type: applied ? 'PLAN_APPLIED' : 'ERROR', payload: applied ? undefined : '変更を適用できませんでした。' });
+    }
+
+    private handleUpdatePreference(rawMessageInput: unknown): void {
+        // 🛡️ Sentinel: Sanitize user input to prevent UI spoofing via VS Code icon syntax $(icon-name)
+        const rawMessage = typeof rawMessageInput === 'string' ? rawMessageInput : '';
+        const sanitizedMessage = rawMessage.replace(/\$\([^)]*\)/g, '');
+
+        // 🛡️ Sentinel: Limit string length to prevent UI freezing DoS attacks
+        const limitedMessage = sanitizedMessage.length > 200 ? sanitizedMessage.substring(0, 200) + '...' : sanitizedMessage;
+
+        vscode.window.setStatusBarMessage(
+            `$(check) Preference updated: ${limitedMessage}`,
+            3000
+        );
     }
 }

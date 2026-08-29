@@ -9,7 +9,7 @@ export class LlmInterventionService {
     constructor(
         private readonly geminiClient = new GeminiClient(),
         private readonly vscodeLmClient = new VscodeLmClient()
-    ) {}
+    ) { }
 
     /**
      * 🛡️ Sentinel: 機密ファイル（.env, .pem, .key, credentials等）がLLMに送信されるのを防ぐ

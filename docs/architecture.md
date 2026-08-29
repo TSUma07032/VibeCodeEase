@@ -129,33 +129,84 @@ graph TB
 
 | ディレクトリ / ファイル | 責務 |
 | :--- | :--- |
-| **`src/extension.ts`** | 拡張機能のエントリポイント。全サービス（Provider, Diagnostics, SilentFix, ActionLog, AdaptiveEngine）の登録と配線。 |
-| **`src/core/interventionEngine.ts`** | 嗜好値（0.0〜1.0）からの介入レベル（`SILENT` / `SUGGESTION` / `IGNORE`）判定、および学習用解説ヒント（Learning Hint）の生成。 |
-| **`src/core/diagnosticsService.ts`** | VS Code Diagnostics（言語サーバーエラー）を購読し、言語不問でPainCategoryへマッピング。 |
-| **`src/core/silentFixService.ts`** | 保存時（`onWillSaveTextDocument`）に `SILENT` 判定の安全な問題を自動適用。 |
-| **`src/core/actionLogService.ts`** | 研究・評価実験用に、承認/却下/モード変更を `research_action_log.csv` へ安全に追記。 |
-| **`src/core/adaptiveEngine.ts`** | ユーザーの受容履歴を分析し、SILENT化やモード変更をプロアクティブに提案。 |
-| **`src/core/analyzer.ts`** | タイポ・構文エラーの静的コード解析器。 |
-| **`src/core/HoverProvider.ts`** | 介入判定エンジンと連動し、学習モード時は教育的ヒント、IGNORE時は抑制するホバー表示。 |
-| **`src/core/CodeActionProvider.ts`** | 介入判定エンジンと連動し、学習モード時はタイトルに教育的アイコン・文言を付加したQuickFixを提供。 |
+| **`src/extension.ts`** | 拡張機能のエントリポイント。Provider、コマンド、ステータスバーの登録とライフサイクル管理。 |
+| **`src/core/analyzer.ts`** | ルールベースのコード解析器（`functon`, `if condtion:` などの静的構文チェック）。 |
+| **`src/core/HoverProvider.ts`** | カーソル位置の問題箇所に対してホバー解説メッセージを提供。 |
+| **`src/core/CodeActionProvider.ts`** | エラー箇所に対してワンクリックで修正できる QuickFix アクションを提供。 |
+| **`src/core/llm/promptBuilder.ts`** | コード情報・言語識別子・JSON Schema を組み合わせたプロンプトを生成。 |
+| **`src/core/llm/planValidator.ts`** | LLMのJSON出力を検証し、CRLF/LF改行の差分オフセットを計算して正確な `vscode.Range` に変換。 |
+| **`src/core/llm/geminiClient.ts`** | Gemini REST APIへのHTTP通信、モデル自動検索・フォールバック、キャンセル処理をカプセル化。 |
+| **`src/core/llm/vscodeLmClient.ts`** | VS Code ネイティブの Language Model API（`vscode.lm`）への通信を処理。 |
 | **`src/core/llmInterventionService.ts`**| LLM連携サブシステムのファサード（Facade）。プロンプト作成・モデル選択・検証を統括。 |
 | **`src/vscode-utils/SidebarProvider.ts`**| Webview View の初期化、HTML/CSP生成、ライフサイクル管理。 |
-| **`src/vscode-utils/WebviewMessageHandler.ts`**| 設定同期（`GET_SETTINGS`, `SET_PRESET`）、プラン適用、アクションコールバック管理。 |
-| **`src/vscode-utils/StatusBar.ts`** | エディタ最下部に現在の動作モードを表示し、`GlobalState` 変更にリアルタイム連動。 |
-| **`src/state/globalState.ts`** | プリセット（Learning/Flow/Zen/Custom）および各カテゴリ嗜好値の永続化と変更通知。 |
-| **`src/types/`** | `PresetMode`, `PainCategory`, `InterventionLevel`, `UserPreferenceProfile` 等の共通型定義。 |
-| **`webview-ui/`** | プリセット選択カード、スライダーマトリクス、学習ポイントプレビューを備えたReact製UI。 |
+| **`src/vscode-utils/WebviewMessageHandler.ts`**| Webviewからのメッセージルーティング、プラン適用（`applyEdit`）、サニタイズ処理。 |
+| **`src/vscode-utils/StatusBar.ts`** | エディタ最下部に現在の動作モードを表示し、クリックでモード変更を呼び出す。 |
+| **`src/state/globalState.ts`** | ユーザー設定や動作モードの永続化管理。 |
+| **`src/types/`** | `PainCategory`, `InterventionLevel`, `LlmInterventionPlan`, `AnalysisResult` 等の共通型定義。 |
+| **`webview-ui/`** | サイドバー内に表示される React 製のユーザー設定 & 介入プラン承認UI。 |
 
 ---
 
-## 4. テスト・品質管理戦略
+## 4. 主要シーケンス
+
+### A. サイドバーからの「ファイル全体解析 → 介入プラン承認・適用」フロー
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Webview as React Webview UI
+    participant Handler as WebviewMessageHandler
+    participant Facade as LlmInterventionService
+    participant LLM as Gemini / VS Code LM
+    participant Doc as vscode.TextDocument
+    participant Workspace as vscode.workspace
+
+    User->>Webview: 「現在のファイルを解析」ボタン押下
+    Webview->>Handler: postMessage({ command: 'ANALYZE_CURRENT_FILE' })
+    Handler->>Webview: postMessage({ type: 'ANALYSIS_STARTED' })
+    
+    Handler->>Facade: createGeminiPlan(document, token, apiKey)
+    Facade->>Doc: getText(), lineCount, offsets
+    Facade->>LLM: プロンプト + JSON Schema 送信
+    LLM-->>Facade: JSON レスポンス
+    Facade->>Facade: planValidator によるスキーマ検証 & オフセット解決
+    Facade-->>Handler: LlmInterventionPlan (解決済みRange付き)
+    
+    Handler->>Handler: PendingPlan としてメモリ保持
+    Handler->>Webview: postMessage({ type: 'INTERVENTION_PLAN', payload: plan })
+    Webview-->>User: 差分プレビュー表示
+    
+    User->>Webview: 「承認して変更」ボタン押下
+    Webview->>Handler: postMessage({ command: 'APPLY_PLAN' })
+    Handler->>Doc: バージョン整合性チェック
+    Handler->>Workspace: applyEdit(WorkspaceEdit)
+    Workspace-->>Doc: 差分をファイルに一括適用
+    Handler->>Webview: postMessage({ type: 'PLAN_APPLIED' })
+```
+
+---
+
+## 5. セキュリティ & 堅牢性設計
+
+1. **APIキーの安全な保護**:
+   - Gemini APIキーなどの認証情報は `vscode.SecretStorage` に安全に保管され、設定ファイル（`settings.json`）やログへの平文保存を防止。
+2. **Webviewの厳格なContent Security Policy (CSP)**:
+   - 動的 nonce と `vscode-resource:` URI 制約を適用し、インラインスクリプトの不正実行や外部リソースの意図しない読み込みを遮断。
+3. **入力値のサニタイズ & DoS対策**:
+   - ユーザー入力からの VS Code アイコン記法（`$(icon-name)`）を無害化してUI偽装を防止。
+   - 文字列長の制限により、過大入力によるイベントループのブロックを防止。
+4. **差分位置の厳密解決と不整合防止**:
+   - CRLF（Windows）とLF（POSIX）の改行コードの違いを `toOriginalOffset` で正規化してオフセット計算。
+   - プラン作成後にエディタのドキュメントバージョンが変更された場合、不正な範囲への誤適用を防ぐため適用を拒否。
+
+---
+
+## 6. テスト・品質管理戦略
 
 - **単体テスト実行コマンド**: `npm test`
-- **全31件のテスト構成**:
-  - **`types.test.ts`**: カテゴリ解析、嗜好値クランプ関数
-  - **`promptBuilder.test.ts`**: JSON Schema 定義およびプロンプト生成
-  - **`planValidator.test.ts`**: CRLF/LFオフセット変換、正常プラン解析、不正スキーマ拒否
-  - **`interventionEngine.test.ts`**: 介入レベル判定、境界値、プリセットデフォルト値、学習ヒント文検証
-  - **`adaptiveEngine.test.ts`**: 連続承認カウント、カテゴリ別受容履歴検証
-  - **`analyzer.test.ts`**: タイポ検出ロジックテスト
-  - **`extension.test.ts`**: 拡張機能ロードテスト
+- **テストカバレッジ構成**:
+  - **`types.test.ts`**: カテゴリ解析（`parsePainCategory`）、嗜好値クランプ関数（`clampPreferenceValue`）の境界値テスト
+  - **`promptBuilder.test.ts`**: JSON Schema 定義およびプロンプト生成テスト
+  - **`planValidator.test.ts`**: CRLF/LFオフセット変換、正常プラン解析、不正スキーマ拒否、存在しない `oldText` の検出テスト
+  - **`analyzer.test.ts`**: タイポ検出ロジック（`functon`, `if condtion:`）と複数行・同一行検出テスト
+  - **`extension.test.ts`**: 拡張機能のロード疎通テスト
