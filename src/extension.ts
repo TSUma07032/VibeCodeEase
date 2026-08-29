@@ -48,11 +48,11 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		if (!apiKey.trim()) {
 			await context.secrets.delete('vibecodeease.geminiApiKey');
-			vscode.window.showInformationMessage('Gemini APIキーを削除しました。');
+			vscode.window.setStatusBarMessage('$(check) Gemini APIキーを削除しました。', 3000);
 			return;
 		}
 		await context.secrets.store('vibecodeease.geminiApiKey', apiKey.trim());
-		vscode.window.showInformationMessage('Gemini APIキーを安全に保存しました。');
+		vscode.window.setStatusBarMessage('$(check) Gemini APIキーを安全に保存しました。', 3000);
 	});
 	context.subscriptions.push(configureGeminiKey);
 
