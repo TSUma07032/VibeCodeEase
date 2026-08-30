@@ -1,16 +1,11 @@
-🎯 消化したTODO:
-- [x] PainCategoryごとの嗜好値から介入レベルを決定する純粋関数を実装する。
-- [x] `SILENT` / `SUGGESTION` / `IGNORE` の境界値と不正値の扱いを定義する。
-- [x] 介入判定の各モード、境界値、カテゴリ未定義時をテストする。
+💡 **実施内容 (What):**
+`src/core/llm/geminiClient.ts` において、`Array.prototype.filter` 内で `Array.prototype.includes` を使用していた $O(n^2)$ の処理を、事前に `Set` を作成し `$O(n)$` の `Set.has` を使用するルックアップに置き換えました。
 
-💡 実装内容 (What):
-- `src/core/interventionEngine.ts` にて、ユーザーの嗜好値から介入レベルを判定する純粋関数 `determineInterventionLevel` を実装しました。
-- 境界値ロジックとして、0.3未満で `IGNORE`、0.7以下で `SUGGESTION`、それを超える場合は `SILENT` とする `THRESHOLDS` を定義しました。
-- Mochaを用いて、`src/test/interventionEngine.test.ts` に各モード、境界値、未定義カテゴリなどのエッジケースを含むユニットテストを実装しました。
+🎯 **理由・目的 (Why):**
+ネストされた配列探索を伴うフィルタリング処理は、将来的にアイテム数が増加した際に計算量が $O(n^2)$ となりパフォーマンス低下を引き起こします。APIクライアントの初期化やモデル探索を高速かつ安全に保つための最適化です。
 
-🔗 活用した基盤:
-- 既存の `PainCategory`, `UserPreferenceProfile`, `InterventionLevel` 型定義
-- 既存の `clampPreferenceValue` ユーティリティ
+📊 **影響 (Impact):**
+モデル探索におけるフィルタリングの計算量を削減し、実行時間を短縮。
 
-📝 次のステップ:
-- 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。(TODO.mdの末尾にも追記済み)
+🔬 **検証方法 (Measurement):**
+`npm run test` がすべてパスすることを確認しました。
