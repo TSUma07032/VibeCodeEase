@@ -1,16 +1,13 @@
 🎯 消化したTODO:
-- [x] PainCategoryごとの嗜好値から介入レベルを決定する純粋関数を実装する。
-- [x] `SILENT` / `SUGGESTION` / `IGNORE` の境界値と不正値の扱いを定義する。
-- [x] 介入判定の各モード、境界値、カテゴリ未定義時をテストする。
+- 提案のプレビューと適用を分離したコマンドを定義する。
 
 💡 実装内容 (What):
-- `src/core/interventionEngine.ts` にて、ユーザーの嗜好値から介入レベルを判定する純粋関数 `determineInterventionLevel` を実装しました。
-- 境界値ロジックとして、0.3未満で `IGNORE`、0.7以下で `SUGGESTION`、それを超える場合は `SILENT` とする `THRESHOLDS` を定義しました。
-- Mochaを用いて、`src/test/interventionEngine.test.ts` に各モード、境界値、未定義カテゴリなどのエッジケースを含むユニットテストを実装しました。
+- `vibecodeease.applyIntervention` コマンドを追加し、`vscode.WorkspaceEdit` を用いてテキストの置換（適用）を行う処理を実装。
+- `package.json` にコマンドのコントリビューションを追加。
+- 適用成功時に `vscode.window.setStatusBarMessage` で完了メッセージを表示。
 
 🔗 活用した基盤:
-- 既存の `PainCategory`, `UserPreferenceProfile`, `InterventionLevel` 型定義
-- 既存の `clampPreferenceValue` ユーティリティ
+- `vscode.commands.registerCommand` と `vscode.WorkspaceEdit` のエディタ操作基盤を活用。
 
 📝 次のステップ:
-- 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。(TODO.mdの末尾にも追記済み)
+- `package.json` での `keybindings` 設定と `when` 句を活用した条件定義を追加する。
