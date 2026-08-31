@@ -19,3 +19,6 @@
 ## 2024-08-27 - Add progress indicator for asynchronous LLM calls
 **学び:** 時間のかかる非同期処理（LLM API呼び出しなど）中にUIのフィードバックがないと、ユーザーは処理が動いているのかフリーズしているのか分からず不安になる。`vscode.window.withProgress` と `ProgressLocation.Window` を使うことで、邪魔にならずに進行状況を伝えることができる。
 **アクション:** 拡張機能内で実行に時間がかかる（数秒以上）API呼び出しや重い処理を行う際は、常に `vscode.window.withProgress` などの進捗インジケータを実装し、開発者に適切なフィードバックを提供する。
+## 2024-08-30 - Replace success popup with status bar message for auto-fix enablement
+**学び:** ユーザーが自動修正の設定を有効化するプロンプトに同意した後の完了通知として、ポップアップ (`showInformationMessage`) を表示すると、元の作業フローが不要に中断されてしまう。
+**アクション:** このような設定変更の成功通知には、邪魔にならないステータスバーメッセージ (`setStatusBarMessage`) をタイムアウト付きで使用することで、シームレスな体験を提供する。

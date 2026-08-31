@@ -1,16 +1,9 @@
-🎯 消化したTODO:
-- [x] PainCategoryごとの嗜好値から介入レベルを決定する純粋関数を実装する。
-- [x] `SILENT` / `SUGGESTION` / `IGNORE` の境界値と不正値の扱いを定義する。
-- [x] 介入判定の各モード、境界値、カテゴリ未定義時をテストする。
+💡 実施内容 (What):
+適応エンジン (AdaptiveEngine) で、ユーザーが自動修正を「はい」と承諾した後の完了メッセージを、ポップアップダイアログ (`showInformationMessage`) からステータスバーメッセージ (`setStatusBarMessage`) に変更しました。
 
-💡 実装内容 (What):
-- `src/core/interventionEngine.ts` にて、ユーザーの嗜好値から介入レベルを判定する純粋関数 `determineInterventionLevel` を実装しました。
-- 境界値ロジックとして、0.3未満で `IGNORE`、0.7以下で `SUGGESTION`、それを超える場合は `SILENT` とする `THRESHOLDS` を定義しました。
-- Mochaを用いて、`src/test/interventionEngine.test.ts` に各モード、境界値、未定義カテゴリなどのエッジケースを含むユニットテストを実装しました。
+🎯 理由・目的 (Why):
+ポップアップ通知はユーザーのコーディング作業を一時的に中断させてしまいます。単なる設定完了の通知であれば、画面下部のステータスバーにアイコン付きで数秒間表示する方が、開発者のフローを妨げずに済むためです。
 
-🔗 活用した基盤:
-- 既存の `PainCategory`, `UserPreferenceProfile`, `InterventionLevel` 型定義
-- 既存の `clampPreferenceValue` ユーティリティ
-
-📝 次のステップ:
-- 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。(TODO.mdの末尾にも追記済み)
+📸 Before/After:
+**Before**: 画面右下に大きな「✨ 「...」を次回から自動修正するように更新しました！」ダイアログが出現し、手動で閉じるか消えるのを待つ必要があった。
+**After**: エディタ最下部のステータスバーに「$(check) 「...」を自動修正に更新しました」と3秒間だけ控えめに表示され、自動で消える。
