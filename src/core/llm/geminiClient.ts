@@ -107,6 +107,9 @@ export class GeminiClient {
             });
             request.on('close', () => cancellation.dispose());
             request.on('error', reject);
+            request.setTimeout(30000, () => {
+                request.destroy(new Error('LLM APIリクエストがタイムアウトしました。'));
+            });
 
             if (body) {
                 request.write(body);
