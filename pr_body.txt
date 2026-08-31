@@ -1,16 +1,12 @@
-🎯 消化したTODO:
-- [x] PainCategoryごとの嗜好値から介入レベルを決定する純粋関数を実装する。
-- [x] `SILENT` / `SUGGESTION` / `IGNORE` の境界値と不正値の扱いを定義する。
-- [x] 介入判定の各モード、境界値、カテゴリ未定義時をテストする。
+💡 実施内容 (What):
+LLMからの変更提案（oldText）をドキュメント内で探索する際、全マッチ位置を配列に保存した後に reduce で最短距離のものを探すO(N)の複数パス処理を、最短距離を都度計算しつつ距離が広がり始めた時点で早期ブレークする単一パスの処理に最適化しました。
 
-💡 実装内容 (What):
-- `src/core/interventionEngine.ts` にて、ユーザーの嗜好値から介入レベルを判定する純粋関数 `determineInterventionLevel` を実装しました。
-- 境界値ロジックとして、0.3未満で `IGNORE`、0.7以下で `SUGGESTION`、それを超える場合は `SILENT` とする `THRESHOLDS` を定義しました。
-- Mochaを用いて、`src/test/interventionEngine.test.ts` に各モード、境界値、未定義カテゴリなどのエッジケースを含むユニットテストを実装しました。
+🎯 理由・目的 (Why):
+大きなファイル内で頻繁に出現する文字列（例: '{' や 'return;' など）が変更対象となった場合、無駄な配列確保や全件探索が発生し、イベントループのブロックやメモリ使用量の増大を招くためです。
 
-🔗 活用した基盤:
-- 既存の `PainCategory`, `UserPreferenceProfile`, `InterventionLevel` 型定義
-- 既存の `clampPreferenceValue` ユーティリティ
+📊 影響 (Impact):
+・無駄な配列（matches）のメモリアロケーションを削減
+・複数パス（ループ + reduce）から単一パス（ループ内の早期ブレーク）への改善により、ベストケースでO(1)、ワーストケースでもO(N)でイベントループブロック時間を短縮
 
-📝 次のステップ:
-- 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。(TODO.mdの末尾にも追記済み)
+🔬 検証方法 (Measurement):
+・`npm run test` を実行し、既存のPlan Validatorの全ユニットテストが通過することを確認します。
