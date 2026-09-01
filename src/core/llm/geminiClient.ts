@@ -95,11 +95,15 @@ export class GeminiClient {
     ): Promise<{ statusCode: number; body: string }> {
         return new Promise((resolve, reject) => {
             const url = new URL(urlString);
-            const request = https.request(url, { ...options, method: options.method ?? 'GET' }, (response) => {
+            const request = https.request(url, { ...options, method: options.method ?? 'GET', timeout: 30000 }, (response) => {
                 let responseBody = '';
                 response.setEncoding('utf8');
                 response.on('data', (chunk: string) => responseBody += chunk);
                 response.on('end', () => resolve({ statusCode: response.statusCode ?? 0, body: responseBody }));
+            });
+
+            request.on('timeout', () => {
+                request.destroy(new Error('リクエストがタイムアウトしました。'));
             });
 
             const cancellation = token.onCancellationRequested(() => {
