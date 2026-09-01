@@ -5,3 +5,7 @@
 ## 2024-08-25 - CodeAnalyzerの検出結果をHoverProviderに統合する。
 **発見:** `HoverProvider` が頻繁に呼び出されるため、ドキュメントの解析結果をキャッシュしないとパフォーマンスに悪影響が出ることが分かりました。
 **提言:** `Map` を使用して `document.uri.toString()` と `document.version` ベースでキャッシュを実装しました。今後の Provider リファクタリング（例：`CodeActionProvider`）でも同様のキャッシュ戦略を検討する必要があります。
+
+## 2024-11-09 - VibeStatusBar のモード変更連携処理の確認
+**発見:** VibeStatusBar と Webview 間の状態同期は既に GlobalState.getInstance().onDidChangeState を介して適切に実装されていました。実装漏れではなく、既に疎通できていることを確認しました。
+**提言:** GlobalState をシングルトンとして用いる現在のステート管理は有効に機能しています。今後の UI 拡張時にもこのアプローチを踏襲することを推奨します。
