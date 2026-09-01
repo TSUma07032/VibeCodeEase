@@ -62,30 +62,22 @@ export class DiagnosticsService {
      * エディタのエラーメッセージやコードからPainCategoryを推論・分類する
      */
     public categorizeDiagnostic(diag: vscode.Diagnostic): PainCategory {
-        const msg = diag.message.toLowerCase();
+        const msg = diag.message;
 
-        // 1. タイポ判定
-        if (msg.includes('typo') || msg.includes('spelling') || msg.includes('did you mean')) {
+        // ⚡ Bolt: 複数の includes を単一の正規表現テストに置き換え
+        // Benchmark: diagnostics の分類処理における文字列スキャン回数を削減し、実行速度を向上
+        if (/typo|spelling|did you mean/i.test(msg)) {
             return 'SYNTAX_TYPO';
         }
 
-        // 2. インデント・フォーマット判定
-        if (msg.includes('indent') || msg.includes('tab') || msg.includes('whitespace') || msg.includes('formatting')) {
+        if (/indent|tab|whitespace|formatting/i.test(msg)) {
             return 'INDENTATION_FORMATTING';
         }
 
-        // 3. 変数・関数管理判定
-        if (
-            msg.includes('cannot find name') ||
-            msg.includes('is not defined') ||
-            msg.includes('declared but never used') ||
-            msg.includes('unused') ||
-            msg.includes('undefined variable')
-        ) {
+        if (/cannot find name|is not defined|declared but never used|unused|undefined variable/i.test(msg)) {
             return 'VAR_FUNC_MANAGEMENT';
         }
 
-        // 4. その他の構文エラー
         return 'SYNTAX_ERROR_HANDLING';
     }
 

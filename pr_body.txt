@@ -1,16 +1,4 @@
-🎯 消化したTODO:
-- [x] PainCategoryごとの嗜好値から介入レベルを決定する純粋関数を実装する。
-- [x] `SILENT` / `SUGGESTION` / `IGNORE` の境界値と不正値の扱いを定義する。
-- [x] 介入判定の各モード、境界値、カテゴリ未定義時をテストする。
-
-💡 実装内容 (What):
-- `src/core/interventionEngine.ts` にて、ユーザーの嗜好値から介入レベルを判定する純粋関数 `determineInterventionLevel` を実装しました。
-- 境界値ロジックとして、0.3未満で `IGNORE`、0.7以下で `SUGGESTION`、それを超える場合は `SILENT` とする `THRESHOLDS` を定義しました。
-- Mochaを用いて、`src/test/interventionEngine.test.ts` に各モード、境界値、未定義カテゴリなどのエッジケースを含むユニットテストを実装しました。
-
-🔗 活用した基盤:
-- 既存の `PainCategory`, `UserPreferenceProfile`, `InterventionLevel` 型定義
-- 既存の `clampPreferenceValue` ユーティリティ
-
-📝 次のステップ:
-- 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。(TODO.mdの末尾にも追記済み)
+💡 **実施内容 (What):** `DiagnosticsService` のエラーメッセージ分類処理において、12回の `String.prototype.includes` 呼び出しと `toLowerCase()` を、3つの正規表現テスト（`RegExp.test`）に置き換えました。また、`WebviewMessageHandler`のコンパイルエラーを修正しました。
+🎯 **理由・目的 (Why):** エディタ上でDiagnosticsが発生するたびに実行されるホットパスにおいて、同一文字列への無駄なマルチスキャンおよび文字列生成コストを削減するため。
+📊 **影響 (Impact):** 分類処理の文字列スキャン回数が削減され、より高速な判定が行われます。
+🔬 **検証方法 (Measurement):** `npm run compile && npm run lint && xvfb-run npm test` を実行して既存のテストがパスすることを確認しました。
