@@ -1,16 +1,13 @@
-🎯 消化したTODO:
-- [x] PainCategoryごとの嗜好値から介入レベルを決定する純粋関数を実装する。
-- [x] `SILENT` / `SUGGESTION` / `IGNORE` の境界値と不正値の扱いを定義する。
-- [x] 介入判定の各モード、境界値、カテゴリ未定義時をテストする。
+🎨 Palette: 適応エンジンの成功通知のUX改善
 
-💡 実装内容 (What):
-- `src/core/interventionEngine.ts` にて、ユーザーの嗜好値から介入レベルを判定する純粋関数 `determineInterventionLevel` を実装しました。
-- 境界値ロジックとして、0.3未満で `IGNORE`、0.7以下で `SUGGESTION`、それを超える場合は `SILENT` とする `THRESHOLDS` を定義しました。
-- Mochaを用いて、`src/test/interventionEngine.test.ts` に各モード、境界値、未定義カテゴリなどのエッジケースを含むユニットテストを実装しました。
+💡 実施内容 (What):
+- `src/core/adaptiveEngine.ts` において、ユーザーが適応型提案エンジン経由で自動修正を承認した際の成功通知を、`showInformationMessage` から `setStatusBarMessage` に変更しました。
+- 通知には `$(check)` アイコンを付与し、3秒のタイムアウトを設定しました。
 
-🔗 活用した基盤:
-- 既存の `PainCategory`, `UserPreferenceProfile`, `InterventionLevel` 型定義
-- 既存の `clampPreferenceValue` ユーティリティ
+🎯 理由・目的 (Why):
+- `showInformationMessage` によるポップアップは開発者の作業フローを遮るため、設定更新などの非クリティカルな成功通知には不適切です。
+- 控えめなステータスバーへの通知に変更することで、ユーザーにストレスを与えず、スムーズな開発体験（DX）を提供します。
 
-📝 次のステップ:
-- 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。(TODO.mdの末尾にも追記済み)
+📸 Before/After:
+- Before: 右下に「✨ 「[カテゴリ名]」を次回から自動修正するように更新しました！」というポップアップが表示される。
+- After: ステータスバーに「✓ 「[カテゴリ名]」を次回から自動修正するように更新しました！」が3秒間だけ静かに表示される。
