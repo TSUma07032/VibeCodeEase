@@ -1,16 +1,4 @@
-🎯 消化したTODO:
-- [x] PainCategoryごとの嗜好値から介入レベルを決定する純粋関数を実装する。
-- [x] `SILENT` / `SUGGESTION` / `IGNORE` の境界値と不正値の扱いを定義する。
-- [x] 介入判定の各モード、境界値、カテゴリ未定義時をテストする。
-
-💡 実装内容 (What):
-- `src/core/interventionEngine.ts` にて、ユーザーの嗜好値から介入レベルを判定する純粋関数 `determineInterventionLevel` を実装しました。
-- 境界値ロジックとして、0.3未満で `IGNORE`、0.7以下で `SUGGESTION`、それを超える場合は `SILENT` とする `THRESHOLDS` を定義しました。
-- Mochaを用いて、`src/test/interventionEngine.test.ts` に各モード、境界値、未定義カテゴリなどのエッジケースを含むユニットテストを実装しました。
-
-🔗 活用した基盤:
-- 既存の `PainCategory`, `UserPreferenceProfile`, `InterventionLevel` 型定義
-- 既存の `clampPreferenceValue` ユーティリティ
-
-📝 次のステップ:
-- 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。(TODO.mdの末尾にも追記済み)
+🚨 深刻度 (Severity): MEDIUM
+💡 脆弱性 (Vulnerability): LLM API リクエストへのタイムアウト欠落（リソース枯渇を引き起こす）
+🎯 影響 (Impact): ネットワーク遅延や応答なしの場合に、リクエストがハングし、Extension Hostのリソースを枯渇させる可能性があります。
+🔧 修正内容 (Fix): https.request に30000msのタイムアウト設定を追加し、タイムアウト時には安全にリクエストを中断してエラーを投げるようにしました。
