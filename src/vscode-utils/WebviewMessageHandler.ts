@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { LlmInterventionService } from '../core/llmInterventionService';
-import { LlmInterventionPlan, PainCategory, PresetMode, PRESET_DEFINITIONS } from '../types';
+import { LlmInterventionPlan, PainCategory, PresetMode, PRESET_DEFINITIONS, parsePainCategory, clampPreferenceValue } from '../types';
 import { GlobalState } from '../state/globalState';
 
 export interface PendingPlan {
@@ -53,9 +53,11 @@ export class WebviewMessageHandler {
                 break;
             }
             case 'UPDATE_PREFERENCE_VALUE': {
-                const { category, value } = message.payload as { category: PainCategory; value: number };
-                if (typeof category === 'string' && typeof value === 'number') {
-                    await GlobalState.getInstance().updatePreference(category, value);
+                const { category, value } = message.payload as { category: string; value: unknown };
+                if (typeof category === 'string') {
+                    const validCategory = parsePainCategory(category);
+                    const validValue = clampPreferenceValue(value);
+                    await GlobalState.getInstance().updatePreference(validCategory, validValue);
                     this.sendCurrentSettings(webview);
                 }
                 break;
@@ -77,7 +79,7 @@ export class WebviewMessageHandler {
                 break;
             }
             case 'UPDATE_PREFERENCE': {
-                this.handleUpdatePreference(message.data?.message);
+                this.handleUpdatePreference((message as any).data?.message);
                 break;
             }
             default: {

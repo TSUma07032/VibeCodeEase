@@ -55,7 +55,8 @@
   - [ ] `WebviewMessage` の `type` / `payload` 契約を具体化する。
   - [ ] `GET_PREFERENCE` と `UPDATE_PREFERENCE` の送受信を実装する。
   - [ ] `GlobalState` にユーザー嗜好値を保存し、Webview初期表示へ返す。
-  - [ ] 受信値の型・カテゴリ・数値範囲をNode.js側でも検証する。
+  - [x] 受信値の型・カテゴリ・数値範囲をNode.js側でも検証する。
+    - Jules Memo: `parsePainCategory` と `clampPreferenceValue` を使用して、Webviewからの入力値を安全にパース・クランプする処理を実装しました。
   - [ ] 保存成功・失敗をUIへ通知する。
 - [ ] ワンタッチ適用インタラクション (`Tab to Apply`)
   - 説明: 提案パネルやHoverからTabキー1つで修正案をコードにワンタッチ適用するキーバインド・コマンド処理。
