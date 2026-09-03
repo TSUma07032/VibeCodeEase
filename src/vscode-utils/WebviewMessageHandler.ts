@@ -77,7 +77,7 @@ export class WebviewMessageHandler {
                 break;
             }
             case 'UPDATE_PREFERENCE': {
-                this.handleUpdatePreference((message as any).data?.message);
+                this.handleUpdatePreference((data as any).data?.message);
                 break;
             }
             default: {
