@@ -1,13 +1,12 @@
-🎯 消化したTODO:
-- 提案のプレビューと適用を分離したコマンドを定義する。
+💡 実施内容 (What):
+LLMからの変更提案（oldText）をドキュメント内で探索する際、全マッチ位置を配列に保存した後に reduce で最短距離のものを探すO(N)の複数パス処理を、最短距離を都度計算しつつ距離が広がり始めた時点で早期ブレークする単一パスの処理に最適化しました。
 
-💡 実装内容 (What):
-- `vibecodeease.applyIntervention` コマンドを追加し、`vscode.WorkspaceEdit` を用いてテキストの置換（適用）を行う処理を実装。
-- `package.json` にコマンドのコントリビューションを追加。
-- 適用成功時に `vscode.window.setStatusBarMessage` で完了メッセージを表示。
+🎯 理由・目的 (Why):
+大きなファイル内で頻繁に出現する文字列（例: '{' や 'return;' など）が変更対象となった場合、無駄な配列確保や全件探索が発生し、イベントループのブロックやメモリ使用量の増大を招くためです。
 
-🔗 活用した基盤:
-- `vscode.commands.registerCommand` と `vscode.WorkspaceEdit` のエディタ操作基盤を活用。
+📊 影響 (Impact):
+・無駄な配列（matches）のメモリアロケーションを削減
+・複数パス（ループ + reduce）から単一パス（ループ内の早期ブレーク）への改善により、ベストケースでO(1)、ワーストケースでもO(N)でイベントループブロック時間を短縮
 
-📝 次のステップ:
-- `package.json` での `keybindings` 設定と `when` 句を活用した条件定義を追加する。
+🔬 検証方法 (Measurement):
+・`npm run test` を実行し、既存のPlan Validatorの全ユニットテストが通過することを確認します。
