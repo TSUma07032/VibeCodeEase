@@ -26,6 +26,10 @@
       {
         "command": "vibecodeease.configureGeminiKey",
         "title": "vibeCodeEase: Configure Gemini API Key"
+      },
+      {
+        "command": "vibecodeease.applyIntervention",
+        "title": "vibeCodeEase: Apply Intervention"
       }
     ],
     "viewsContainers": {

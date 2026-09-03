@@ -57,26 +57,32 @@ export function validatePlan(value: unknown, document: vscode.TextDocument): Llm
         const documentText = document.getText();
         const normalizedDocumentText = documentText.replace(/\r\n/g, '\n');
         const normalizedOldText = (item.oldText as string).replace(/\r\n/g, '\n');
-        const matches: number[] = [];
+        const hintLine = Math.min(startLine, document.lineCount - 1);
+        const hintCharacter = Math.min(startCharacter, document.lineAt(hintLine).text.length);
+        const hintOffset = document.offsetAt(new vscode.Position(hintLine, hintCharacter));
+
+        // ⚡ Bolt: Removed array allocation and added early break, reducing O(N) multi-pass search to O(1) best-case single pass.
+        let matchOffsetNormalized = -1;
+        let minDistance = Infinity;
         let searchFrom = 0;
         while (true) {
             const match = normalizedDocumentText.indexOf(normalizedOldText, searchFrom);
             if (match < 0) {
                 break;
             }
-            matches.push(match);
+            const distance = Math.abs(match - hintOffset);
+            if (distance < minDistance) {
+                minDistance = distance;
+                matchOffsetNormalized = match;
+            } else if (match > hintOffset) {
+                break;
+            }
             searchFrom = match + item.oldText.length;
         }
-        if (matches.length === 0) {
+
+        if (matchOffsetNormalized === -1) {
             throw new Error(`LLMが指定したoldTextをファイル内で見つけられません。要求範囲: ${startLine}:${startCharacter}-${endLine}:${endCharacter}`);
         }
-
-        const hintLine = Math.min(startLine, document.lineCount - 1);
-        const hintCharacter = Math.min(startCharacter, document.lineAt(hintLine).text.length);
-        const hintOffset = document.offsetAt(new vscode.Position(hintLine, hintCharacter));
-        const matchOffsetNormalized = matches.reduce((closest, current) =>
-            Math.abs(current - hintOffset) < Math.abs(closest - hintOffset) ? current : closest
-        );
         const matchOffset = toOriginalOffset(documentText, matchOffsetNormalized);
         const endOffset = toOriginalOffset(documentText, matchOffsetNormalized + normalizedOldText.length);
         const resolvedRange = new vscode.Range(

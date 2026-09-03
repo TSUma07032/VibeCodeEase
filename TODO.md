@@ -61,9 +61,11 @@
 - [ ] ワンタッチ適用インタラクション (`Tab to Apply`)
   - 説明: 提案パネルやHoverからTabキー1つで修正案をコードにワンタッチ適用するキーバインド・コマンド処理。
   - Jules Memo: 現在はQuickFixを選択して適用する基盤まで。Tabキーによる適用フローは未実装。
-  - [ ] 提案のプレビューと適用を分離したコマンドを定義する。
+  - [x] 提案のプレビューと適用を分離したコマンドを定義する。
+    - Jules Memo: `vibecodeease.applyIntervention` コマンドを定義し、個別の修正案を `WorkspaceEdit` 経由で適用できるように実装。
   - [ ] Tabキーの既存エディタ操作と競合しない起動条件を決める。
   - [ ] 適用前後のドキュメントバージョンとUndo単位を検証する。
+  - [ ] 次のステップ: `package.json` での `keybindings` 設定と `when` 句を活用した条件定義を追加する。
 
 ## 🧪 4. テスト & 品質
 - [ ] テキスト解析・介入判定ロジックのユニットテスト
@@ -74,7 +76,8 @@
   - Jules Memo: Analyzer・型ユーティリティのMochaテストは存在する。介入判定、設定保存、Providerのモード別挙動は未検証。
   - [x] 介入判定の各モード、境界値、カテゴリ未定義時をテストする。
   - [ ] `SILENT` / `SUGGESTION` / `IGNORE` ごとのHover・CodeActionをテストする。
-  - [ ] Webviewメッセージの不正payload、範囲外数値、未知typeをテストする。
+  - [x] Webviewメッセージの不正payload、範囲外数値、未知typeをテストする。
+  - Jules Memo: WebviewMessageHandler のテスト（src/test/webviewMessageHandler.test.ts）を作成し、無効なコマンドや無効なペイロードに対する動作検証を追加しました。
   - Jules Memo: `InterventionEngine`クラスを実装。0.75以上をSILENT、0.40以上をSUGGESTION、0.40未満をIGNORE（自力解決）と判定。学習モード向けの教育的ヒント生成機能も実装。
   - [x] PainCategoryごとの嗜好値から介入レベルを決定する純粋関数を実装。
   - [x] `SILENT` / `SUGGESTION` / `IGNORE` の境界値と判定ロジックを定義。
@@ -137,3 +140,4 @@
   - [ ] 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。(次にやるべきこと)
 - [ ] AST（抽象構文木）操作・高度なコード修正案生成ロジックの拡充
 - [ ] LLM Structured Outputs（Zod + JSON Schema）の更なる厳格化
+- [ ] Webviewから送信されるメッセージアクションの型安全性をさらに高めるリファクタリング
