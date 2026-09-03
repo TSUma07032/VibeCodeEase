@@ -77,6 +77,7 @@ export class WebviewMessageHandler {
                 break;
             }
             case 'UPDATE_PREFERENCE': {
+                // UIからの古いアクション(もし残っていれば)への対応、現状はUPDATE_PREFERENCE_VALUEを使用
                 this.handleUpdatePreference(message.payload);
                 break;
             }
