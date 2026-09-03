@@ -37,7 +37,7 @@ export class WebviewMessageHandler {
             return;
         }
 
-        const message = data as { command: string; payload?: unknown };
+        const message = data as { command: string; payload?: unknown; data?: { message?: unknown } };
 
         switch (message.command) {
             case 'GET_SETTINGS': {

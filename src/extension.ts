@@ -28,6 +28,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// 保存時自動修正（SILENT）のコールバック配線
 	silentFixService.setOnFixAppliedCallback((fixCount, docUri) => {
+		vscode.window.setStatusBarMessage(`$(zap) 保存時に${fixCount}件の問題を自動修正しました`, 3000);
 		actionLogService.log({
 			category: 'SILENT_FIX',
 			action: 'APPLY_ON_SAVE',
