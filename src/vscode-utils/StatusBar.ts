@@ -37,10 +37,15 @@ export class VibeStatusBar {
                 this.statusBarItem.text = '$(eye-closed) Vibe: Zen';
                 this.statusBarItem.tooltip = 'vibeCodeEase: 職人モード (介入最小) - クリックで変更';
                 break;
-            case 'CUSTOM':
+            case 'CUSTOM': {
+                const prefs = state.preferences.preferences;
+                const details = Object.entries(prefs)
+                    .map(([k, v]) => `${k}: ${v.toFixed(2)}`)
+                    .join(', ');
                 this.statusBarItem.text = '$(settings) Vibe: Custom';
-                this.statusBarItem.tooltip = 'vibeCodeEase: カスタム設定 - クリックで変更';
+                this.statusBarItem.tooltip = `vibeCodeEase: カスタム設定 ( ${details} ) - クリックで変更`;
                 break;
+            }
         }
     }
 
