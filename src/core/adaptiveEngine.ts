@@ -65,16 +65,9 @@ export class AdaptiveEngine {
 
         if (count >= this.consecutiveThreshold && currentLevel !== 'SILENT') {
             const categoryLabel = this.getCategoryLabel(category);
-            vscode.window.showInformationMessage(
-                `💡 【適応型提案】「${categoryLabel}」の修正を連続で承認しています。次回から自動修正（SILENT）に切り替えて、さらにバイブスを高めますか？`,
-                'はい (自動修正にする)',
-                '後で'
-            ).then(async (selection) => {
-                if (selection === 'はい (自動修正にする)') {
-                    await globalState.updatePreference(category, 0.9);
-                    vscode.window.setStatusBarMessage(`$(check) 「${categoryLabel}」を次回から自動修正するように更新しました！`, 3000);
-                }
-            });
+            // Non-blocking auto-upgrade
+            globalState.updatePreference(category, 0.9);
+            vscode.window.setStatusBarMessage(`$(zap) 「${categoryLabel}」を次回から自動修正するように更新しました！`, 3000);
             return true;
         }
 
