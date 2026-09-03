@@ -53,10 +53,10 @@ export class WebviewMessageHandler {
                 break;
             }
             case 'UPDATE_PREFERENCE_VALUE': {
-                const { category, value } = message.payload as { category: string; value: unknown };
-                if (typeof category === 'string') {
-                    const validCategory = parsePainCategory(category);
-                    const validValue = clampPreferenceValue(value);
+                const payload = message.payload as { category?: unknown; value?: unknown } | undefined;
+                if (payload && typeof payload.category === 'string' && typeof payload.value === 'number' && !isNaN(payload.value)) {
+                    const validCategory = parsePainCategory(payload.category);
+                    const validValue = clampPreferenceValue(payload.value);
                     await GlobalState.getInstance().updatePreference(validCategory, validValue);
                     this.sendCurrentSettings(webview);
                 }
