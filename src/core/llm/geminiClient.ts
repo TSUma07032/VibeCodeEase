@@ -80,7 +80,10 @@ export class GeminiClient {
             .map((preferredName) => availableModels.find((model) => model.name.endsWith(`/${preferredName}`)))
             .filter((model): model is GeminiModel => model !== undefined);
 
-        const candidateModels = [...preferredModels, ...availableModels.filter((model) => !preferredModels.includes(model))];
+        // ⚡ Bolt: $O(n^2)$ の Array.includes を $O(n)$ の Set.has ルックアップに置き換え
+        // Benchmark: モデル探索におけるフィルタリングの計算量を削減し、APIクライアントの初期化を高速化
+        const preferredModelsSet = new Set(preferredModels);
+        const candidateModels = [...preferredModels, ...availableModels.filter((model) => !preferredModelsSet.has(model))];
         if (candidateModels.length === 0) {
             throw new Error('Gemini APIでgenerateContentに対応するモデルが見つかりません。');
         }
