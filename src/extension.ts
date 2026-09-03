@@ -9,6 +9,7 @@ import { DiagnosticsService } from './core/diagnosticsService';
 import { SilentFixService } from './core/silentFixService';
 import { ActionLogService } from './core/actionLogService';
 import { AdaptiveEngine } from './core/adaptiveEngine';
+import { CursorInterventionTracker } from './core/cursorInterventionTracker';
 
 interface PresetQuickPickItem extends vscode.QuickPickItem {
 	preset: PresetMode;
@@ -25,6 +26,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const adaptiveEngine = new AdaptiveEngine(3);
 	const diagnosticsService = new DiagnosticsService();
 	const silentFixService = new SilentFixService();
+	const cursorInterventionTracker = new CursorInterventionTracker();
 
 	// 保存時自動修正（SILENT）のコールバック配線
 	silentFixService.setOnFixAppliedCallback((fixCount, docUri) => {
@@ -75,6 +77,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(diagnosticsService);
 	context.subscriptions.push(silentFixService);
+	context.subscriptions.push(cursorInterventionTracker);
 
 	const disposable = vscode.commands.registerCommand('vibecodeease.helloWorld', () => {
 		vscode.window.showInformationMessage('Hello World from vibeCodeEase!');
@@ -99,6 +102,26 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 	context.subscriptions.push(applyInterventionCommand);
+
+	const applyInterventionAtCursorCommand = vscode.commands.registerCommand('vibecodeease.applyInterventionAtCursor', async () => {
+		const currentIntervention = cursorInterventionTracker.getCurrentIntervention();
+		if (!currentIntervention || !currentIntervention.intervention.replacementText) {
+			return;
+		}
+		const edit = new vscode.WorkspaceEdit();
+		edit.replace(currentIntervention.uri, currentIntervention.range, currentIntervention.intervention.replacementText);
+		const applied = await vscode.workspace.applyEdit(edit);
+		if (applied) {
+			vscode.window.setStatusBarMessage('$(check) ワンタッチ適用完了', 3000);
+			actionLogService.log({
+				category: 'SYSTEM',
+				action: 'APPLY',
+				targetId: currentIntervention.uri.toString(),
+				payload: 'Applied intervention at cursor via Tab'
+			});
+		}
+	});
+	context.subscriptions.push(applyInterventionAtCursorCommand);
 
 	const configureGeminiKey = vscode.commands.registerCommand('vibecodeease.configureGeminiKey', async () => {
 		const apiKey = await vscode.window.showInputBox({
