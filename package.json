@@ -30,6 +30,17 @@
       {
         "command": "vibecodeease.applyIntervention",
         "title": "vibeCodeEase: Apply Intervention"
+      },
+      {
+        "command": "vibecodeease.applyInterventionAtCursor",
+        "title": "vibeCodeEase: Apply Intervention at Cursor"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "vibecodeease.applyInterventionAtCursor",
+        "key": "tab",
+        "when": "editorTextFocus && vibecodeease.hasInterventionAtCursor && !suggestWidgetVisible && !inlineSuggestionVisible && !inSnippetMode"
       }
     ],
     "viewsContainers": {

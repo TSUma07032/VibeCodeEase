@@ -1,0 +1,17 @@
+タイトル: 🏗️ Builder: ワンタッチ適用インタラクション (`Tab to Apply`)
+
+🎯 消化したTODO:
+ワンタッチ適用インタラクション (`Tab to Apply`)
+
+💡 実装内容 (What):
+- `CursorInterventionTracker`を実装し、カーソル位置にある介入案を追跡
+- `vibecodeease.hasInterventionAtCursor` コンテキストを動的に更新
+- `Tab` キーに `vibecodeease.applyInterventionAtCursor` コマンドをバインド
+- 競合を避けるための厳密な `when` 条件を設定
+
+🔗 活用した基盤:
+- `CodeAnalyzer` による解析結果
+- `GlobalState` と `InterventionEngine` による介入判定
+
+📝 次のステップ:
+- [ ] ワンタッチ適用時の適用前後のドキュメントバージョンとUndo単位を検証する。

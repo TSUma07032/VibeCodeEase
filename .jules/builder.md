@@ -5,3 +5,7 @@
 ## 2024-08-25 - CodeAnalyzerの検出結果をHoverProviderに統合する。
 **発見:** `HoverProvider` が頻繁に呼び出されるため、ドキュメントの解析結果をキャッシュしないとパフォーマンスに悪影響が出ることが分かりました。
 **提言:** `Map` を使用して `document.uri.toString()` と `document.version` ベースでキャッシュを実装しました。今後の Provider リファクタリング（例：`CodeActionProvider`）でも同様のキャッシュ戦略を検討する必要があります。
+
+## 2024-05-19 - ワンタッチ適用インタラクション
+**発見:** `Tab` キーのハイジャックを避けるため、厳密な `when` コンテキスト（`vibecodeease.hasInterventionAtCursor` 等）の管理が必須だった。
+**提言:** `CursorInterventionTracker` を実装したが、既存の `HoverProvider` や `CodeActionProvider` でも同じ `CodeAnalyzer` とキャッシュを利用している。今後、これらを統合する共通の `DiagnosticManager` のようなものを検討すべき。
