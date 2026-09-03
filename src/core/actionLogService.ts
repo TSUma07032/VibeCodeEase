@@ -25,6 +25,14 @@ export class ActionLogService {
     }
 
     public setWorkspaceRoot(rootPath: string) {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (workspaceFolders && workspaceFolders.length > 0) {
+            const workspacePath = workspaceFolders[0].uri.fsPath;
+            if (!rootPath.startsWith(workspacePath)) {
+                throw new Error('セキュリティ違反: ワークスペース外のファイルへのアクセスが試行されました');
+            }
+        }
+
         this.logFilePath = path.join(rootPath, 'research_action_log.csv');
         this.ensureLogFile();
     }

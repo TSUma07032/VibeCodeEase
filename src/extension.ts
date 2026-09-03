@@ -28,6 +28,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// 保存時自動修正（SILENT）のコールバック配線
 	silentFixService.setOnFixAppliedCallback((fixCount, docUri) => {
+		vscode.window.setStatusBarMessage(`$(zap) 保存時に${fixCount}件の問題を自動修正しました`, 3000);
 		actionLogService.log({
 			category: 'SILENT_FIX',
 			action: 'APPLY_ON_SAVE',
@@ -79,6 +80,25 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.showInformationMessage('Hello World from vibeCodeEase!');
 	});
 	context.subscriptions.push(disposable);
+
+	const applyInterventionCommand = vscode.commands.registerCommand('vibecodeease.applyIntervention', async (uri: vscode.Uri, range: vscode.Range, newText: string) => {
+		if (!uri || !range || typeof newText !== 'string') {
+			return;
+		}
+		const edit = new vscode.WorkspaceEdit();
+		edit.replace(uri, range, newText);
+		const applied = await vscode.workspace.applyEdit(edit);
+		if (applied) {
+			vscode.window.setStatusBarMessage('$(check) 修正を適用しました', 3000);
+			actionLogService.log({
+				category: 'SYSTEM',
+				action: 'APPLY',
+				targetId: uri.toString(),
+				payload: 'Applied intervention via command'
+			});
+		}
+	});
+	context.subscriptions.push(applyInterventionCommand);
 
 	const configureGeminiKey = vscode.commands.registerCommand('vibecodeease.configureGeminiKey', async () => {
 		const apiKey = await vscode.window.showInputBox({

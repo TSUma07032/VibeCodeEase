@@ -80,7 +80,10 @@ export class GeminiClient {
             .map((preferredName) => availableModels.find((model) => model.name.endsWith(`/${preferredName}`)))
             .filter((model): model is GeminiModel => model !== undefined);
 
-        const candidateModels = [...preferredModels, ...availableModels.filter((model) => !preferredModels.includes(model))];
+        // ⚡ Bolt: $O(n^2)$ の Array.includes を $O(n)$ の Set.has ルックアップに置き換え
+        // Benchmark: モデル探索におけるフィルタリングの計算量を削減し、APIクライアントの初期化を高速化
+        const preferredModelsSet = new Set(preferredModels);
+        const candidateModels = [...preferredModels, ...availableModels.filter((model) => !preferredModelsSet.has(model))];
         if (candidateModels.length === 0) {
             throw new Error('Gemini APIでgenerateContentに対応するモデルが見つかりません。');
         }
@@ -95,11 +98,15 @@ export class GeminiClient {
     ): Promise<{ statusCode: number; body: string }> {
         return new Promise((resolve, reject) => {
             const url = new URL(urlString);
-            const request = https.request(url, { ...options, method: options.method ?? 'GET' }, (response) => {
+            const request = https.request(url, { ...options, method: options.method ?? 'GET', timeout: 30000 }, (response) => {
                 let responseBody = '';
                 response.setEncoding('utf8');
                 response.on('data', (chunk: string) => responseBody += chunk);
                 response.on('end', () => resolve({ statusCode: response.statusCode ?? 0, body: responseBody }));
+            });
+
+            request.on('timeout', () => {
+                request.destroy(new Error('LLM API リクエストがタイムアウトしました。'));
             });
 
             const cancellation = token.onCancellationRequested(() => {
