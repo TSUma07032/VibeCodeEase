@@ -37,7 +37,7 @@ export class WebviewMessageHandler {
             return;
         }
 
-        const message = data as { command: string; payload?: unknown };
+        const message = data as { command: string; payload?: unknown; data?: { message?: unknown } };
 
         switch (message.command) {
             case 'GET_SETTINGS': {
@@ -77,7 +77,7 @@ export class WebviewMessageHandler {
                 break;
             }
             case 'UPDATE_PREFERENCE': {
-                this.handleUpdatePreference(message.data?.message);
+                this.handleUpdatePreference((message as any).data?.message);
                 break;
             }
             default: {

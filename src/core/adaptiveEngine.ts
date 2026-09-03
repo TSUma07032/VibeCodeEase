@@ -72,7 +72,7 @@ export class AdaptiveEngine {
             ).then(async (selection) => {
                 if (selection === 'はい (自動修正にする)') {
                     await globalState.updatePreference(category, 0.9);
-                    vscode.window.showInformationMessage(`✨ 「${categoryLabel}」を次回から自動修正するように更新しました！`);
+                    vscode.window.setStatusBarMessage(`$(check) 「${categoryLabel}」を次回から自動修正するように更新しました！`, 3000);
                 }
             });
             return true;
