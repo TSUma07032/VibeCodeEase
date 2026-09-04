@@ -27,8 +27,9 @@ export class ActionLogService {
     public setWorkspaceRoot(rootPath: string) {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (workspaceFolders && workspaceFolders.length > 0) {
-            const workspacePath = workspaceFolders[0].uri.fsPath;
-            if (!rootPath.startsWith(workspacePath)) {
+            const resolvedWorkspacePath = path.resolve(workspaceFolders[0].uri.fsPath);
+            const resolvedRootPath = path.resolve(rootPath);
+            if (!(resolvedRootPath === resolvedWorkspacePath || resolvedRootPath.startsWith(resolvedWorkspacePath + path.sep))) {
                 throw new Error('セキュリティ違反: ワークスペース外のファイルへのアクセスが試行されました');
             }
         }
