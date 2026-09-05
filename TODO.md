@@ -58,14 +58,15 @@
   - [x] 受信値の型・カテゴリ・数値範囲をNode.js側でも検証する。
     - Jules Memo: `parsePainCategory` と `clampPreferenceValue` を使用して、Webviewからの入力値を安全にパース・クランプする処理を実装しました。
   - [ ] 保存成功・失敗をUIへ通知する。
-- [ ] ワンタッチ適用インタラクション (`Tab to Apply`)
+- [x] ワンタッチ適用インタラクション (`Tab to Apply`)
   - 説明: 提案パネルやHoverからTabキー1つで修正案をコードにワンタッチ適用するキーバインド・コマンド処理。
   - Jules Memo: 現在はQuickFixを選択して適用する基盤まで。Tabキーによる適用フローは未実装。
   - [x] 提案のプレビューと適用を分離したコマンドを定義する。
     - Jules Memo: `vibecodeease.applyIntervention` コマンドを定義し、個別の修正案を `WorkspaceEdit` 経由で適用できるように実装。
-  - [ ] Tabキーの既存エディタ操作と競合しない起動条件を決める。
-  - [ ] 適用前後のドキュメントバージョンとUndo単位を検証する。
-  - [ ] 次のステップ: `package.json` での `keybindings` 設定と `when` 句を活用した条件定義を追加する。
+  - [x] Tabキーの既存エディタ操作と競合しない起動条件を決める。
+  - [x] 適用前後のドキュメントバージョンとUndo単位を検証する。
+  - [x] 次のステップ: `package.json` での `keybindings` 設定と `when` 句を活用した条件定義を追加する。
+    - Jules Memo: `vibecodeease.tabToApply` コマンドを実装し、`package.json` の `keybindings` に追加。`when` 句で競合を防ぎ、提案があれば Tab で即時適用する機能を実装しました。
 
 ## 🧪 4. テスト & 品質
 - [ ] テキスト解析・介入判定ロジックのユニットテスト
@@ -141,3 +142,4 @@
 - [ ] AST（抽象構文木）操作・高度なコード修正案生成ロジックの拡充
 - [ ] LLM Structured Outputs（Zod + JSON Schema）の更なる厳格化
 - [ ] Webviewから送信されるメッセージアクションの型安全性をさらに高めるリファクタリング
+- [ ] Tabキーによるワンタッチ適用の機能を、より広い範囲（インライン補完や複数候補時の選択UI）に拡張する。

@@ -9,6 +9,7 @@ import { DiagnosticsService } from './core/diagnosticsService';
 import { SilentFixService } from './core/silentFixService';
 import { ActionLogService } from './core/actionLogService';
 import { AdaptiveEngine } from './core/adaptiveEngine';
+import { SharedAnalysisCache } from './core/analyzer';
 
 interface PresetQuickPickItem extends vscode.QuickPickItem {
 	preset: PresetMode;
@@ -99,6 +100,62 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 	context.subscriptions.push(applyInterventionCommand);
+
+	const tabToApplyCommand = vscode.commands.registerCommand('vibecodeease.tabToApply', async () => {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) {
+			return vscode.commands.executeCommand('tab');
+		}
+
+		const document = editor.document;
+		const selection = editor.selection;
+		const globalState = GlobalState.getInstance();
+
+		const cached = SharedAnalysisCache.get(document.uri.toString());
+		// Only apply if we have cached results for the current document version
+		if (!cached || cached.version !== document.version) {
+			return vscode.commands.executeCommand('tab');
+		}
+
+		for (const result of cached.results) {
+			if (result.range.start.line > selection.end.line) {
+				break;
+			}
+
+			const level = globalState.getInterventionLevel(result.category);
+			if (level === 'IGNORE') {
+				continue;
+			}
+
+			const resultRange = new vscode.Range(
+				result.range.start.line, result.range.start.character,
+				result.range.end.line, result.range.end.character
+			);
+
+			if (selection.contains(resultRange.start) || selection.contains(resultRange.end) || selection.intersection(resultRange) || selection.start.line === resultRange.start.line) {
+				if (result.interventions.length > 0 && result.interventions[0].replacementText) {
+					const newText = result.interventions[0].replacementText;
+					const edit = new vscode.WorkspaceEdit();
+					edit.replace(document.uri, resultRange, newText);
+					const applied = await vscode.workspace.applyEdit(edit);
+					if (applied) {
+						vscode.window.setStatusBarMessage('$(check) 修正をワンタッチ適用しました', 3000);
+						actionLogService.log({
+							category: 'SYSTEM',
+							action: 'APPLY_TAB',
+							targetId: document.uri.toString(),
+							payload: `Applied intervention via Tab key: ${result.category}`
+						});
+					}
+					return;
+				}
+			}
+		}
+
+		// If no intervention found, fallback to default tab behavior
+		return vscode.commands.executeCommand('tab');
+	});
+	context.subscriptions.push(tabToApplyCommand);
 
 	const configureGeminiKey = vscode.commands.registerCommand('vibecodeease.configureGeminiKey', async () => {
 		const apiKey = await vscode.window.showInputBox({

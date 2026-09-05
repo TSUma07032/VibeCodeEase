@@ -1,5 +1,12 @@
 import { AnalysisResult, InterventionLevel, PAIN_CATEGORIES, ProposedIntervention } from '../types';
 
+export interface CachedAnalysis {
+    version: number;
+    results: AnalysisResult[];
+}
+
+export const SharedAnalysisCache = new Map<string, CachedAnalysis>();
+
 export class CodeAnalyzer {
   /**
    * 入力されたコードテキストを解析し、タイポや構文エラーなどの問題を検出する
@@ -71,3 +78,5 @@ export class CodeAnalyzer {
     return results;
   }
 }
+
+export const sharedAnalyzer = new CodeAnalyzer();
