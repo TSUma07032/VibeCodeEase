@@ -1,22 +1,8 @@
 import * as vscode from 'vscode';
-import { CodeAnalyzer } from './analyzer';
-import { AnalysisResult } from '../types';
+import { sharedAnalyzer, SharedAnalysisCache } from './analyzer';
 import { GlobalState } from '../state/globalState';
 
-interface CachedAnalysis {
-    version: number;
-    results: AnalysisResult[];
-}
-
 export class VibeCodeActionProvider implements vscode.CodeActionProvider {
-    private analyzer: CodeAnalyzer;
-    private cache: Map<string, CachedAnalysis>;
-
-    constructor() {
-        this.analyzer = new CodeAnalyzer();
-        this.cache = new Map<string, CachedAnalysis>();
-    }
-
     provideCodeActions(
         document: vscode.TextDocument,
         range: vscode.Range | vscode.Selection,
@@ -29,15 +15,15 @@ export class VibeCodeActionProvider implements vscode.CodeActionProvider {
 
         // Cache logic
         const uri = document.uri.toString();
-        let cached = this.cache.get(uri);
+        let cached = SharedAnalysisCache.get(uri);
 
         if (!cached || cached.version !== document.version) {
-            const results = this.analyzer.analyze(document.getText());
+            const results = sharedAnalyzer.analyze(document.getText());
             cached = {
                 version: document.version,
                 results: results
             };
-            this.cache.set(uri, cached);
+            SharedAnalysisCache.set(uri, cached);
         }
 
         const globalState = GlobalState.getInstance();
