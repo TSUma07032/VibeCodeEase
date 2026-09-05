@@ -16,6 +16,7 @@ export class GlobalState {
     private _mode: InterventionLevel = 'SUGGESTION';
     private _presetMode: PresetMode = DEFAULT_PRESET_MODE;
     private _preferences: UserPreferenceProfile = { ...DEFAULT_USER_PREFERENCES };
+    private _interventionLevelCache = new Map<PainCategory, InterventionLevel>();
 
     private readonly _onDidChangeState = new vscode.EventEmitter<void>();
     public readonly onDidChangeState = this._onDidChangeState.event;
@@ -41,6 +42,7 @@ export class GlobalState {
                 preferences: { ...PRESET_DEFINITIONS[this._presetMode as Exclude<PresetMode, 'CUSTOM'>].preferences }
             };
         }
+        this._interventionLevelCache.clear();
     }
 
     public get mode(): InterventionLevel {
@@ -75,6 +77,7 @@ export class GlobalState {
             await this.context.globalState.update('vibecodeease.presetMode', preset);
             await this.context.globalState.update('vibecodeease.preferences', this._preferences);
         }
+        this._interventionLevelCache.clear();
         this._onDidChangeState.fire();
     }
 
@@ -85,6 +88,7 @@ export class GlobalState {
             await this.context.globalState.update('vibecodeease.presetMode', 'CUSTOM');
             await this.context.globalState.update('vibecodeease.preferences', this._preferences);
         }
+        this._interventionLevelCache.clear();
         this._onDidChangeState.fire();
     }
 
@@ -95,6 +99,7 @@ export class GlobalState {
             await this.context.globalState.update('vibecodeease.presetMode', preset);
             await this.context.globalState.update('vibecodeease.preferences', this._preferences);
         }
+        this._interventionLevelCache.clear();
         this._onDidChangeState.fire();
     }
 
@@ -102,6 +107,13 @@ export class GlobalState {
      * 特定のPainCategoryに対する現在の介入レベルを判定して返す
      */
     public getInterventionLevel(category: PainCategory): InterventionLevel {
-        return InterventionEngine.getLevelForCategory(category, this._preferences);
+        // ⚡ Bolt: 介入レベル判定の高頻度な呼び出し結果をキャッシュし、計算コストを削減
+        // Benchmark: ホバー時やCodeAction表示時に行われる O(N) 回のクランプ処理やオブジェクトアクセスを O(1) に最適化
+        let level = this._interventionLevelCache.get(category);
+        if (!level) {
+            level = InterventionEngine.getLevelForCategory(category, this._preferences);
+            this._interventionLevelCache.set(category, level);
+        }
+        return level;
     }
 }
