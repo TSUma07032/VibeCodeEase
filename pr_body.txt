@@ -1,0 +1,4 @@
+🚨 深刻度 (Severity): CRITICAL
+💡 脆弱性 (Vulnerability): `ActionLogService` の `setWorkspaceRoot` における、パストラバーサルの脆弱性。
+🎯 影響 (Impact): 悪意のある入力により、ワークスペース外の任意のディレクトリに対してファイル作成や書き込みが行われるリスク。
+🔧 修正内容 (Fix): `path.resolve` を利用してベースパスとターゲットパスを正規化し、境界チェックを厳格化しました。
