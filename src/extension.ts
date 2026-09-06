@@ -102,6 +102,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const configureGeminiKey = vscode.commands.registerCommand('vibecodeease.configureGeminiKey', async () => {
 		const apiKey = await vscode.window.showInputBox({
+			title: 'Gemini API キー設定',
 			prompt: 'Gemini APIキーを入力してください。キーはVS CodeのSecretStorageに保存されます。',
 			password: true,
 			ignoreFocusOut: true,
