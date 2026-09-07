@@ -1,0 +1,9 @@
+💡 実施内容 (What):
+`showInputBox` を使用してGemini APIキーを入力する際の設定プロンプトに `title` プロパティを追加しました。
+
+🎯 理由・目的 (Why):
+入力ボックスにタイトルがないと、何のための入力画面なのか直感的に分かりにくいため。タイトルを追加することで、開発者にコンテキストを明確に伝え、UXを向上させます。
+
+📸 Before/After:
+Before: 入力ボックス上部にタイトルが表示されない。
+After: 入力ボックス上部に「vibeCodeEase: Configure Gemini API Key」というタイトルが表示される。
