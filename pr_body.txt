@@ -1,0 +1,4 @@
+🚨 **深刻度 (Severity):** CRITICAL
+💡 **脆弱性 (Vulnerability):** `ActionLogService`の`setWorkspaceRoot`にて、`rootPath.startsWith(workspacePath)`という不十分なチェックにより、`workspace-hacked`のようなプレフィックスが一致するディレクトリへのパストラバーサルを許可してしまう脆弱性が存在しました。
+🎯 **影響 (Impact):** ワークスペース外のローカルファイルシステムにログファイルが作成・書き込みされる可能性がありました。
+🔧 **修正内容 (Fix):** `path.resolve`を用いてパスを正規化し、`path.sep`を含めたプレフィックスチェックを行うことで、指定されたパスが確実にワークスペースフォルダ内に制限されるように修正しました。
