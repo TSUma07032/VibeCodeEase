@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { LlmInterventionService } from '../core/llmInterventionService';
-import { LlmInterventionPlan, PainCategory, PresetMode, PRESET_DEFINITIONS, parsePainCategory, clampPreferenceValue } from '../types';
+import { LlmInterventionPlan, PainCategory, PresetMode, PRESET_DEFINITIONS, parsePainCategory, clampPreferenceValue, ExtensionMessage } from '../types';
 import { GlobalState } from '../state/globalState';
 
 export interface PendingPlan {
@@ -37,7 +37,7 @@ export class WebviewMessageHandler {
             return;
         }
 
-        const message = data as { command: string; payload?: unknown; data?: { message?: unknown } };
+        const message = data as ExtensionMessage;
 
         switch (message.command) {
             case 'GET_SETTINGS': {
@@ -45,7 +45,7 @@ export class WebviewMessageHandler {
                 break;
             }
             case 'SET_PRESET': {
-                const preset = message.payload as PresetMode;
+                const preset = message.payload;
                 if (preset === 'LEARNING' || preset === 'FLOW' || preset === 'ZEN' || preset === 'CUSTOM') {
                     await GlobalState.getInstance().setPresetMode(preset);
                     this.sendCurrentSettings(webview);
@@ -53,7 +53,7 @@ export class WebviewMessageHandler {
                 break;
             }
             case 'UPDATE_PREFERENCE_VALUE': {
-                const payload = message.payload as { category?: unknown; value?: unknown } | undefined;
+                const payload = message.payload;
                 if (payload && typeof payload.category === 'string' && typeof payload.value === 'number' && !isNaN(payload.value)) {
                     const validCategory = parsePainCategory(payload.category);
                     const validValue = clampPreferenceValue(payload.value);
