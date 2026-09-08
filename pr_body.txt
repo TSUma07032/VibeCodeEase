@@ -1,4 +1,0 @@
-💡 **実施内容 (What):** HoverProvider, CodeActionProvider, SilentFixService のそれぞれで個別に実行されていた CodeAnalyzer を統合し、シングルトンの SharedAnalysisCache を導入しました。
-🎯 **理由・目的 (Why):** ドキュメントの変更（バージョン変更）ごとに複数のプロバイダーがそれぞれ独立して CodeAnalyzer.analyze() を実行しており、不要な解析が重複して走るのを防ぐため。
-📊 **影響 (Impact):** 高頻度イベント（キー入力など）での重複した解析が排除され、テキストパース処理の合計実行時間をプロバイダー数に応じて最大 1/N（今回は約1/3）に削減します。
-🔬 **検証方法 (Measurement):** テストスイートの実行（npm run compile && npm run lint && xvfb-run npm test）で機能が壊れていないことを確認しました。
