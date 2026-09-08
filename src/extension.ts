@@ -111,13 +111,9 @@ export function activate(context: vscode.ExtensionContext) {
 		const selection = editor.selection;
 		const globalState = GlobalState.getInstance();
 
-		const cached = SharedAnalysisCache.get(document.uri.toString());
-		// Only apply if we have cached results for the current document version
-		if (!cached || cached.version !== document.version) {
-			return vscode.commands.executeCommand('tab');
-		}
+		const results = SharedAnalysisCache.getInstance().getResults(document);
 
-		for (const result of cached.results) {
+		for (const result of results) {
 			if (result.range.start.line > selection.end.line) {
 				break;
 			}
@@ -159,6 +155,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const configureGeminiKey = vscode.commands.registerCommand('vibecodeease.configureGeminiKey', async () => {
 		const apiKey = await vscode.window.showInputBox({
+			title: 'vibeCodeEase: Configure Gemini API Key',
 			prompt: 'Gemini APIキーを入力してください。キーはVS CodeのSecretStorageに保存されます。',
 			password: true,
 			ignoreFocusOut: true,

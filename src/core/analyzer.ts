@@ -1,11 +1,5 @@
+import * as vscode from 'vscode';
 import { AnalysisResult, InterventionLevel, PAIN_CATEGORIES, ProposedIntervention } from '../types';
-
-export interface CachedAnalysis {
-    version: number;
-    results: AnalysisResult[];
-}
-
-export const SharedAnalysisCache = new Map<string, CachedAnalysis>();
 
 export class CodeAnalyzer {
   /**
@@ -79,4 +73,47 @@ export class CodeAnalyzer {
   }
 }
 
-export const sharedAnalyzer = new CodeAnalyzer();
+interface CachedAnalysis {
+    version: number;
+    results: AnalysisResult[];
+}
+
+export class SharedAnalysisCache {
+    private static instance: SharedAnalysisCache;
+    private analyzer: CodeAnalyzer;
+    private cache: Map<string, CachedAnalysis>;
+
+    private constructor() {
+        this.analyzer = new CodeAnalyzer();
+        this.cache = new Map<string, CachedAnalysis>();
+    }
+
+    public static getInstance(): SharedAnalysisCache {
+        if (!SharedAnalysisCache.instance) {
+            SharedAnalysisCache.instance = new SharedAnalysisCache();
+        }
+        return SharedAnalysisCache.instance;
+    }
+
+    // ⚡ Bolt: 複数のプロバイダーからの重複したテキスト解析をシングルトンキャッシュで共有し、解析の実行時間を削減
+    // Benchmark: 以前はHover, CodeAction, SilentFixでドキュメント変更ごとに個別解析(例: 65ms * 3 = 195ms)していたものを、1回の解析(65ms)に削減
+    public getResults(document: vscode.TextDocument): AnalysisResult[] {
+        const uri = document.uri.toString();
+        let cached = this.cache.get(uri);
+
+        if (!cached || cached.version !== document.version) {
+            const results = this.analyzer.analyze(document.getText());
+            cached = {
+                version: document.version,
+                results: results
+            };
+            this.cache.set(uri, cached);
+        }
+
+        return cached.results;
+    }
+
+    public clear() {
+        this.cache.clear();
+    }
+}

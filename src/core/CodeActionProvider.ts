@@ -1,8 +1,11 @@
 import * as vscode from 'vscode';
-import { sharedAnalyzer, SharedAnalysisCache } from './analyzer';
+import { SharedAnalysisCache } from './analyzer';
+import { AnalysisResult } from '../types';
 import { GlobalState } from '../state/globalState';
 
 export class VibeCodeActionProvider implements vscode.CodeActionProvider {
+    constructor() {}
+
     provideCodeActions(
         document: vscode.TextDocument,
         range: vscode.Range | vscode.Selection,
@@ -13,23 +16,11 @@ export class VibeCodeActionProvider implements vscode.CodeActionProvider {
             return [];
         }
 
-        // Cache logic
-        const uri = document.uri.toString();
-        let cached = SharedAnalysisCache.get(uri);
-
-        if (!cached || cached.version !== document.version) {
-            const results = sharedAnalyzer.analyze(document.getText());
-            cached = {
-                version: document.version,
-                results: results
-            };
-            SharedAnalysisCache.set(uri, cached);
-        }
-
+        const results = SharedAnalysisCache.getInstance().getResults(document);
         const globalState = GlobalState.getInstance();
         const actions: vscode.CodeAction[] = [];
 
-        for (const result of cached.results) {
+        for (const result of results) {
             // ⚡ Bolt: 選択範囲より後方の解析結果に対する不要なループ処理をスキップする早期ブレークを追加
             // Benchmark: 無駄な vscode.Range オブジェクトの生成と包含判定をスキップし、実行時間を削減
             if (result.range.start.line > range.end.line) {
