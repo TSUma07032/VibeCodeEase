@@ -75,4 +75,33 @@ suite('CodeAnalyzer Test Suite', () => {
 
         assert.strictEqual(results.length, 0);
     });
+
+    test('should detect snake_case variable declarations and suggest camelCase', () => {
+        const code = `let my_var = 1;\nconst another_long_var = 2;\nvar test_var_name = 3;`;
+        const results = analyzer.analyze(code);
+
+        assert.strictEqual(results.length, 3);
+
+        assert.strictEqual(results[0].category, 'VAR_FUNC_MANAGEMENT');
+        assert.strictEqual(results[0].interventions[0].originalText, 'my_var');
+        assert.strictEqual(results[0].interventions[0].replacementText, 'myVar');
+        assert.strictEqual(results[0].range.start.line, 0);
+
+        assert.strictEqual(results[1].category, 'VAR_FUNC_MANAGEMENT');
+        assert.strictEqual(results[1].interventions[0].originalText, 'another_long_var');
+        assert.strictEqual(results[1].interventions[0].replacementText, 'anotherLongVar');
+        assert.strictEqual(results[1].range.start.line, 1);
+
+        assert.strictEqual(results[2].category, 'VAR_FUNC_MANAGEMENT');
+        assert.strictEqual(results[2].interventions[0].originalText, 'test_var_name');
+        assert.strictEqual(results[2].interventions[0].replacementText, 'testVarName');
+        assert.strictEqual(results[2].range.start.line, 2);
+    });
+
+    test('should not suggest camelCase for non-matching strings or non-declarations', () => {
+        const code = `let camelCase = 1;\nmy_var = 2;\nconst ONLY_UPPER_SNAKE = 3;`;
+        const results = analyzer.analyze(code);
+
+        assert.strictEqual(results.length, 0);
+    });
 });

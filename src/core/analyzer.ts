@@ -18,7 +18,11 @@ export class CodeAnalyzer {
       // Benchmark: Skips regex and indexOf loop on non-matching lines, improving time from ~270ms to ~25ms on large, mostly clean files.
       // ⚡ Bolt: Replaced RegExp.exec with String.prototype.indexOf for static string matching
       // Benchmark: Reduces Extension Host event loop blocking on large documents, improving analysis time from ~270ms to ~65ms per 400,000 lines.
-      if (lineText.indexOf('functon') === -1 && lineText.indexOf('if condtion:') === -1) {
+      const hasFuncton = lineText.indexOf('functon') !== -1;
+      const hasCondtion = lineText.indexOf('if condtion:') !== -1;
+      const hasVarDeclaration = lineText.indexOf('let ') !== -1 || lineText.indexOf('const ') !== -1 || lineText.indexOf('var ') !== -1;
+
+      if (!hasFuncton && !hasCondtion && !hasVarDeclaration) {
           continue;
       }
 
@@ -66,6 +70,37 @@ export class CodeAnalyzer {
           interventions
         });
         conditionIndex = lineText.indexOf('if condtion:', conditionIndex + 'if condtion:'.length);
+      }
+
+      // 3. スネークケース命名規則 (snake_case) のキャメルケース化 (camelCase)
+      if (hasVarDeclaration) {
+        const snakeCaseRegex = /\b(?:let|const|var)\s+([a-z][a-z0-9]*_[a-z0-9_]+)\b/g;
+        let match;
+        while ((match = snakeCaseRegex.exec(lineText)) !== null) {
+          const varName = match[1];
+          const camelCaseName = varName.replace(/_([a-z0-9])/g, (_, letter) => letter.toUpperCase());
+
+          const interventions: ProposedIntervention[] = [
+            {
+              originalText: varName,
+              replacementText: camelCaseName,
+              message: `$(lightbulb) **Consider using camelCase:** \`${camelCaseName}\``
+            }
+          ];
+
+          const varStartOffset = match[0].indexOf(varName);
+          const characterStart = match.index + varStartOffset;
+
+          results.push({
+            category: 'VAR_FUNC_MANAGEMENT',
+            level: 'SUGGESTION',
+            range: {
+              start: { line: lineIndex, character: characterStart },
+              end: { line: lineIndex, character: characterStart + varName.length }
+            },
+            interventions
+          });
+        }
       }
     }
 
