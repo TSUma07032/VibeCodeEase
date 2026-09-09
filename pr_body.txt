@@ -1,0 +1,9 @@
+💡 実施内容 (What):
+`vibecodeease.helloWorld` コマンド実行時に表示されていた `showInformationMessage` によるポップアップ通知を、非侵入型の `setStatusBarMessage` (アイコン付き、3000msのタイムアウト) に変更しました。
+
+🎯 理由・目的 (Why):
+単なる挨拶や確認のための通知でポップアップを表示すると、開発者のタイピングや思考（フロー）を中断してしまうため。ステータスバーへの表示に変更することで、作業を邪魔することなく情報を提供できます。
+
+📸 Before/After:
+- Before: 画面右下にポップアップが表示され、閉じる操作が必要になる場合がある。
+- After: ステータスバーに「$(globe) Hello World from vibeCodeEase!」と3秒間だけ表示され、自動で消える。

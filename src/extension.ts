@@ -78,7 +78,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(silentFixService);
 
 	const disposable = vscode.commands.registerCommand('vibecodeease.helloWorld', () => {
-		vscode.window.showInformationMessage('Hello World from vibeCodeEase!');
+		vscode.window.setStatusBarMessage('$(globe) Hello World from vibeCodeEase!', 3000);
 	});
 	context.subscriptions.push(disposable);
 
