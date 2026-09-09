@@ -32,6 +32,8 @@ export class ActionLogService {
             if (!resolvedTarget.startsWith(workspacePath + path.sep) && resolvedTarget !== workspacePath) {
                 throw new Error('セキュリティ違反: ワークスペース外のファイルへのアクセスが試行されました');
             }
+        } else {
+            throw new Error('セキュリティ違反: ワークスペース外のファイルへのアクセスが試行されました');
         }
 
         this.logFilePath = path.join(rootPath, 'research_action_log.csv');
