@@ -1,0 +1,4 @@
+🎯 消化したTODO: LLM Structured Outputs（Zod + JSON Schema）の導入
+💡 実装内容 (What): LlmInterventionPlan / LlmEdit に対応するZodスキーマを定義し、zod-to-json-schema を用いてJSON Schemaを自動生成するようにしました。また、Zodを用いたレスポンスの再検証を planValidator に追加しました。
+🔗 活用した基盤: 既存の型定義（PainCategoryなど）とZodを連携させ、検証ロジックを簡素化しました。
+📝 次のステップ: LLMプロバイダー抽象化を追加し、Zod + JSON Schemaを活用する。
