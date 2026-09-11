@@ -132,12 +132,15 @@
   - Jules Memo: CodeAnalyzerをCodeActionProviderに組み込み、ハードコードされていたロジックを削除しました。HoverProviderと同様のキャッシュ機構(ドキュメントURIとバージョンベース)を導入し、パフォーマンスを維持しています。
 
 - [ ] 介入判定エンジン (サイレント修正 vs ポップアップ提案) を実装し、ユーザー設定に基づいて CodeAction と Hover の表示を動的に制御する。
-- [ ] LLM Structured Outputs（Zod + JSON Schema）を導入する。
+- [x] LLM Structured Outputs（Zod + JSON Schema）を導入する。
   - 説明: LLMの介入プランをアプリケーション側の型定義から生成したJSON Schemaに拘束し、構造化された応答を型安全に受け取る。
-  - [ ] `LlmInterventionPlan` / `LlmEdit` に対応するZodスキーマを定義する。
-  - [ ] ZodスキーマからJSON Schemaを自動生成し、OpenAI等の直接APIのStructured Outputs（`strict: true`）へ渡す。
+  - [x] `LlmInterventionPlan` / `LlmEdit` に対応するZodスキーマを定義する。
+  - Jules Memo: `src/types/schema.ts` を作成し、Zodを用いてスキーマを定義しました。
+  - [x] ZodスキーマからJSON Schemaを自動生成し、OpenAI等の直接APIのStructured Outputs（`strict: true`）へ渡す。
+  - Jules Memo: `zod-to-json-schema` を用いて JSON Schema を自動生成し、`promptBuilder.ts` と `geminiClient.ts` に組み込みました。
   - [ ] 直接API用のLLMプロバイダー抽象化を追加し、VS Code Language Model APIと切り替え可能にする。
-  - [ ] Zodによるレスポンス再検証と、スキーマ不一致・拒否応答・タイムアウト時のエラー処理を追加する。
+  - [x] Zodによるレスポンス再検証と、スキーマ不一致・拒否応答・タイムアウト時のエラー処理を追加する。
+  - Jules Memo: `planValidator.ts` で `safeParse` を使用し、無効なフォーマットに対して適切なエラーを投げるように変更しました。
   - [ ] 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。(次にやるべきこと)
 - [ ] AST（抽象構文木）操作・高度なコード修正案生成ロジックの拡充
 - [ ] LLM Structured Outputs（Zod + JSON Schema）の更なる厳格化
