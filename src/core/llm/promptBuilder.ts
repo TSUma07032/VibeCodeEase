@@ -1,30 +1,15 @@
 import * as vscode from 'vscode';
 import { PAIN_CATEGORIES } from '../../types';
 
-export const INTERVENTION_RESPONSE_SCHEMA = {
-    type: 'OBJECT',
-    required: ['summary', 'edits'],
-    properties: {
-        summary: { type: 'string' },
-        edits: {
-            type: 'ARRAY',
-            items: {
-                type: 'OBJECT',
-                required: ['startLine', 'startCharacter', 'endLine', 'endCharacter', 'oldText', 'newText', 'category', 'reason'],
-                properties: {
-                    startLine: { type: 'INTEGER', minimum: 0 },
-                    startCharacter: { type: 'INTEGER', minimum: 0 },
-                    endLine: { type: 'INTEGER', minimum: 0 },
-                    endCharacter: { type: 'INTEGER', minimum: 0 },
-                    oldText: { type: 'STRING' },
-                    newText: { type: 'STRING' },
-                    category: { type: 'STRING', enum: PAIN_CATEGORIES },
-                    reason: { type: 'STRING' }
-                }
-            }
-        }
-    }
-};
+import { LlmInterventionPlanSchema } from '../../types/schema';
+import { zodToJsonSchema } from 'zod-to-json-schema';
+
+export const INTERVENTION_RESPONSE_SCHEMA = zodToJsonSchema(LlmInterventionPlanSchema, {
+    target: 'jsonSchema7',
+    $refStrategy: 'none'
+});
+
+
 
 /**
  * コードレビュー・介入生成用のプロンプト文字列を構築する

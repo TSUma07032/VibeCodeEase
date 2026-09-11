@@ -4,8 +4,8 @@ import { buildInterventionPrompt, INTERVENTION_RESPONSE_SCHEMA } from '../core/l
 
 suite('PromptBuilder Test Suite', () => {
     test('スキーマに必要なプロパティが定義されていること', () => {
-        assert.strictEqual(INTERVENTION_RESPONSE_SCHEMA.type, 'OBJECT');
-        assert.deepStrictEqual(INTERVENTION_RESPONSE_SCHEMA.required, ['summary', 'edits']);
+        assert.strictEqual((INTERVENTION_RESPONSE_SCHEMA as any).type, 'object');
+        assert.deepStrictEqual((INTERVENTION_RESPONSE_SCHEMA as any).required, ['summary', 'edits']);
     });
 
     test('ドキュメント情報とコンテンツを含むプロンプトが生成されること', () => {

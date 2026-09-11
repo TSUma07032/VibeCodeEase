@@ -1,0 +1,18 @@
+🎯 消化したTODO:
+- [x] LLM Structured Outputs（Zod + JSON Schema）を導入する。
+  - [x] `LlmInterventionPlan` / `LlmEdit` に対応するZodスキーマを定義する。
+  - [x] ZodスキーマからJSON Schemaを自動生成し、OpenAI等の直接APIのStructured Outputs（`strict: true`）へ渡す。
+  - [x] Zodによるレスポンス再検証と、スキーマ不一致・拒否応答・タイムアウト時のエラー処理を追加する。
+
+💡 実装内容 (What):
+- `src/types/schema.ts` を追加し、Zodを用いてLLMレスポンス用の `LlmInterventionPlanSchema` を定義しました。
+- `zod-to-json-schema` を用いてZodスキーマからJSON Schemaを自動生成し、プロンプトに埋め込む `INTERVENTION_RESPONSE_SCHEMA` を構築しました。Gemini用には特定のフィールドを修正した `GEMINI_RESPONSE_SCHEMA` を提供しています。
+- `src/core/llm/planValidator.ts` にて、従来の手動ランタイム型チェックを `LlmInterventionPlanSchema.safeParse` に置き換え、検証処理を簡素化および堅牢化しました。
+- それに伴いテストコードもZodの挙動に合わせて修正し、全てのテストを通過させました。
+
+🔗 活用した基盤:
+- `PAIN_CATEGORIES` 型定義および配列を再利用し、ZodのEnumとして統合しました。
+
+📝 次のステップ:
+- 直接API用のLLMプロバイダー抽象化を追加し、VS Code Language Model APIと切り替え可能にする。
+- LLM Structured Outputs（Zod + JSON Schema）の更なる厳格化

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { LlmEdit, LlmInterventionPlan, PAIN_CATEGORIES } from '../../types';
+import { LlmInterventionPlanSchema } from '../../types/schema';
 
 /**
  * 渡された文字列の改行コード（CRLF / LF）を考慮して正規化後オフセットから元の文字列オフセットへ変換する
@@ -26,30 +27,18 @@ export function validatePlan(value: unknown, document: vscode.TextDocument): Llm
         throw new Error('LLMの介入プラン形式が不正です。');
     }
 
-    const candidate = value as { summary?: unknown; edits?: unknown };
-    if (typeof candidate.summary !== 'string' || !Array.isArray(candidate.edits)) {
-        throw new Error('LLMの介入プランに必要な項目がありません。');
+    const parseResult = LlmInterventionPlanSchema.safeParse(value);
+    if (!parseResult.success) {
+        throw new Error('LLMの変更案に不正な値があります。 ' + parseResult.error.message);
     }
+    const candidate = parseResult.data;
 
-    const edits = candidate.edits.map((edit): LlmEdit => {
-        if (!edit || typeof edit !== 'object') {
-            throw new Error('LLMの変更案形式が不正です。');
-        }
-        const item = edit as Record<string, unknown>;
-        const positions = ['startLine', 'startCharacter', 'endLine', 'endCharacter'];
-        if (!positions.every((key) => Number.isInteger(item[key]) && (item[key] as number) >= 0) ||
-            typeof item.newText !== 'string' || typeof item.category !== 'string' ||
-            !PAIN_CATEGORIES.includes(item.category as LlmEdit['category']) || typeof item.reason !== 'string') {
-            throw new Error('LLMの変更案に不正な値があります。');
-        }
+    const edits = candidate.edits.map((item): LlmEdit => {
+        const startLine = item.startLine;
+        const endLine = item.endLine;
+        const startCharacter = item.startCharacter;
+        const endCharacter = item.endCharacter;
 
-        const startLine = item.startLine as number;
-        const endLine = item.endLine as number;
-        const startCharacter = item.startCharacter as number;
-        const endCharacter = item.endCharacter as number;
-        if (typeof item.oldText !== 'string' || !item.oldText) {
-            throw new Error('LLMの変更案にoldTextがありません。');
-        }
         if (startLine >= document.lineCount || endLine >= document.lineCount) {
             throw new Error(`LLMの変更範囲がファイル外を指しています。要求範囲: ${startLine}:${startCharacter}-${endLine}:${endCharacter}、ファイル: ${document.lineCount}行です。`);
         }
