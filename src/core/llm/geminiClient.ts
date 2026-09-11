@@ -48,7 +48,8 @@ export class GeminiClient {
             }
             if (response.statusCode < 200 || response.statusCode >= 300) {
                 const details = response.body.slice(0, 160);
-                throw new Error(`Gemini APIリクエストに失敗しました（HTTP ${response.statusCode}）。${details}`);
+                const safeDetails = details.replace(new RegExp(apiKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '***');
+                throw new Error(`Gemini APIリクエストに失敗しました（HTTP ${response.statusCode}）。${safeDetails}`);
             }
 
             const data = JSON.parse(response.body) as {
