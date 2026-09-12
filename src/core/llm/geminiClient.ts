@@ -47,8 +47,9 @@ export class GeminiClient {
                 continue;
             }
             if (response.statusCode < 200 || response.statusCode >= 300) {
-                const details = response.body.slice(0, 160);
-                throw new Error(`Gemini APIリクエストに失敗しました（HTTP ${response.statusCode}）。${details}`);
+                const safeApiKeyPattern = new RegExp(apiKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+                const safeDetails = response.body.slice(0, 160).replace(safeApiKeyPattern, '***API_KEY***');
+                throw new Error(`Gemini APIリクエストに失敗しました（HTTP ${response.statusCode}）。${safeDetails}`);
             }
 
             const data = JSON.parse(response.body) as {
@@ -71,7 +72,9 @@ export class GeminiClient {
             token
         );
         if (modelsResponse.statusCode < 200 || modelsResponse.statusCode >= 300) {
-            throw new Error(`Geminiのモデル一覧取得に失敗しました（HTTP ${modelsResponse.statusCode}）。APIキーとGenerative Language APIの有効化を確認してください。`);
+            const safeApiKeyPattern = new RegExp(apiKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+            const safeDetails = modelsResponse.body.slice(0, 160).replace(safeApiKeyPattern, '***API_KEY***');
+            throw new Error(`Geminiのモデル一覧取得に失敗しました（HTTP ${modelsResponse.statusCode}）。${safeDetails}`);
         }
 
         const models = (JSON.parse(modelsResponse.body) as GeminiModelsResponse).models ?? [];
