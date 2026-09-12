@@ -1,0 +1,18 @@
+タイトル: 🏗️ Builder: LLM Structured Outputs（Zod + JSON Schema）の導入
+
+🎯 消化したTODO:
+- [x] LlmInterventionPlan / LlmEdit に対応するZodスキーマを定義する。
+- [x] ZodスキーマからJSON Schemaを自動生成し、OpenAI等の直接APIのStructured Outputsへ渡す。
+
+💡 実装内容 (What):
+- `src/types/llmIntervention.ts` に Zod を用いた `LlmInterventionPlanSchema` を定義しました。
+- `src/core/llm/promptBuilder.ts` にて `zod-to-json-schema` を使用し、Zodスキーマから動的に `INTERVENTION_RESPONSE_SCHEMA` を生成するように変更しました。
+- `src/core/llm/planValidator.ts` の手動型チェック処理を `LlmInterventionPlanSchema.safeParse` に置き換え、検証処理を堅牢化しました。
+
+🔗 活用した基盤:
+- 既存の `LlmInterventionPlan` および `LlmEdit` インターフェース
+- `PAIN_CATEGORIES` 定数
+
+📝 次のステップ:
+- [ ] 直接API用のLLMプロバイダー抽象化を追加し、VS Code Language Model APIと切り替え可能にする。
+- [ ] Zodによるレスポンス再検証と、スキーマ不一致・拒否応答・タイムアウト時のエラー処理を追加する。
