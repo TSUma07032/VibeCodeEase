@@ -4,8 +4,10 @@ import { buildInterventionPrompt, INTERVENTION_RESPONSE_SCHEMA } from '../core/l
 
 suite('PromptBuilder Test Suite', () => {
     test('スキーマに必要なプロパティが定義されていること', () => {
-        assert.strictEqual(INTERVENTION_RESPONSE_SCHEMA.type, 'OBJECT');
-        assert.deepStrictEqual(INTERVENTION_RESPONSE_SCHEMA.required, ['summary', 'edits']);
+        const schema = INTERVENTION_RESPONSE_SCHEMA as any;
+        assert.ok(schema.definitions);
+        assert.strictEqual(schema.definitions.LlmInterventionPlan.type, 'object');
+        assert.deepStrictEqual(schema.definitions.LlmInterventionPlan.required, ['summary', 'edits']);
     });
 
     test('ドキュメント情報とコンテンツを含むプロンプトが生成されること', () => {

@@ -132,10 +132,11 @@
   - Jules Memo: CodeAnalyzerをCodeActionProviderに組み込み、ハードコードされていたロジックを削除しました。HoverProviderと同様のキャッシュ機構(ドキュメントURIとバージョンベース)を導入し、パフォーマンスを維持しています。
 
 - [ ] 介入判定エンジン (サイレント修正 vs ポップアップ提案) を実装し、ユーザー設定に基づいて CodeAction と Hover の表示を動的に制御する。
-- [ ] LLM Structured Outputs（Zod + JSON Schema）を導入する。
+- [x] LLM Structured Outputs（Zod + JSON Schema）を導入する。
   - 説明: LLMの介入プランをアプリケーション側の型定義から生成したJSON Schemaに拘束し、構造化された応答を型安全に受け取る。
-  - [ ] `LlmInterventionPlan` / `LlmEdit` に対応するZodスキーマを定義する。
-  - [ ] ZodスキーマからJSON Schemaを自動生成し、OpenAI等の直接APIのStructured Outputs（`strict: true`）へ渡す。
+  - Jules Memo: Zodとzod-to-json-schemaを導入し、LlmInterventionPlanスキーマを定義。JSON Schemaの自動生成とパース時の厳格な型チェックを実装しました。
+  - [x] `LlmInterventionPlan` / `LlmEdit` に対応するZodスキーマを定義する。
+  - [x] ZodスキーマからJSON Schemaを自動生成し、OpenAI等の直接APIのStructured Outputs（`strict: true`）へ渡す。
   - [ ] 直接API用のLLMプロバイダー抽象化を追加し、VS Code Language Model APIと切り替え可能にする。
   - [ ] Zodによるレスポンス再検証と、スキーマ不一致・拒否応答・タイムアウト時のエラー処理を追加する。
   - [ ] 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。(次にやるべきこと)
