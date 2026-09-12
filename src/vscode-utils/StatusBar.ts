@@ -25,25 +25,36 @@ export class VibeStatusBar {
         const preset = state.presetMode;
 
         switch (preset) {
-            case 'LEARNING':
+            case 'LEARNING': {
                 this.statusBarItem.text = '$(mortar-board) Vibe: Learning';
-                this.statusBarItem.tooltip = 'vibeCodeEase: 学習モード (解説ヒント中心) - クリックで変更';
+                const mdLearning = new vscode.MarkdownString('**vibeCodeEase: 学習モード**\n\n(解説ヒント中心) - クリックで変更');
+                mdLearning.supportThemeIcons = true;
+                this.statusBarItem.tooltip = mdLearning;
                 break;
-            case 'FLOW':
+            }
+            case 'FLOW': {
                 this.statusBarItem.text = '$(zap) Vibe: Flow';
-                this.statusBarItem.tooltip = 'vibeCodeEase: フローモード (自動修正中心) - クリックで変更';
+                const mdFlow = new vscode.MarkdownString('**vibeCodeEase: フローモード**\n\n(自動修正中心) - クリックで変更');
+                mdFlow.supportThemeIcons = true;
+                this.statusBarItem.tooltip = mdFlow;
                 break;
-            case 'ZEN':
+            }
+            case 'ZEN': {
                 this.statusBarItem.text = '$(eye-closed) Vibe: Zen';
-                this.statusBarItem.tooltip = 'vibeCodeEase: 職人モード (介入最小) - クリックで変更';
+                const mdZen = new vscode.MarkdownString('**vibeCodeEase: 職人モード**\n\n(介入最小) - クリックで変更');
+                mdZen.supportThemeIcons = true;
+                this.statusBarItem.tooltip = mdZen;
                 break;
+            }
             case 'CUSTOM': {
                 const prefs = state.preferences.preferences;
                 const details = Object.entries(prefs)
-                    .map(([k, v]) => `${k}: ${v.toFixed(2)}`)
-                    .join(', ');
+                    .map(([k, v]) => `- **${k}**: ${v.toFixed(2)}`)
+                    .join('\n');
                 this.statusBarItem.text = '$(settings) Vibe: Custom';
-                this.statusBarItem.tooltip = `vibeCodeEase: カスタム設定 ( ${details} ) - クリックで変更`;
+                const mdCustom = new vscode.MarkdownString(`**vibeCodeEase: カスタム設定**\n\n${details}\n\nクリックで変更`);
+                mdCustom.supportThemeIcons = true;
+                this.statusBarItem.tooltip = mdCustom;
                 break;
             }
         }

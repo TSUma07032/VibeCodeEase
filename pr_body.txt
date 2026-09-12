@@ -1,0 +1,11 @@
+🎨 Palette: ステータスバーのツールチップのMarkdown対応
+
+💡 **実施内容 (What):**
+- StatusBar の tooltip を plain text から `vscode.MarkdownString` に変更し、テーマアイコン (`supportThemeIcons = true`) を表示可能にしました。
+
+🎯 **理由・目的 (Why):**
+- tooltip の視認性とデザイン性を向上させ、カスタム設定の詳細などをより分かりやすく提示するため。
+
+📸 **Before/After:**
+- **Before:** tooltip はプレーンテキストのみでアイコンや改行がサポートされていませんでした。
+- **After:** tooltip は Markdown 対応でアイコンが表示され、設定内容がリスト形式で読みやすくなりました。
