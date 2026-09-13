@@ -53,20 +53,20 @@ export class InterventionEngine {
     presetMode: PresetMode = 'LEARNING'
   ): string {
     if (presetMode !== 'LEARNING') {
-      return `💡 **Did you mean:** \`${replacementText}\`?`;
+      return `💡 **提案:**\n\n\`\`\`\n${replacementText}\n\`\`\``;
     }
 
     switch (category) {
       case 'SYNTAX_TYPO':
-        return `🎓 **学習ヒント (タイポ):** \`${originalText}\` はキーワードの誤記の可能性があります。正しくは \`${replacementText}\` です。構文キーワードを正確に覚えることでエラーを予防できます。`;
+        return `🎓 **学習ヒント (タイポ):** \`${originalText}\` はキーワードの誤記の可能性があります。\n\n**修正案:**\n\`\`\`\n${replacementText}\n\`\`\`\n\n構文キーワードを正確に覚えることでエラーを予防できます。`;
       case 'INDENTATION_FORMATTING':
-        return `🎓 **学習ヒント (コード構造):** インデントのズレは可読性を落とすだけでなく、Python等のインデント構文言語ではエラーの直接原因になります。一貫したインデントを意識しましょう。`;
+        return `🎓 **学習ヒント (コード構造):** インデントのズレは可読性を落とすだけでなく、エラーの直接原因になります。\n\n**修正案:**\n\`\`\`\n${replacementText}\n\`\`\`\n\n一貫したインデントを意識しましょう。`;
       case 'VAR_FUNC_MANAGEMENT':
-        return `🎓 **学習ヒント (命名・宣言):** 変数や関数は意図が伝わる命名規則（camelCase等）や適切なスコープ宣言を心がけましょう。`;
+        return `🎓 **学習ヒント (命名・宣言):** 変数や関数は意図が伝わる命名規則や適切なスコープ宣言を心がけましょう。\n\n**修正案:**\n\`\`\`\n${replacementText}\n\`\`\``;
       case 'SYNTAX_ERROR_HANDLING':
-        return `🎓 **学習ヒント (構文構造):** 括弧やブロックの対応関係に不整合があります。開いたブロックが正しく閉じられているか確認しましょう。`;
+        return `🎓 **学習ヒント (構文構造):** 括弧やブロックの対応関係に不整合がある可能性があります。\n\n**修正案:**\n\`\`\`\n${replacementText}\n\`\`\`\n\n開いたブロックが正しく閉じられているか確認しましょう。`;
       default:
-        return `🎓 **学習ヒント:** \`${replacementText}\` への修正が推奨されます。`;
+        return `🎓 **学習ヒント:** 以下の修正が推奨されます。\n\n\`\`\`\n${replacementText}\n\`\`\``;
     }
   }
 }

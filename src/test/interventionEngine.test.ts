@@ -117,7 +117,7 @@ suite('InterventionEngine Test Suite', () => {
 
         test('LEARNINGモード以外ではシンプルなサジェスト文を返すこと', () => {
             const hint = InterventionEngine.getEducationalHint('SYNTAX_TYPO', 'functon', 'function', 'FLOW');
-            assert.strictEqual(hint, '💡 **Did you mean:** `function`?');
+            assert.strictEqual(hint, '💡 **提案:**\n\n\`\`\`\nfunction\n\`\`\`');
         });
     });
 });
