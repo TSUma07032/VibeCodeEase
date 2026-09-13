@@ -1,0 +1,15 @@
+🎯 消化したTODO:
+- 命名規則（camelCase 補正）の修正案生成器を追加する。
+
+💡 実装内容 (What):
+- `src/core/analyzer.ts` において、`const` および `let` で宣言された `snake_case` の変数名を検出し、`camelCase` に補正するロジックを正規表現を用いて追加しました。
+- 検出カテゴリは `VAR_FUNC_MANAGEMENT` とし、修正案とともに提案されるようにしました。
+- `src/test/analyzer.test.ts` に検出および置換が正しく機能することを保証するユニットテストを追加しました。
+
+🔗 活用した基盤:
+- 既存の `CodeAnalyzer` クラスの解析ループおよび `SharedAnalysisCache` の仕組みを再利用し、パフォーマンス影響を最小限に抑えました。
+- 既存の `AnalysisResult` 型定義および `VAR_FUNC_MANAGEMENT` カテゴリを活用しました。
+
+📝 次のステップ:
+- インデント、ブロック構文の修正案生成器を追加する。
+- Tabキーによるワンタッチ適用の機能を、より広い範囲に拡張する。
