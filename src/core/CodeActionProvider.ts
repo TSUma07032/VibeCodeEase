@@ -43,7 +43,8 @@ export class VibeCodeActionProvider implements vscode.CodeActionProvider {
                     if (intervention.replacementText) {
                         const isLearning = globalState.presetMode === 'LEARNING';
                         const titlePrefix = isLearning ? '$(mortar-board) [学習ヒント] ' : '$(zap) ';
-                        const title = `${titlePrefix}Change '${intervention.originalText}' to '${intervention.replacementText}'`;
+                        const originalShort = intervention.originalText.length > 15 ? intervention.originalText.substring(0, 15) + '...' : intervention.originalText;
+                        const title = `${titlePrefix}「${originalShort}」を修正`;
                         const fix = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
                         fix.isPreferred = true;
                         fix.edit = new vscode.WorkspaceEdit();
