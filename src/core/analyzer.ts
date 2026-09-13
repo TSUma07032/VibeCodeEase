@@ -18,7 +18,8 @@ export class CodeAnalyzer {
       // Benchmark: Skips regex and indexOf loop on non-matching lines, improving time from ~270ms to ~25ms on large, mostly clean files.
       // ⚡ Bolt: Replaced RegExp.exec with String.prototype.indexOf for static string matching
       // Benchmark: Reduces Extension Host event loop blocking on large documents, improving analysis time from ~270ms to ~65ms per 400,000 lines.
-      if (lineText.indexOf('functon') === -1 && lineText.indexOf('if condtion:') === -1) {
+      const hasNamingTarget = (lineText.indexOf('const ') !== -1 || lineText.indexOf('let ') !== -1) && lineText.indexOf('_') !== -1;
+      if (lineText.indexOf('functon') === -1 && lineText.indexOf('if condtion:') === -1 && !hasNamingTarget) {
           continue;
       }
 
@@ -66,6 +67,32 @@ export class CodeAnalyzer {
           interventions
         });
         conditionIndex = lineText.indexOf('if condtion:', conditionIndex + 'if condtion:'.length);
+      }
+
+      // 3. snake_case 変数の命名規則の検出
+      const namingRegex = /(const|let)\s+([a-z][a-z0-9]*_[a-z0-9_]*)/g;
+      let namingMatch;
+      while ((namingMatch = namingRegex.exec(lineText)) !== null) {
+        const fullMatch = namingMatch[0];
+        const originalName = namingMatch[2];
+        const camelCaseName = originalName.replace(/_([a-z0-9])/g, (g) => g[1].toUpperCase());
+        const replacementText = fullMatch.replace(originalName, camelCaseName);
+
+        results.push({
+          category: 'VAR_FUNC_MANAGEMENT',
+          level: 'SUGGESTION',
+          range: {
+            start: { line: lineIndex, character: namingMatch.index },
+            end: { line: lineIndex, character: namingMatch.index + fullMatch.length }
+          },
+          interventions: [
+            {
+              originalText: fullMatch,
+              replacementText: replacementText,
+              message: `$(lightbulb) **Consider using camelCase:** \`${camelCaseName}\`?`
+            }
+          ]
+        });
       }
     }
 

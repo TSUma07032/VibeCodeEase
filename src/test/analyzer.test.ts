@@ -75,4 +75,31 @@ suite('CodeAnalyzer Test Suite', () => {
 
         assert.strictEqual(results.length, 0);
     });
+
+    test('should detect snake_case variable naming and suggest camelCase', () => {
+        const code = `const my_snake_var = 1;\nlet another_test_var = "test";`;
+        const results = analyzer.analyze(code);
+
+        assert.strictEqual(results.length, 2);
+
+        // Check first match (const my_snake_var)
+        assert.strictEqual(results[0].category, 'VAR_FUNC_MANAGEMENT');
+        assert.strictEqual(results[0].level, 'SUGGESTION');
+        assert.strictEqual(results[0].range.start.line, 0);
+        assert.strictEqual(results[0].range.start.character, 0);
+        assert.strictEqual(results[0].range.end.line, 0);
+        assert.strictEqual(results[0].range.end.character, 18);
+        assert.strictEqual(results[0].interventions[0].originalText, 'const my_snake_var');
+        assert.strictEqual(results[0].interventions[0].replacementText, 'const mySnakeVar');
+
+        // Check second match (let another_test_var)
+        assert.strictEqual(results[1].category, 'VAR_FUNC_MANAGEMENT');
+        assert.strictEqual(results[1].level, 'SUGGESTION');
+        assert.strictEqual(results[1].range.start.line, 1);
+        assert.strictEqual(results[1].range.start.character, 0);
+        assert.strictEqual(results[1].range.end.line, 1);
+        assert.strictEqual(results[1].range.end.character, 20);
+        assert.strictEqual(results[1].interventions[0].originalText, 'let another_test_var');
+        assert.strictEqual(results[1].interventions[0].replacementText, 'let anotherTestVar');
+    });
 });
