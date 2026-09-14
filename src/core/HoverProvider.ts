@@ -1,21 +1,14 @@
 import * as vscode from 'vscode';
-import { CodeAnalyzer } from './analyzer';
-import { AnalysisCache } from './analysisCache';
+import { SharedAnalysisCache } from './analyzer';
+import { AnalysisResult } from '../types';
 import { GlobalState } from '../state/globalState';
 import { InterventionEngine } from './interventionEngine';
 
 export class VibeHoverProvider implements vscode.HoverProvider {
-    private readonly analyzer: CodeAnalyzer;
-    private readonly cache: AnalysisCache;
-
-    constructor(analyzer: CodeAnalyzer = new CodeAnalyzer(), cache: AnalysisCache = new AnalysisCache()) {
-        this.analyzer = analyzer;
-        this.cache = cache;
-    }
-
+    constructor() {}
 
     provideHover(document: vscode.TextDocument, position: vscode.Position, _token: vscode.CancellationToken): vscode.ProviderResult<vscode.Hover> {
-        const results = this.cache.getOrAnalyze(document, this.analyzer);
+        const results = SharedAnalysisCache.getInstance().getResults(document);
         const globalState = GlobalState.getInstance();
 
         // Find intersecting result

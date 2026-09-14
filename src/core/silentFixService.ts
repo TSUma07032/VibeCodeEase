@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { CodeAnalyzer } from './analyzer';
+import { SharedAnalysisCache } from './analyzer';
 import { GlobalState } from '../state/globalState';
 
 /**
@@ -7,13 +7,10 @@ import { GlobalState } from '../state/globalState';
  * 介入レベルが 'SILENT' に設定されている問題を自動的に修正するサービス
  */
 export class SilentFixService {
-    private analyzer: CodeAnalyzer;
     private disposables: vscode.Disposable[] = [];
     private onFixAppliedCallback?: (fixCount: number, documentUri: string) => void;
 
     constructor() {
-        this.analyzer = new CodeAnalyzer();
-
         this.disposables.push(
             vscode.workspace.onWillSaveTextDocument((event) => {
                 this.handleWillSave(event);
@@ -30,7 +27,7 @@ export class SilentFixService {
         const globalState = GlobalState.getInstance();
 
         // ドキュメント内の問題を検出
-        const results = this.analyzer.analyze(document.getText());
+        const results = SharedAnalysisCache.getInstance().getResults(document);
         const edits: vscode.TextEdit[] = [];
 
         for (const result of results) {

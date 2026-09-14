@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { AnalysisResult, ProposedIntervention, PainCategory } from '../types';
 
 export interface TypoRule {
@@ -70,3 +71,45 @@ export class CodeAnalyzer {
   }
 }
 
+interface CachedAnalysis {
+    version: number;
+    results: AnalysisResult[];
+}
+
+export class SharedAnalysisCache {
+    private static instance: SharedAnalysisCache;
+    private analyzer: CodeAnalyzer;
+    private cache: Map<string, CachedAnalysis>;
+
+    private constructor() {
+        this.analyzer = new CodeAnalyzer();
+        this.cache = new Map<string, CachedAnalysis>();
+    }
+
+    public static getInstance(): SharedAnalysisCache {
+        if (!SharedAnalysisCache.instance) {
+            SharedAnalysisCache.instance = new SharedAnalysisCache();
+        }
+        return SharedAnalysisCache.instance;
+    }
+
+    public getResults(document: vscode.TextDocument): AnalysisResult[] {
+        const uri = document.uri.toString();
+        let cached = this.cache.get(uri);
+
+        if (!cached || cached.version !== document.version) {
+            const results = this.analyzer.analyze(document.getText());
+            cached = {
+                version: document.version,
+                results: results
+            };
+            this.cache.set(uri, cached);
+        }
+
+        return cached.results;
+    }
+
+    public clear() {
+        this.cache.clear();
+    }
+}
