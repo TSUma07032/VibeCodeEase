@@ -6,6 +6,9 @@ export type PainCategory =
 
 export type PresetMode = 'LEARNING' | 'FLOW' | 'ZEN' | 'CUSTOM';
 
+/** LLMバックグラウンドサービスのトリガーモード */
+export type LlmTriggerMode = 'continuous' | 'on-save' | 'disabled';
+
 export interface ProposedEdit {
   startLine: number;
   startCharacter: number;
@@ -28,7 +31,6 @@ export interface LlmConfig {
   model: string;
 }
 
-
 export interface PresetDefinition {
   id: string;
   name: string;
@@ -37,12 +39,32 @@ export interface PresetDefinition {
   preferences: Record<PainCategory, number>;
 }
 
+/** ルールカタログ1件 */
+export interface RuleSummary {
+  pattern: string;
+  replacement: string;
+  category: PainCategory;
+  languageId?: string[];
+}
+
+/** Grammarly パネル用: 現在ファイルの生きた問題1件 */
+export interface LiveIssue {
+  line: number;
+  character: number;
+  category: PainCategory;
+  message: string;
+  replacementText?: string;
+  source: 'static' | 'ast' | 'llm';
+}
+
 export interface SettingsPayload {
   presetMode: PresetMode;
   preferences: Record<PainCategory, number>;
   presetDefinitions: Record<string, PresetDefinition>;
   llmConfig: LlmConfig;
   hasGeminiApiKey: boolean;
+  activeRules?: RuleSummary[];
+  llmTriggerMode: LlmTriggerMode;
 }
 
 export const CATEGORY_NAMES: Record<PainCategory, string> = {
@@ -51,3 +73,4 @@ export const CATEGORY_NAMES: Record<PainCategory, string> = {
   VAR_FUNC_MANAGEMENT: '変数・関数の管理',
   SYNTAX_ERROR_HANDLING: '構文エラー・ブロック'
 };
+

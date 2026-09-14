@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { AnalysisResult, ProposedIntervention, PainCategory } from '../types';
+import { AstAnalyzer } from './astAnalyzer';
 
 export interface TypoRule {
   pattern: string;
@@ -188,11 +189,16 @@ export class CodeAnalyzer {
 export class SharedAnalysisCache {
   private static instance: SharedAnalysisCache;
   private analyzer: CodeAnalyzer;
+  private astAnalyzer: AstAnalyzer;
   private cache: Map<string, CachedAnalysis>;
+  /** LLM バックグラウンドサービスがマージした外部結果 (source: 'llm') */
+  private externalResults: Map<string, AnalysisResult[]>;
 
   private constructor() {
     this.analyzer = new CodeAnalyzer();
+    this.astAnalyzer = new AstAnalyzer();
     this.cache = new Map<string, CachedAnalysis>();
+    this.externalResults = new Map<string, AnalysisResult[]>();
   }
 
   public static getInstance(): SharedAnalysisCache {
@@ -202,24 +208,54 @@ export class SharedAnalysisCache {
     return SharedAnalysisCache.instance;
   }
 
+  /**
+   * アクティブなドキュメントの解析結果を返す。
+   * 静的解析（ルールベース）・AST解析・LLM結果の3つをマージして返す。
+   */
   public getResults(document: vscode.TextDocument): AnalysisResult[] {
     const uri = document.uri.toString();
     let cached = this.cache.get(uri);
 
     if (!cached || cached.version !== document.version) {
-      // languageId を渡してルールのフィルタリングを有効化
-      const results = this.analyzer.analyze(document.getText(), document.languageId);
+      const text = document.getText();
+      const languageId = document.languageId;
+      const fileName = document.fileName;
+
+      // 静的解析 (ルールベース) → source: 'static'
+      const staticResults = this.analyzer.analyze(text, languageId)
+        .map(r => ({ ...r, source: 'static' as const }));
+
+      // AST 解析 (TS/JS のみ) → source: 'ast'
+      const astResults = this.astAnalyzer.analyze(text, fileName, languageId)
+        .map(r => ({ ...r, source: 'ast' as const }));
+
       cached = {
         version: document.version,
-        results: results
+        results: [...staticResults, ...astResults]
       };
       this.cache.set(uri, cached);
     }
 
-    return cached.results;
+    // LLM 結果をマージ（バージョン関係なく最新を使う）
+    const external = this.externalResults.get(uri) ?? [];
+    return [...cached.results, ...external];
+  }
+
+  /**
+   * LLM バックグラウンドサービスから呼ばれる。
+   * 指定URIの外部解析結果（source: 'llm'）を上書き保存する。
+   */
+  public mergeExternalResults(uri: string, results: AnalysisResult[]): void {
+    this.externalResults.set(uri, results.map(r => ({ ...r, source: 'llm' as const })));
+  }
+
+  /** 外部結果（LLM）のみをクリア */
+  public clearExternalResults(uri: string): void {
+    this.externalResults.delete(uri);
   }
 
   public clear() {
     this.cache.clear();
+    this.externalResults.clear();
   }
 }

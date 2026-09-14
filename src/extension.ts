@@ -9,6 +9,7 @@ import { SilentFixService } from './core/silentFixService';
 import { ActionLogService } from './core/actionLogService';
 import { AdaptiveEngine } from './core/adaptiveEngine';
 import { SharedAnalysisCache } from './core/analyzer';
+import { LlmBackgroundService } from './core/llmBackgroundService';
 
 import { registerCommands } from './commands';
 
@@ -23,6 +24,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const adaptiveEngine = new AdaptiveEngine(3);
 	const diagnosticsService = new DiagnosticsService();
 	const silentFixService = new SilentFixService();
+	const llmBackgroundService = new LlmBackgroundService(context.secrets);
 
 	// 保存時自動修正（SILENT）のコールバック配線
 	silentFixService.setOnFixAppliedCallback((fixCount, docUri) => {
@@ -84,6 +86,12 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(diagnosticsService);
 	context.subscriptions.push(silentFixService);
+	context.subscriptions.push(llmBackgroundService);
+
+	const refreshLiveIssuesCmd = vscode.commands.registerCommand('vibecodeease.refreshLiveIssues', () => {
+		sidebarProvider.pushLiveIssues();
+	});
+	context.subscriptions.push(refreshLiveIssuesCmd);
 
 	const disposable = vscode.commands.registerCommand('vibecodeease.helloWorld', () => {
 		vscode.window.showInformationMessage('Hello World from vibeCodeEase!');

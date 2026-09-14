@@ -8,7 +8,8 @@ import {
     DEFAULT_PRESET_MODE,
     DEFAULT_USER_PREFERENCES,
     LlmProvider,
-    LlmConfig
+    LlmConfig,
+    LlmTriggerMode
 } from '../types';
 import { InterventionEngine } from '../core/interventionEngine';
 
@@ -20,6 +21,7 @@ export class GlobalState {
     private _preferences: UserPreferenceProfile = { ...DEFAULT_USER_PREFERENCES };
     private _llmProvider: LlmProvider = 'gemini';
     private _llmModel: string = 'gemini-2.5-flash';
+    private _llmTriggerMode: LlmTriggerMode = 'on-save';
     private _interventionLevelCache = new Map<PainCategory, InterventionLevel>();
 
     private readonly _onDidChangeState = new vscode.EventEmitter<void>();
@@ -49,6 +51,7 @@ export class GlobalState {
         const config = vscode.workspace.getConfiguration('vibecodeease');
         this._llmProvider = config.get<LlmProvider>('llmProvider') || context.globalState.get<LlmProvider>('vibecodeease.llmProvider') || 'gemini';
         this._llmModel = config.get<string>('llmModel') || context.globalState.get<string>('vibecodeease.llmModel') || 'gemini-2.5-flash';
+        this._llmTriggerMode = context.globalState.get<LlmTriggerMode>('vibecodeease.llmTriggerMode') || 'on-save';
         
         const storedPrefs = context.globalState.get<UserPreferenceProfile>('vibecodeease.preferences');
         if (storedPrefs && storedPrefs.preferences) {
@@ -94,6 +97,10 @@ export class GlobalState {
             provider: this._llmProvider,
             model: this._llmModel
         };
+    }
+
+    public get llmTriggerMode(): LlmTriggerMode {
+        return this._llmTriggerMode;
     }
 
     public async setMode(mode: InterventionLevel) {
@@ -153,6 +160,14 @@ export class GlobalState {
         if (this.context) {
             await this.context.globalState.update('vibecodeease.llmProvider', config.provider);
             await this.context.globalState.update('vibecodeease.llmModel', config.model);
+        }
+        this._onDidChangeState.fire();
+    }
+
+    public async setLlmTriggerMode(mode: LlmTriggerMode) {
+        this._llmTriggerMode = mode;
+        if (this.context) {
+            await this.context.globalState.update('vibecodeease.llmTriggerMode', mode);
         }
         this._onDidChangeState.fire();
     }

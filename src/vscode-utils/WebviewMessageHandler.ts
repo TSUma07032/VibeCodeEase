@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { LlmInterventionService } from '../core/llmInterventionService';
+import { DEFAULT_TYPO_RULES } from '../core/analyzer';
 import {
     LlmInterventionPlan,
     PainCategory,
@@ -7,7 +8,9 @@ import {
     PRESET_DEFINITIONS,
     PRESET_MODES,
     parsePainCategory,
-    clampPreferenceValue
+    clampPreferenceValue,
+    RuleSummary,
+    LlmTriggerMode
 } from '../types';
 import { GlobalState } from '../state/globalState';
 
@@ -95,6 +98,14 @@ export class WebviewMessageHandler {
                 await this.sendCurrentSettings(webview);
                 break;
             }
+            case 'SET_LLM_TRIGGER_MODE': {
+                const payload = message.payload as LlmTriggerMode | undefined;
+                if (payload && ['continuous', 'on-save', 'disabled'].includes(payload)) {
+                    await GlobalState.getInstance().setLlmTriggerMode(payload);
+                    await this.sendCurrentSettings(webview);
+                }
+                break;
+            }
             case 'ANALYZE_CURRENT_FILE': {
                 await this.handleAnalyzeCurrentFile(webview);
                 break;
@@ -109,6 +120,20 @@ export class WebviewMessageHandler {
                 }
                 this.pendingPlan = undefined;
                 webview.postMessage({ type: 'PLAN_REJECTED' });
+                break;
+            }
+            case 'JUMP_TO_ISSUE': {
+                // Grammarly パネルから問題行へジャンプ
+                const payload = message.payload as { line?: unknown; character?: unknown } | undefined;
+                if (payload && typeof payload.line === 'number' && typeof payload.character === 'number') {
+                    const editor = vscode.window.activeTextEditor;
+                    if (editor) {
+                        const pos = new vscode.Position(payload.line, payload.character);
+                        editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+                        editor.selection = new vscode.Selection(pos, pos);
+                        vscode.window.showTextDocument(editor.document);
+                    }
+                }
                 break;
             }
             case 'UPDATE_PREFERENCE': {
@@ -129,6 +154,15 @@ export class WebviewMessageHandler {
         if (!apiKey) {
             apiKey = vscode.workspace.getConfiguration('vibecodeease').get<string>('geminiApiKey');
         }
+
+        // ルールカタログ: DEFAULT_TYPO_RULES を軽量 RuleSummary にシリアライズ
+        const activeRules: RuleSummary[] = DEFAULT_TYPO_RULES.map(r => ({
+            pattern: r.pattern,
+            replacement: r.replacement,
+            category: r.category,
+            ...(r.languageId ? { languageId: r.languageId } : {})
+        }));
+
         webview.postMessage({
             type: 'SETTINGS_DATA',
             payload: {
@@ -136,7 +170,9 @@ export class WebviewMessageHandler {
                 preferences: state.preferences.preferences,
                 presetDefinitions: PRESET_DEFINITIONS,
                 llmConfig: state.llmConfig,
-                hasGeminiApiKey: !!apiKey
+                hasGeminiApiKey: !!apiKey,
+                activeRules,
+                llmTriggerMode: state.llmTriggerMode
             }
         });
     }

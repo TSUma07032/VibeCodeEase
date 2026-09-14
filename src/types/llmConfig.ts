@@ -4,3 +4,5 @@ export interface LlmConfig {
     provider: LlmProvider;
     model: string;
 }
+
+export type LlmTriggerMode = 'continuous' | 'on-save' | 'disabled';

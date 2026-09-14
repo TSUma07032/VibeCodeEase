@@ -6,7 +6,10 @@ import type {
   InterventionPlan,
   SettingsPayload,
   LlmConfig,
-  LlmProvider
+  LlmProvider,
+  LiveIssue,
+  RuleSummary,
+  LlmTriggerMode
 } from './types';
 import { CATEGORY_NAMES } from './types';
 
@@ -45,6 +48,17 @@ function App() {
   const [status, setStatus] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
 
+  // Grammarly パネル: ライブ問題一覧
+  const [liveIssues, setLiveIssues] = useState<LiveIssue[]>([]);
+
+  // ルールカタログ
+  const [activeRules, setActiveRules] = useState<RuleSummary[]>([]);
+  const [catalogOpen, setCatalogOpen] = useState<boolean>(false);
+  const [catalogSearch, setCatalogSearch] = useState<string>('');
+
+  // LLMトリガーモード
+  const [llmTriggerMode, setLlmTriggerMode] = useState<LlmTriggerMode>('on-save');
+
   // LLM / API Key State
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({ provider: 'gemini', model: 'gemini-2.5-flash' });
   const [hasGeminiApiKey, setHasGeminiApiKey] = useState<boolean>(false);
@@ -66,6 +80,8 @@ function App() {
           setPreferences(payload.preferences);
           if (payload.llmConfig) setLlmConfig(payload.llmConfig);
           if (payload.hasGeminiApiKey !== undefined) setHasGeminiApiKey(payload.hasGeminiApiKey);
+          if (payload.activeRules) setActiveRules(payload.activeRules);
+          if (payload.llmTriggerMode) setLlmTriggerMode(payload.llmTriggerMode);
           break;
         }
         case 'ANALYSIS_STARTED':
@@ -93,6 +109,9 @@ function App() {
         case 'ERROR':
           setIsAnalyzing(false);
           setStatus(data.payload as string);
+          break;
+        case 'LIVE_ISSUES_UPDATE':
+          setLiveIssues(data.payload as LiveIssue[]);
           break;
       }
     };
@@ -380,6 +399,129 @@ function App() {
           </div>
         </section>
       )}
+
+      {/* ─── Grammarly パネル: ライブ問題一覧 ─── */}
+      <section className="card grammarly-panel">
+        <div className="section-title">
+          🔍 現在の問題
+          <span className={`issue-count-badge ${liveIssues.length === 0 ? 'badge-ok' : 'badge-warn'}`}>
+            {liveIssues.length === 0 ? '✅ なし' : `${liveIssues.length}件`}
+          </span>
+        </div>
+        {liveIssues.length === 0 ? (
+          <div className="no-issues">✅ 問題は検出されていません</div>
+        ) : (
+          <ul className="issue-list">
+            {liveIssues.map((issue, i) => (
+              <li
+                key={i}
+                className={`issue-item issue-${issue.source}`}
+                onClick={() => vscode?.postMessage({ command: 'JUMP_TO_ISSUE', payload: { line: issue.line, character: issue.character } })}
+                title={`行 ${issue.line + 1} へジャンプ`}
+              >
+                <span className="issue-location">L{issue.line + 1}</span>
+                <span className="issue-source-badge">
+                  {issue.source === 'llm' ? '🤖' : issue.source === 'ast' ? '🌲' : '🔤'}
+                </span>
+                <span className="issue-category">{CATEGORY_NAMES[issue.category]}</span>
+                <span className="issue-message">{issue.message}</span>
+                {issue.replacementText && (
+                  <span className="issue-fix">→ <code>{issue.replacementText}</code></span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* ─── AI グラビティーモード: LLM トリガー切り替え ─── */}
+      <section className="card ai-mode-section">
+        <div className="section-title">🤖 AI グラビティーモード</div>
+        <div className="ai-mode-desc">LLM による高度な解析のトリガーを選択します。</div>
+        <div className="radio-group">
+          {([
+            { value: 'continuous' as LlmTriggerMode, label: '常時監視', desc: 'エディタ変更から6秒後に解析' },
+            { value: 'on-save' as LlmTriggerMode, label: '保存時のみ', desc: '推奨 · APIコスト約1/6' },
+            { value: 'disabled' as LlmTriggerMode, label: '無効', desc: 'LLM解析を完全に停止' },
+          ] as const).map(opt => (
+            <label key={opt.value} className={`radio-option ${llmTriggerMode === opt.value ? 'radio-selected' : ''}`}>
+              <input
+                type="radio"
+                name="llm-trigger"
+                value={opt.value}
+                checked={llmTriggerMode === opt.value}
+                onChange={() => {
+                  setLlmTriggerMode(opt.value);
+                  vscode?.postMessage({ command: 'SET_LLM_TRIGGER_MODE', payload: opt.value });
+                }}
+              />
+              <span className="radio-label-text">
+                <strong>{opt.label}</strong>
+                <small>{opt.desc}</small>
+              </span>
+            </label>
+          ))}
+        </div>
+      </section>
+
+      {/* ─── ルールカタログ ─── */}
+      <section className="card catalog-section">
+        <button
+          className="catalog-toggle"
+          onClick={() => setCatalogOpen(v => !v)}
+          aria-expanded={catalogOpen}
+        >
+          <span>📖 アクティブなルール一覧 ({activeRules.length}件)</span>
+          <span className="catalog-chevron">{catalogOpen ? '▲' : '▼'}</span>
+        </button>
+        {catalogOpen && (
+          <div className="catalog-body">
+            <input
+              className="catalog-search"
+              type="text"
+              placeholder="ルールを検索... (例: retrun)"
+              value={catalogSearch}
+              onChange={e => setCatalogSearch(e.target.value)}
+            />
+            <div className="catalog-groups">
+              {(['SYNTAX_TYPO', 'INDENTATION_FORMATTING', 'VAR_FUNC_MANAGEMENT', 'SYNTAX_ERROR_HANDLING'] as const).map(cat => {
+                const filtered = activeRules.filter(r =>
+                  r.category === cat &&
+                  (catalogSearch === '' ||
+                    r.pattern.includes(catalogSearch) ||
+                    r.replacement.includes(catalogSearch))
+                );
+                if (filtered.length === 0) return null;
+                return (
+                  <div key={cat} className="catalog-group">
+                    <div className="catalog-group-title">{CATEGORY_NAMES[cat]}</div>
+                    <ul className="catalog-list">
+                      {filtered.map((rule, i) => (
+                        <li key={i} className="catalog-rule">
+                          <code className="rule-pattern">{rule.pattern}</code>
+                          <span className="rule-arrow">→</span>
+                          <code className="rule-replacement">{rule.replacement}</code>
+                          {rule.languageId && (
+                            <span className="rule-lang">{rule.languageId.join(', ')}</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+              {activeRules.filter(r =>
+                catalogSearch === '' ||
+                r.pattern.includes(catalogSearch) ||
+                r.replacement.includes(catalogSearch)
+              ).length === 0 && (
+                <div className="catalog-empty">「{catalogSearch}」に一致するルールがありません</div>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+
     </div>
   );
 }

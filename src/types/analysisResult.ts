@@ -26,4 +26,7 @@ export interface AnalysisResult {
   range: Range;
   /** 推奨される修正案のリスト */
   interventions: ProposedIntervention[];
+  /** 解析の出所: static=ルールベース静的解析, ast=ASTベース, llm=LLMバックグラウンド */
+  source?: 'static' | 'ast' | 'llm';
 }
+
