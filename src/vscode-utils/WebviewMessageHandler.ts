@@ -125,7 +125,10 @@ export class WebviewMessageHandler {
 
     public async sendCurrentSettings(webview: vscode.Webview): Promise<void> {
         const state = GlobalState.getInstance();
-        const apiKey = await this.secrets.get('vibecodeease.geminiApiKey');
+        let apiKey = await this.secrets.get('vibecodeease.geminiApiKey');
+        if (!apiKey) {
+            apiKey = vscode.workspace.getConfiguration('vibecodeease').get<string>('geminiApiKey');
+        }
         webview.postMessage({
             type: 'SETTINGS_DATA',
             payload: {
@@ -157,9 +160,12 @@ export class WebviewMessageHandler {
                 async () => {
                     const state = GlobalState.getInstance();
                     if (state.llmProvider === 'gemini') {
-                        const apiKey = await this.secrets.get('vibecodeease.geminiApiKey');
+                        let apiKey = await this.secrets.get('vibecodeease.geminiApiKey');
                         if (!apiKey) {
-                            throw new Error('Gemini APIキーが設定されていません。サイドバーからGemini APIキーを設定してください。');
+                            apiKey = vscode.workspace.getConfiguration('vibecodeease').get<string>('geminiApiKey');
+                        }
+                        if (!apiKey) {
+                            throw new Error('Gemini APIキーが設定されていません。設定(Settings)またはサイドバーからGemini APIキーを設定してください。');
                         }
                         return await this.llmService.createGeminiPlan(editor.document, source.token, apiKey, state.llmModel);
                     } else {

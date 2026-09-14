@@ -57,7 +57,28 @@
         "key": "tab",
         "when": "editorTextFocus && !editorHasSelection && !inSnippetMode && !suggestWidgetVisible"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "vibeCodeEase",
+      "properties": {
+        "vibecodeease.geminiApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Gemini API Key (Note: It is highly recommended to use the sidebar or command palette to store it securely in SecretStorage instead of this plain text setting.)"
+        },
+        "vibecodeease.llmProvider": {
+          "type": "string",
+          "enum": ["gemini", "vscode-lm"],
+          "default": "gemini",
+          "description": "LLM Provider to use (gemini or vscode-lm)"
+        },
+        "vibecodeease.llmModel": {
+          "type": "string",
+          "default": "gemini-2.5-flash",
+          "description": "LLM Model to use (e.g. gemini-2.5-flash, gpt-4o)"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",

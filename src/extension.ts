@@ -56,6 +56,14 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// プロバイダー・リスナーの登録
 	context.subscriptions.push(
+		vscode.workspace.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration('vibecodeease')) {
+				GlobalState.getInstance().reloadConfiguration();
+			}
+		})
+	);
+
+	context.subscriptions.push(
 		vscode.window.registerWebviewViewProvider(
 			"vibecodeease.sidebarView",
 			sidebarProvider

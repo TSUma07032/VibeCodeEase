@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { getNonce } from './getNonce';
 import { WebviewMessageHandler } from './WebviewMessageHandler';
+import { GlobalState } from '../state/globalState';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
   private _view?: vscode.WebviewView;
@@ -31,6 +32,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.onDidReceiveMessage(async (data) => {
       await this.messageHandler.handleMessage(data, webviewView.webview);
+    });
+
+    // 状態が変更されたら、サイドバーのWebviewに最新設定を送信する
+    GlobalState.getInstance().onDidChangeState(async () => {
+      if (this._view) {
+        await this.messageHandler.sendCurrentSettings(this._view.webview);
+      }
     });
   }
 

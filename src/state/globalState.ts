@@ -45,8 +45,11 @@ export class GlobalState {
         this.context = context;
         this._mode = context.globalState.get<InterventionLevel>('vibecodeease.mode') || 'SUGGESTION';
         this._presetMode = context.globalState.get<PresetMode>('vibecodeease.presetMode') || DEFAULT_PRESET_MODE;
-        this._llmProvider = context.globalState.get<LlmProvider>('vibecodeease.llmProvider') || 'gemini';
-        this._llmModel = context.globalState.get<string>('vibecodeease.llmModel') || 'gemini-2.5-flash';
+        
+        const config = vscode.workspace.getConfiguration('vibecodeease');
+        this._llmProvider = config.get<LlmProvider>('llmProvider') || context.globalState.get<LlmProvider>('vibecodeease.llmProvider') || 'gemini';
+        this._llmModel = config.get<string>('llmModel') || context.globalState.get<string>('vibecodeease.llmModel') || 'gemini-2.5-flash';
+        
         const storedPrefs = context.globalState.get<UserPreferenceProfile>('vibecodeease.preferences');
         if (storedPrefs && storedPrefs.preferences) {
             this._preferences = storedPrefs;
@@ -142,11 +145,36 @@ export class GlobalState {
     public async setLlmConfig(config: LlmConfig) {
         this._llmProvider = config.provider;
         this._llmModel = config.model;
+
+        const workspaceConfig = vscode.workspace.getConfiguration('vibecodeease');
+        await workspaceConfig.update('llmProvider', config.provider, vscode.ConfigurationTarget.Global);
+        await workspaceConfig.update('llmModel', config.model, vscode.ConfigurationTarget.Global);
+
         if (this.context) {
             await this.context.globalState.update('vibecodeease.llmProvider', config.provider);
             await this.context.globalState.update('vibecodeease.llmModel', config.model);
         }
         this._onDidChangeState.fire();
+    }
+
+    public reloadConfiguration() {
+        const config = vscode.workspace.getConfiguration('vibecodeease');
+        const newProvider = config.get<LlmProvider>('llmProvider');
+        const newModel = config.get<string>('llmModel');
+        
+        let changed = false;
+        if (newProvider && newProvider !== this._llmProvider) {
+            this._llmProvider = newProvider;
+            changed = true;
+        }
+        if (newModel && newModel !== this._llmModel) {
+            this._llmModel = newModel;
+            changed = true;
+        }
+        
+        if (changed) {
+            this._onDidChangeState.fire();
+        }
     }
 
     /**
