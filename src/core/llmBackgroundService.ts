@@ -98,9 +98,6 @@ export class LlmBackgroundService implements vscode.Disposable {
         if (state.llmProvider === 'gemini') {
             apiKey = await this.secrets.get('vibecodeease.geminiApiKey');
             if (!apiKey) {
-                apiKey = vscode.workspace.getConfiguration('vibecodeease').get<string>('geminiApiKey');
-            }
-            if (!apiKey) {
                 // API キー未設定: サイレントに無視
                 return;
             }
