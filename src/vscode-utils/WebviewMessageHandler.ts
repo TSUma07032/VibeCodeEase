@@ -10,9 +10,13 @@ import {
     parsePainCategory,
     clampPreferenceValue,
     RuleSummary,
-    LlmTriggerMode
+    LlmTriggerMode,
+    LiveIssue,
+    EditorAppealLevel
 } from '../types';
 import { GlobalState } from '../state/globalState';
+import { SharedAnalysisCache } from '../core/analyzer';
+import { findOriginalTextRange } from '../core/llm/planValidator';
 
 export interface PendingPlan {
     documentUri: string;
@@ -106,6 +110,14 @@ export class WebviewMessageHandler {
                 }
                 break;
             }
+            case 'SET_EDITOR_APPEAL_LEVEL': {
+                const payload = message.payload as EditorAppealLevel | undefined;
+                if (payload && ['high', 'medium', 'low'].includes(payload)) {
+                    await GlobalState.getInstance().setEditorAppealLevel(payload);
+                    await this.sendCurrentSettings(webview);
+                }
+                break;
+            }
             case 'ANALYZE_CURRENT_FILE': {
                 await this.handleAnalyzeCurrentFile(webview);
                 break;
@@ -133,6 +145,43 @@ export class WebviewMessageHandler {
                         editor.selection = new vscode.Selection(pos, pos);
                         vscode.window.showTextDocument(editor.document);
                     }
+                }
+                break;
+            }
+            case 'APPLY_LIVE_ISSUE': {
+                const issue = message.payload as LiveIssue | undefined;
+                const editor = vscode.window.activeTextEditor;
+                if (issue && issue.replacementText !== undefined && editor) {
+                    const edit = new vscode.WorkspaceEdit();
+                    let range = new vscode.Range(
+                        issue.line, issue.character,
+                        issue.endLine, issue.endCharacter
+                    );
+
+                    // セーブ時のズレ補正: originalTextがあれば動的検索
+                    if (issue.originalText) {
+                        const dynamicRange = findOriginalTextRange(editor.document, issue.originalText, issue.line, issue.character);
+                        if (dynamicRange) {
+                            range = dynamicRange;
+                        } else {
+                            vscode.window.showErrorMessage('コードが大幅に変更されたため、適用位置を特定できませんでした。');
+                            break;
+                        }
+                    }
+
+                    edit.replace(editor.document.uri, range, issue.replacementText);
+                    const applied = await vscode.workspace.applyEdit(edit);
+                    if (applied) {
+                        SharedAnalysisCache.getInstance().ignoreIssue(issue.id);
+                    }
+                }
+                break;
+            }
+            case 'REJECT_LIVE_ISSUE': {
+                const issue = message.payload as LiveIssue | undefined;
+                if (issue && issue.id) {
+                    SharedAnalysisCache.getInstance().ignoreIssue(issue.id);
+                    vscode.commands.executeCommand('vibecodeease.refreshLiveIssues');
                 }
                 break;
             }
@@ -172,7 +221,8 @@ export class WebviewMessageHandler {
                 llmConfig: state.llmConfig,
                 hasGeminiApiKey: !!apiKey,
                 activeRules,
-                llmTriggerMode: state.llmTriggerMode
+                llmTriggerMode: state.llmTriggerMode,
+                editorAppealLevel: state.editorAppealLevel
             }
         });
     }
@@ -233,19 +283,31 @@ export class WebviewMessageHandler {
     private async handleApplyPlan(webview: vscode.Webview): Promise<void> {
         const pending = this.pendingPlan;
         const editor = vscode.window.activeTextEditor;
-        if (!pending || !editor || editor.document.uri.toString() !== pending.documentUri || editor.document.version !== pending.documentVersion) {
-            webview.postMessage({ type: 'ERROR', payload: 'ファイルが変更されたため、提案を適用できません。もう一度解析してください。' });
+        if (!pending || !editor || editor.document.uri.toString() !== pending.documentUri) {
+            webview.postMessage({ type: 'ERROR', payload: 'ファイルが閉じられたか、変更されたため適用できません。' });
             return;
         }
 
         const edit = new vscode.WorkspaceEdit();
         for (const proposedEdit of pending.plan.edits) {
-            const range = new vscode.Range(
+            let range = new vscode.Range(
                 proposedEdit.startLine,
                 proposedEdit.startCharacter,
                 proposedEdit.endLine,
                 proposedEdit.endCharacter
             );
+
+            // セーブ時のズレ補正
+            if (proposedEdit.oldText) {
+                const dynamicRange = findOriginalTextRange(editor.document, proposedEdit.oldText, proposedEdit.startLine, proposedEdit.startCharacter);
+                if (dynamicRange) {
+                    range = dynamicRange;
+                } else {
+                    webview.postMessage({ type: 'ERROR', payload: `コードが変更されたため、適用位置を特定できませんでした。（対象: ${proposedEdit.category}）` });
+                    return;
+                }
+            }
+
             edit.replace(editor.document.uri, range, proposedEdit.newText);
         }
 

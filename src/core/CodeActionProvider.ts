@@ -49,6 +49,17 @@ export class VibeCodeActionProvider implements vscode.CodeActionProvider {
                         fix.edit = new vscode.WorkspaceEdit();
                         fix.edit.replace(document.uri, resultRange, intervention.replacementText);
                         actions.push(fix);
+
+                        // Reject (Ignore) Action
+                        const rejectTitle = `✕ 却下 (この提案を無視する)`;
+                        const rejectAction = new vscode.CodeAction(rejectTitle, vscode.CodeActionKind.Empty);
+                        const id = `${document.uri.toString()}::${result.source ?? 'static'}::${result.category}::${result.range.start.line}::${result.range.start.character}`;
+                        rejectAction.command = {
+                            title: rejectTitle,
+                            command: 'vibecodeease.rejectIntervention',
+                            arguments: [id]
+                        };
+                        actions.push(rejectAction);
                     }
                 }
             }

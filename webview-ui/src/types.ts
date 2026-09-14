@@ -47,13 +47,16 @@ export interface RuleSummary {
   languageId?: string[];
 }
 
-/** Grammarly パネル用: 現在ファイルの生きた問題1件 */
 export interface LiveIssue {
+  id: string;
   line: number;
   character: number;
+  endLine: number;
+  endCharacter: number;
   category: PainCategory;
   message: string;
   replacementText?: string;
+  originalText?: string;
   source: 'static' | 'ast' | 'llm';
 }
 
@@ -64,7 +67,8 @@ export interface SettingsPayload {
   llmConfig: LlmConfig;
   hasGeminiApiKey: boolean;
   activeRules?: RuleSummary[];
-  llmTriggerMode: LlmTriggerMode;
+  llmTriggerMode?: LlmTriggerMode;
+  editorAppealLevel?: EditorAppealLevel;
 }
 
 export const CATEGORY_NAMES: Record<PainCategory, string> = {
@@ -74,3 +78,4 @@ export const CATEGORY_NAMES: Record<PainCategory, string> = {
   SYNTAX_ERROR_HANDLING: '構文エラー・ブロック'
 };
 
+export type EditorAppealLevel = 'high' | 'medium' | 'low';

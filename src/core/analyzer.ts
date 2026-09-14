@@ -193,12 +193,15 @@ export class SharedAnalysisCache {
   private cache: Map<string, CachedAnalysis>;
   /** LLM バックグラウンドサービスがマージした外部結果 (source: 'llm') */
   private externalResults: Map<string, AnalysisResult[]>;
+  /** ユーザーが却下した問題のIDリスト */
+  private ignoredIssues: Set<string>;
 
   private constructor() {
     this.analyzer = new CodeAnalyzer();
     this.astAnalyzer = new AstAnalyzer();
     this.cache = new Map<string, CachedAnalysis>();
     this.externalResults = new Map<string, AnalysisResult[]>();
+    this.ignoredIssues = new Set<string>();
   }
 
   public static getInstance(): SharedAnalysisCache {
@@ -238,7 +241,13 @@ export class SharedAnalysisCache {
 
     // LLM 結果をマージ（バージョン関係なく最新を使う）
     const external = this.externalResults.get(uri) ?? [];
-    return [...cached.results, ...external];
+    const allResults = [...cached.results, ...external];
+
+    // 却下された問題をフィルタリング
+    return allResults.filter(r => {
+      const id = `${uri}::${r.source ?? 'static'}::${r.category}::${r.range.start.line}::${r.range.start.character}`;
+      return !this.ignoredIssues.has(id);
+    });
   }
 
   /**
@@ -254,8 +263,14 @@ export class SharedAnalysisCache {
     this.externalResults.delete(uri);
   }
 
+  /** 特定の問題（LiveIssueのID相当）を無視リストに追加する */
+  public ignoreIssue(id: string): void {
+    this.ignoredIssues.add(id);
+  }
+
   public clear() {
     this.cache.clear();
     this.externalResults.clear();
+    this.ignoredIssues.clear();
   }
 }

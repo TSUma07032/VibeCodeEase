@@ -9,7 +9,8 @@ import type {
   LlmProvider,
   LiveIssue,
   RuleSummary,
-  LlmTriggerMode
+  LlmTriggerMode,
+  EditorAppealLevel
 } from './types';
 import { CATEGORY_NAMES } from './types';
 
@@ -47,6 +48,7 @@ function App() {
   const [plan, setPlan] = useState<InterventionPlan | null>(null);
   const [status, setStatus] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [isBackgroundAnalyzing, setIsBackgroundAnalyzing] = useState<boolean>(false);
 
   // Grammarly パネル: ライブ問題一覧
   const [liveIssues, setLiveIssues] = useState<LiveIssue[]>([]);
@@ -56,11 +58,12 @@ function App() {
   const [catalogOpen, setCatalogOpen] = useState<boolean>(false);
   const [catalogSearch, setCatalogSearch] = useState<string>('');
 
-  // LLMトリガーモード
+  // LLMトリガーモードとエディタアピール度
   const [llmTriggerMode, setLlmTriggerMode] = useState<LlmTriggerMode>('on-save');
+  const [editorAppealLevel, setEditorAppealLevel] = useState<EditorAppealLevel>('medium');
 
   // LLM / API Key State
-  const [llmConfig, setLlmConfig] = useState<LlmConfig>({ provider: 'gemini', model: 'gemini-2.5-flash' });
+  const [llmConfig, setLlmConfig] = useState<LlmConfig>({ provider: 'gemini', model: 'gemini-3.6-flash' });
   const [hasGeminiApiKey, setHasGeminiApiKey] = useState<boolean>(false);
   const [apiKeyValue, setApiKeyValue] = useState<string>('');
   const [isEditingApiKey, setIsEditingApiKey] = useState<boolean>(false);
@@ -82,12 +85,19 @@ function App() {
           if (payload.hasGeminiApiKey !== undefined) setHasGeminiApiKey(payload.hasGeminiApiKey);
           if (payload.activeRules) setActiveRules(payload.activeRules);
           if (payload.llmTriggerMode) setLlmTriggerMode(payload.llmTriggerMode);
+          if (payload.editorAppealLevel) setEditorAppealLevel(payload.editorAppealLevel);
           break;
         }
         case 'ANALYSIS_STARTED':
           setIsAnalyzing(true);
           setStatus('ファイルを解析しています...');
           setPlan(null);
+          break;
+        case 'BACKGROUND_ANALYSIS_STARTED':
+          setIsBackgroundAnalyzing(true);
+          break;
+        case 'BACKGROUND_ANALYSIS_COMPLETED':
+          setIsBackgroundAnalyzing(false);
           break;
         case 'INTERVENTION_PLAN': {
           setIsAnalyzing(false);
@@ -145,10 +155,20 @@ function App() {
   const handleApply = () => vscode?.postMessage({ command: 'APPLY_PLAN' });
   const handleReject = () => vscode?.postMessage({ command: 'REJECT_PLAN' });
 
+  const handleApplyIssue = (e: React.MouseEvent, issue: LiveIssue) => {
+    e.stopPropagation();
+    vscode?.postMessage({ command: 'APPLY_LIVE_ISSUE', payload: issue });
+  };
+
+  const handleRejectIssue = (e: React.MouseEvent, issue: LiveIssue) => {
+    e.stopPropagation();
+    vscode?.postMessage({ command: 'REJECT_LIVE_ISSUE', payload: issue });
+  };
+
   const handleLlmProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const provider = e.target.value as LlmProvider;
     // providerが切り替わったらデフォルトモデルも切り替える
-    const model = provider === 'gemini' ? 'gemini-2.5-flash' : 'auto';
+    const model = provider === 'gemini' ? 'gemini-3.6-flash' : 'auto';
     setLlmConfig({ provider, model });
     vscode?.postMessage({ command: 'SET_LLM_CONFIG', payload: { provider, model } });
   };
@@ -195,7 +215,8 @@ function App() {
             <select value={llmConfig.model} onChange={handleLlmModelChange} className="styled-select">
               {llmConfig.provider === 'gemini' ? (
                 <>
-                  <option value="gemini-2.5-flash">gemini-2.5-flash (推奨・高速)</option>
+                  <option value="gemini-3.6-flash">gemini-3.6-flash (推奨・最速)</option>
+                  <option value="gemini-2.5-flash">gemini-2.5-flash</option>
                   <option value="gemini-2.0-flash">gemini-2.0-flash</option>
                   <option value="gemini-1.5-flash">gemini-1.5-flash</option>
                   <option value="gemini-1.5-pro">gemini-1.5-pro</option>
@@ -407,6 +428,7 @@ function App() {
           <span className={`issue-count-badge ${liveIssues.length === 0 ? 'badge-ok' : 'badge-warn'}`}>
             {liveIssues.length === 0 ? '✅ なし' : `${liveIssues.length}件`}
           </span>
+          {isBackgroundAnalyzing && <span className="bg-analysis-loader">🤖 AI考え中...</span>}
         </div>
         {liveIssues.length === 0 ? (
           <div className="no-issues">✅ 問題は検出されていません</div>
@@ -424,17 +446,46 @@ function App() {
                   {issue.source === 'llm' ? '🤖' : issue.source === 'ast' ? '🌲' : '🔤'}
                 </span>
                 <span className="issue-category">{CATEGORY_NAMES[issue.category]}</span>
-                <span className="issue-message">{issue.message}</span>
-                {issue.replacementText && (
-                  <span className="issue-fix">→ <code>{issue.replacementText}</code></span>
-                )}
+                
+                <div className="issue-content">
+                  {issue.message.includes('🤖 **AI 提案**: ') ? (
+                    <div className="ai-reason-bubble">
+                      <div className="ai-reason-header">🤖 AI 提案</div>
+                      <div className="ai-reason-body">{issue.message.replace('🤖 **AI 提案**: ', '')}</div>
+                    </div>
+                  ) : (
+                    <div className="issue-message">{issue.message}</div>
+                  )}
+                  
+                  {(issue.originalText || issue.replacementText) && (
+                    <div className="issue-diff">
+                      {issue.originalText && (
+                        <div className="diff-line diff-old">
+                          <span className="diff-indicator">-</span>
+                          <pre>{issue.originalText}</pre>
+                        </div>
+                      )}
+                      {issue.replacementText && (
+                        <div className="diff-line diff-new">
+                          <span className="diff-indicator">+</span>
+                          <pre>{issue.replacementText}</pre>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="issue-actions">
+                  <button className="issue-btn-apply" onClick={(e) => handleApplyIssue(e, issue)}>✓ 適用</button>
+                  <button className="issue-btn-reject" onClick={(e) => handleRejectIssue(e, issue)}>✕ 却下</button>
+                </div>
               </li>
             ))}
           </ul>
         )}
       </section>
 
-      {/* ─── AI グラビティーモード: LLM トリガー切り替え ─── */}
+      {/* ─── AI グラビティーモード & アピール度 ─── */}
       <section className="card ai-mode-section">
         <div className="section-title">🤖 AI グラビティーモード</div>
         <div className="ai-mode-desc">LLM による高度な解析のトリガーを選択します。</div>
@@ -453,6 +504,33 @@ function App() {
                 onChange={() => {
                   setLlmTriggerMode(opt.value);
                   vscode?.postMessage({ command: 'SET_LLM_TRIGGER_MODE', payload: opt.value });
+                }}
+              />
+              <span className="radio-label-text">
+                <strong>{opt.label}</strong>
+                <small>{opt.desc}</small>
+              </span>
+            </label>
+          ))}
+        </div>
+
+        <div className="section-title" style={{ marginTop: '20px' }}>🎨 エディタでのアピール度</div>
+        <div className="ai-mode-desc">エディタ画面上での提案の目立ち具合（自己主張）を調整します。</div>
+        <div className="radio-group">
+          {([
+            { value: 'high' as EditorAppealLevel, label: 'High', desc: 'インライン装飾＋波線で強くアピール' },
+            { value: 'medium' as EditorAppealLevel, label: 'Medium', desc: 'Gutterアイコン＋CodeLensで程よく表示' },
+            { value: 'low' as EditorAppealLevel, label: 'Low', desc: 'Gutterアイコンのみで控えめに表示' },
+          ] as const).map(opt => (
+            <label key={opt.value} className={`radio-option ${editorAppealLevel === opt.value ? 'radio-selected' : ''}`}>
+              <input
+                type="radio"
+                name="editor-appeal"
+                value={opt.value}
+                checked={editorAppealLevel === opt.value}
+                onChange={() => {
+                  setEditorAppealLevel(opt.value);
+                  vscode?.postMessage({ command: 'SET_EDITOR_APPEAL_LEVEL', payload: opt.value });
                 }}
               />
               <span className="radio-label-text">

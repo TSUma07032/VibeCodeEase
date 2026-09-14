@@ -9,7 +9,8 @@ import {
     DEFAULT_USER_PREFERENCES,
     LlmProvider,
     LlmConfig,
-    LlmTriggerMode
+    LlmTriggerMode,
+    EditorAppealLevel
 } from '../types';
 import { InterventionEngine } from '../core/interventionEngine';
 
@@ -20,8 +21,9 @@ export class GlobalState {
     private _presetMode: PresetMode = DEFAULT_PRESET_MODE;
     private _preferences: UserPreferenceProfile = { ...DEFAULT_USER_PREFERENCES };
     private _llmProvider: LlmProvider = 'gemini';
-    private _llmModel: string = 'gemini-2.5-flash';
+    private _llmModel: string = 'gemini-3.6-flash';
     private _llmTriggerMode: LlmTriggerMode = 'on-save';
+    private _editorAppealLevel: EditorAppealLevel = 'medium';
     private _interventionLevelCache = new Map<PainCategory, InterventionLevel>();
 
     private readonly _onDidChangeState = new vscode.EventEmitter<void>();
@@ -50,8 +52,9 @@ export class GlobalState {
         
         const config = vscode.workspace.getConfiguration('vibecodeease');
         this._llmProvider = config.get<LlmProvider>('llmProvider') || context.globalState.get<LlmProvider>('vibecodeease.llmProvider') || 'gemini';
-        this._llmModel = config.get<string>('llmModel') || context.globalState.get<string>('vibecodeease.llmModel') || 'gemini-2.5-flash';
+        this._llmModel = config.get<string>('llmModel') || context.globalState.get<string>('vibecodeease.llmModel') || 'gemini-3.6-flash';
         this._llmTriggerMode = context.globalState.get<LlmTriggerMode>('vibecodeease.llmTriggerMode') || 'on-save';
+        this._editorAppealLevel = context.globalState.get<EditorAppealLevel>('vibecodeease.editorAppealLevel') || 'medium';
         
         const storedPrefs = context.globalState.get<UserPreferenceProfile>('vibecodeease.preferences');
         if (storedPrefs && storedPrefs.preferences) {
@@ -101,6 +104,10 @@ export class GlobalState {
 
     public get llmTriggerMode(): LlmTriggerMode {
         return this._llmTriggerMode;
+    }
+
+    public get editorAppealLevel(): EditorAppealLevel {
+        return this._editorAppealLevel;
     }
 
     public async setMode(mode: InterventionLevel) {
@@ -168,6 +175,14 @@ export class GlobalState {
         this._llmTriggerMode = mode;
         if (this.context) {
             await this.context.globalState.update('vibecodeease.llmTriggerMode', mode);
+        }
+        this._onDidChangeState.fire();
+    }
+
+    public async setEditorAppealLevel(level: EditorAppealLevel) {
+        this._editorAppealLevel = level;
+        if (this.context) {
+            await this.context.globalState.update('vibecodeease.editorAppealLevel', level);
         }
         this._onDidChangeState.fire();
     }

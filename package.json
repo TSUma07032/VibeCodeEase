@@ -81,9 +81,12 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run package",
+    "build:ui": "npm run build --prefix webview-ui",
+    "watch:ui": "npm run build --prefix webview-ui -- -w",
+    "build:all": "npm run compile && npm run build:ui",
+    "watch:all": "npm-run-all -p watch:esbuild watch:ui",
+    "watch": "npm run watch:all",
     "compile": "npm run check-types && npm run lint && node esbuild.js",
-    "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "package": "npm run check-types && npm run lint && node esbuild.js --production",

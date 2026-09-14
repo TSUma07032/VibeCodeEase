@@ -19,6 +19,12 @@ export class LlmBackgroundService implements vscode.Disposable {
     // 現在実行中の解析をキャンセルするためのトークンソース
     private _cancellationTokenSource?: vscode.CancellationTokenSource;
 
+    private readonly _onDidStartAnalysis = new vscode.EventEmitter<void>();
+    public readonly onDidStartAnalysis = this._onDidStartAnalysis.event;
+
+    private readonly _onDidCompleteAnalysis = new vscode.EventEmitter<void>();
+    public readonly onDidCompleteAnalysis = this._onDidCompleteAnalysis.event;
+
     constructor(private readonly secrets: vscode.SecretStorage) {
         // onDidChangeTextDocument (ポーリング用: 6秒デバウンス)
         this._disposables.push(
@@ -109,6 +115,7 @@ export class LlmBackgroundService implements vscode.Disposable {
         const token = this._cancellationTokenSource.token;
 
         try {
+            this._onDidStartAnalysis.fire();
             vscode.window.setStatusBarMessage('$(sync~spin) vibeCodeEase: AI 解析中...', 3000);
 
             // LLM呼び出し
@@ -160,6 +167,8 @@ export class LlmBackgroundService implements vscode.Disposable {
             if (!token.isCancellationRequested) {
                 console.error('[LlmBackgroundService] Analysis failed:', error);
             }
+        } finally {
+            this._onDidCompleteAnalysis.fire();
         }
     }
 

@@ -7,3 +7,9 @@ export interface WebviewMessage {
   /** ペイロード。任意のデータを持たせることができる */
   payload?: unknown;
 }
+
+export interface SettingsPayload {
+  activeRules?: import('./liveIssue').RuleSummary[];
+  llmTriggerMode?: import('./llmConfig').LlmTriggerMode;
+  editorAppealLevel?: import('./common').EditorAppealLevel;
+}

@@ -41,9 +41,10 @@ export function buildInterventionPrompt(document: vscode.TextDocument): string {
 
     return [
         'You are a code review assistant.',
-        'Analyze the file below and propose only concrete, minimal edits that improve correctness or remove obvious friction.',
+        'Analyze the file below and propose ALL concrete, minimal edits that improve correctness, readability, or remove obvious friction. Please propose MULTIPLE edits across the file if applicable.',
         'All line and character positions must be zero-based and must point inside the supplied file. Use the exact line text and never invent a position beyond the line length.',
         'For every edit, oldText must be copied exactly from the target text. It may span multiple lines. The extension will locate oldText in the real file before applying it.',
+        'For the `reason` field, explain the intervention in Japanese, assuming the reader is a university student who has studied Computer Science. Provide a polite and technically sound explanation. You may use markdown like backticks for code.',
         'Return JSON only. Do not wrap it in markdown fences.',
         `JSON schema: ${JSON.stringify(INTERVENTION_RESPONSE_SCHEMA)}`,
         `File: ${document.fileName}`,

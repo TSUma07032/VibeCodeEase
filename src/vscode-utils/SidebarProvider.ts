@@ -13,7 +13,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
-    secrets: vscode.SecretStorage
+    secrets: vscode.SecretStorage,
+    private readonly llmBackgroundService?: import('../core/llmBackgroundService').LlmBackgroundService
   ) {
     this.messageHandler = new WebviewMessageHandler(secrets);
   }
@@ -66,6 +67,20 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     // 初期表示時にも一度プッシュ
     this._pushLiveIssues();
+
+    // 背景のLLM解析ステータスを転送
+    if (this.llmBackgroundService) {
+      this._disposables.push(
+        this.llmBackgroundService.onDidStartAnalysis(() => {
+          this._view?.webview.postMessage({ type: 'BACKGROUND_ANALYSIS_STARTED' });
+        })
+      );
+      this._disposables.push(
+        this.llmBackgroundService.onDidCompleteAnalysis(() => {
+          this._view?.webview.postMessage({ type: 'BACKGROUND_ANALYSIS_COMPLETED' });
+        })
+      );
+    }
   }
 
   /**
@@ -88,15 +103,22 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     const issues: LiveIssue[] = results
       .filter(r => globalState.getInterventionLevel(r.category) !== 'IGNORE')
-      .map(r => ({
-        line: r.range.start.line,
-        character: r.range.start.character,
-        category: r.category,
-        message: r.interventions[0]?.message?.replace(/\$\([^)]*\)\s*/g, '') ??
-                 `${PAIN_CATEGORY_LABELS[r.category]}: ${r.interventions[0]?.originalText ?? ''}`,
-        replacementText: r.interventions[0]?.replacementText,
-        source: r.source ?? 'static'
-      }));
+      .map(r => {
+        const id = `${editor.document.uri.toString()}::${r.source}::${r.category}::${r.range.start.line}::${r.range.start.character}`;
+        return {
+          id,
+          line: r.range.start.line,
+          character: r.range.start.character,
+          endLine: r.range.end.line,
+          endCharacter: r.range.end.character,
+          category: r.category,
+          message: r.interventions[0]?.message?.replace(/\$\([^)]*\)\s*/g, '') ??
+                  `${PAIN_CATEGORY_LABELS[r.category]}: ${r.interventions[0]?.originalText ?? ''}`,
+          replacementText: r.interventions[0]?.replacementText,
+          originalText: r.interventions[0]?.originalText,
+          source: r.source ?? 'static'
+        };
+      });
 
     this._view.webview.postMessage({ type: 'LIVE_ISSUES_UPDATE', payload: issues });
   }

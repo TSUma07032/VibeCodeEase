@@ -10,6 +10,10 @@ import { ActionLogService } from './core/actionLogService';
 import { AdaptiveEngine } from './core/adaptiveEngine';
 import { SharedAnalysisCache } from './core/analyzer';
 import { LlmBackgroundService } from './core/llmBackgroundService';
+import { EditorDecorator } from './core/editorDecorator';
+import { ProposalCodeLensProvider } from './core/proposalCodeLensProvider';
+import { AnalysisResult } from './types';
+import { findOriginalTextRange } from './core/llm/planValidator';
 
 import { registerCommands } from './commands';
 
@@ -25,6 +29,8 @@ export function activate(context: vscode.ExtensionContext) {
 	const diagnosticsService = new DiagnosticsService();
 	const silentFixService = new SilentFixService();
 	const llmBackgroundService = new LlmBackgroundService(context.secrets);
+	const editorDecorator = new EditorDecorator();
+	const codeLensProvider = new ProposalCodeLensProvider();
 
 	// 保存時自動修正（SILENT）のコールバック配線
 	silentFixService.setOnFixAppliedCallback((fixCount, docUri) => {
@@ -39,7 +45,7 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	// サイドバーProviderの初期化とアクションコールバック配線
-	const sidebarProvider = new SidebarProvider(context.extensionUri, context.secrets);
+	const sidebarProvider = new SidebarProvider(context.extensionUri, context.secrets, llmBackgroundService);
 	sidebarProvider.getMessageHandler().setActionCallback((action, plan, docUri) => {
 		// ログ記録
 		actionLogService.log({
@@ -87,6 +93,10 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(diagnosticsService);
 	context.subscriptions.push(silentFixService);
 	context.subscriptions.push(llmBackgroundService);
+	context.subscriptions.push(editorDecorator);
+	context.subscriptions.push(
+		vscode.languages.registerCodeLensProvider('*', codeLensProvider)
+	);
 
 	const refreshLiveIssuesCmd = vscode.commands.registerCommand('vibecodeease.refreshLiveIssues', () => {
 		sidebarProvider.pushLiveIssues();
@@ -116,6 +126,86 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 	context.subscriptions.push(applyInterventionCommand);
+
+	const reviewInterventionCommand = vscode.commands.registerCommand('vibecodeease.reviewIntervention', async (uri: vscode.Uri, result: AnalysisResult, id: string) => {
+		if (!uri || !result) {
+			return;
+		}
+		const intervention = result.interventions[0];
+		if (!intervention || !intervention.replacementText) {
+			return;
+		}
+
+		// 🤖 提案理由を整形
+		const reasonMatch = intervention.message?.match(/🤖 \*\*AI 提案\*\*: (.*)/s);
+		const reason = reasonMatch ? reasonMatch[1] : (intervention.message ?? '理由の記載はありません。');
+
+		const oldCode = intervention.originalText || '';
+		const newCode = intervention.replacementText;
+
+		// モーダルダイアログで確認
+		const action = await vscode.window.showInformationMessage(
+			`🤖 提案理由:\n${reason}\n\n================\n【変更前】\n${oldCode}\n\n【変更後】\n${newCode}\n================`,
+			{ modal: true },
+			'✨ 適用',
+			'✕ 却下'
+		);
+
+		if (action === '✨ 適用') {
+			const editor = vscode.window.activeTextEditor;
+			if (!editor || editor.document.uri.toString() !== uri.toString()) {
+				vscode.window.showErrorMessage('適用先のファイルがアクティブではありません。');
+				return;
+			}
+			const edit = new vscode.WorkspaceEdit();
+			let range = new vscode.Range(
+				result.range.start.line, result.range.start.character,
+				result.range.end.line, result.range.end.character
+			);
+			// ズレ補正
+			if (intervention.originalText) {
+				const dynamicRange = findOriginalTextRange(editor.document, intervention.originalText, result.range.start.line, result.range.start.character);
+				if (dynamicRange) {
+					range = dynamicRange;
+				} else {
+					vscode.window.showErrorMessage('コードが大幅に変更されたため、適用位置を特定できませんでした。');
+					return;
+				}
+			}
+
+			edit.replace(uri, range, newCode);
+			const applied = await vscode.workspace.applyEdit(edit);
+			if (applied) {
+				SharedAnalysisCache.getInstance().ignoreIssue(id);
+				vscode.window.setStatusBarMessage('$(check) 修正を適用しました', 3000);
+				actionLogService.log({
+					category: 'SYSTEM',
+					action: 'APPLY_REVIEW',
+					targetId: uri.toString(),
+					payload: 'Applied intervention after review'
+				});
+			}
+		} else if (action === '✕ 却下') {
+			vscode.commands.executeCommand('vibecodeease.rejectIntervention', id);
+		}
+	});
+	context.subscriptions.push(reviewInterventionCommand);
+
+	const rejectInterventionCommand = vscode.commands.registerCommand('vibecodeease.rejectIntervention', (id: string) => {
+		if (id) {
+			SharedAnalysisCache.getInstance().ignoreIssue(id);
+			vscode.window.setStatusBarMessage('$(close) 提案を却下しました', 3000);
+			vscode.commands.executeCommand('vibecodeease.refreshLiveIssues');
+			
+			// If CodeLens/Decorations need refresh
+			// It should happen naturally via onDidChangeState or text changes, but to force:
+			const editor = vscode.window.activeTextEditor;
+			if (editor) {
+				editorDecorator.updateDecorations(editor);
+			}
+		}
+	});
+	context.subscriptions.push(rejectInterventionCommand);
 
 	const tabToApplyCommand = vscode.commands.registerCommand('vibecodeease.tabToApply', async () => {
 		const editor = vscode.window.activeTextEditor;
