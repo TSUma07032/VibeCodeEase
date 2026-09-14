@@ -17,13 +17,21 @@ const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : nul
 
 function getInterventionBadge(val: number) {
   if (val >= 0.75) {
-    return <span className="level-badge badge-silent">自動修正</span>;
+    return <span className="level-badge badge-silent">⚡ 自動修正</span>;
   }
   if (val >= 0.40) {
-    return <span className="level-badge badge-suggestion">提案</span>;
+    return <span className="level-badge badge-suggestion">💡 提案</span>;
   }
-  return <span className="level-badge badge-ignore">自力解決</span>;
+  return <span className="level-badge badge-ignore">🧘 自力解決</span>;
 }
+
+/** プリセット選択時の嗜好値プレビュー用 */
+const PRESET_PREVIEW: Record<string, Record<string, number>> = {
+  LEARNING: { SYNTAX_TYPO: 0.9, INDENTATION_FORMATTING: 0.5, VAR_FUNC_MANAGEMENT: 0.2, SYNTAX_ERROR_HANDLING: 0.5 },
+  FLOW:     { SYNTAX_TYPO: 0.9, INDENTATION_FORMATTING: 0.9, VAR_FUNC_MANAGEMENT: 0.7, SYNTAX_ERROR_HANDLING: 0.8 },
+  ZEN:      { SYNTAX_TYPO: 0.1, INDENTATION_FORMATTING: 0.1, VAR_FUNC_MANAGEMENT: 0.1, SYNTAX_ERROR_HANDLING: 0.1 },
+  CUSTOM:   {},
+};
 
 function App() {
   const [presetMode, setPresetMode] = useState<PresetMode>('LEARNING');
@@ -245,6 +253,13 @@ function App() {
             <div className="preset-card-desc">
               タイポや構文ミスを裏で自動修正。思考のノリとバイブスを最優先。
             </div>
+            <div className="preset-card-badges">
+              {Object.entries(PRESET_PREVIEW.FLOW).map(([, v]) => (
+                <span key={v} className={`mini-badge ${v >= 0.75 ? 'badge-silent' : v >= 0.40 ? 'badge-suggestion' : 'badge-ignore'}`}>
+                  {v >= 0.75 ? '⚡' : v >= 0.40 ? '💡' : '🧘'}
+                </span>
+              ))}
+            </div>
           </div>
 
           <div
@@ -256,6 +271,11 @@ function App() {
             </div>
             <div className="preset-card-desc">
               AI介入を最小限に抑え、自力でコードを紡ぐクラフト重視。
+            </div>
+            <div className="preset-card-badges">
+              {Object.entries(PRESET_PREVIEW.ZEN).map(([, v]) => (
+                <span key={v} className={`mini-badge badge-ignore`}>🧘</span>
+              ))}
             </div>
           </div>
 
@@ -293,8 +313,9 @@ function App() {
                 onChange={e => handleSliderChange(category, parseFloat(e.target.value))}
               />
               <div className="slider-labels">
-                <span>0.0 (自力でやる)</span>
-                <span>1.0 (全自動)</span>
+                <span>🧘 0.0 自分で気づいて学ぶ</span>
+                <span>💡 0.4 ヒントを出して</span>
+                <span>⚡ 1.0 全部任せる</span>
               </div>
             </div>
           );
@@ -323,9 +344,15 @@ function App() {
           {presetMode === 'LEARNING' && (
             <div className="learning-box">
               <strong>🎓 学習ポイント:</strong>
-              <div>
-                提案された変更内容を確認し、「なぜこの構文が必要なのか」「タイポやインデントがどのように動作に影響するか」を意識してみましょう。
-              </div>
+              <ul className="learning-points">
+                {plan.edits.map((edit, i) => (
+                  <li key={i} className="learning-point-item">
+                    <span className="learning-category">{CATEGORY_NAMES[edit.category] || edit.category}</span>
+                    <span className="learning-reason">{edit.reason}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="learning-tip">💡 「なぜこう変えると良いのか」を確認してから承認すると、コードへの理解が深まります。</p>
             </div>
           )}
 
