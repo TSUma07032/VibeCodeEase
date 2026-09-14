@@ -1,41 +1,25 @@
 import * as vscode from 'vscode';
 import { CodeAnalyzer } from './analyzer';
-import { AnalysisResult } from '../types';
+import { AnalysisCache } from './analysisCache';
 import { GlobalState } from '../state/globalState';
 import { InterventionEngine } from './interventionEngine';
 
-interface CachedAnalysis {
-    version: number;
-    results: AnalysisResult[];
-}
-
 export class VibeHoverProvider implements vscode.HoverProvider {
-    private analyzer: CodeAnalyzer;
-    private cache: Map<string, CachedAnalysis>;
+    private readonly analyzer: CodeAnalyzer;
+    private readonly cache: AnalysisCache;
 
-    constructor() {
-        this.analyzer = new CodeAnalyzer();
-        this.cache = new Map<string, CachedAnalysis>();
+    constructor(analyzer: CodeAnalyzer = new CodeAnalyzer(), cache: AnalysisCache = new AnalysisCache()) {
+        this.analyzer = analyzer;
+        this.cache = cache;
     }
 
+
     provideHover(document: vscode.TextDocument, position: vscode.Position, _token: vscode.CancellationToken): vscode.ProviderResult<vscode.Hover> {
-        // Cache logic
-        const uri = document.uri.toString();
-        let cached = this.cache.get(uri);
-
-        if (!cached || cached.version !== document.version) {
-            const results = this.analyzer.analyze(document.getText());
-            cached = {
-                version: document.version,
-                results: results
-            };
-            this.cache.set(uri, cached);
-        }
-
+        const results = this.cache.getOrAnalyze(document, this.analyzer);
         const globalState = GlobalState.getInstance();
 
         // Find intersecting result
-        for (const result of cached.results) {
+        for (const result of results) {
             if (result.range.start.line > position.line) {
                 break;
             }

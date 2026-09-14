@@ -16,3 +16,14 @@ export const PAIN_CATEGORIES: PainCategory[] = [
   'VAR_FUNC_MANAGEMENT',
   'SYNTAX_ERROR_HANDLING'
 ];
+
+/**
+ * PainCategory の人間向け表示名（日本語）
+ */
+export const PAIN_CATEGORY_LABELS: Record<PainCategory, string> = {
+  SYNTAX_TYPO: 'タイポ・誤記',
+  INDENTATION_FORMATTING: 'インデント・整形',
+  VAR_FUNC_MANAGEMENT: '変数・関数の管理',
+  SYNTAX_ERROR_HANDLING: '構文エラー・ブロック'
+};
+

@@ -6,7 +6,9 @@ import {
     UserPreferenceProfile,
     PRESET_DEFINITIONS,
     DEFAULT_PRESET_MODE,
-    DEFAULT_USER_PREFERENCES
+    DEFAULT_USER_PREFERENCES,
+    LlmProvider,
+    LlmConfig
 } from '../types';
 import { InterventionEngine } from '../core/interventionEngine';
 
@@ -16,6 +18,8 @@ export class GlobalState {
     private _mode: InterventionLevel = 'SUGGESTION';
     private _presetMode: PresetMode = DEFAULT_PRESET_MODE;
     private _preferences: UserPreferenceProfile = { ...DEFAULT_USER_PREFERENCES };
+    private _llmProvider: LlmProvider = 'gemini';
+    private _llmModel: string = 'gemini-2.5-flash';
 
     private readonly _onDidChangeState = new vscode.EventEmitter<void>();
     public readonly onDidChangeState = this._onDidChangeState.event;
@@ -29,10 +33,19 @@ export class GlobalState {
         return GlobalState.instance;
     }
 
+    /**
+     * テスト環境用: シングルトンインスタンスをリセットする
+     */
+    public static resetInstanceForTesting(): void {
+        GlobalState.instance = new GlobalState();
+    }
+
     public initialize(context: vscode.ExtensionContext) {
         this.context = context;
         this._mode = context.globalState.get<InterventionLevel>('vibecodeease.mode') || 'SUGGESTION';
         this._presetMode = context.globalState.get<PresetMode>('vibecodeease.presetMode') || DEFAULT_PRESET_MODE;
+        this._llmProvider = context.globalState.get<LlmProvider>('vibecodeease.llmProvider') || 'gemini';
+        this._llmModel = context.globalState.get<string>('vibecodeease.llmModel') || 'gemini-2.5-flash';
         const storedPrefs = context.globalState.get<UserPreferenceProfile>('vibecodeease.preferences');
         if (storedPrefs && storedPrefs.preferences) {
             this._preferences = storedPrefs;
@@ -43,9 +56,17 @@ export class GlobalState {
         }
     }
 
+    public get isInitialized(): boolean {
+        return this.context !== undefined;
+    }
+
+    /**
+     * @deprecated 個別カテゴリごとの介入レベル（getInterventionLevel）または presetMode を使用してください。
+     */
     public get mode(): InterventionLevel {
         return this._mode;
     }
+
 
     public get presetMode(): PresetMode {
         return this._presetMode;
@@ -53,6 +74,21 @@ export class GlobalState {
 
     public get preferences(): UserPreferenceProfile {
         return this._preferences;
+    }
+
+    public get llmProvider(): LlmProvider {
+        return this._llmProvider;
+    }
+
+    public get llmModel(): string {
+        return this._llmModel;
+    }
+
+    public get llmConfig(): LlmConfig {
+        return {
+            provider: this._llmProvider,
+            model: this._llmModel
+        };
     }
 
     public async setMode(mode: InterventionLevel) {
@@ -94,6 +130,16 @@ export class GlobalState {
         if (this.context) {
             await this.context.globalState.update('vibecodeease.presetMode', preset);
             await this.context.globalState.update('vibecodeease.preferences', this._preferences);
+        }
+        this._onDidChangeState.fire();
+    }
+
+    public async setLlmConfig(config: LlmConfig) {
+        this._llmProvider = config.provider;
+        this._llmModel = config.model;
+        if (this.context) {
+            await this.context.globalState.update('vibecodeease.llmProvider', config.provider);
+            await this.context.globalState.update('vibecodeease.llmModel', config.model);
         }
         this._onDidChangeState.fire();
     }

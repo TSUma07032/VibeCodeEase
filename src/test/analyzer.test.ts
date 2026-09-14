@@ -75,4 +75,18 @@ suite('CodeAnalyzer Test Suite', () => {
 
         assert.strictEqual(results.length, 0);
     });
+
+    test('should support custom typo rules', () => {
+        const customAnalyzer = new CodeAnalyzer([
+            {
+                pattern: 'retrun',
+                replacement: 'return',
+                category: 'SYNTAX_TYPO'
+            }
+        ]);
+        const results = customAnalyzer.analyze('retrun false;');
+        assert.strictEqual(results.length, 1);
+        assert.strictEqual(results[0].interventions[0].originalText, 'retrun');
+        assert.strictEqual(results[0].interventions[0].replacementText, 'return');
+    });
 });

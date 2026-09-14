@@ -3,6 +3,8 @@ import { UserPreferenceProfile } from './userPreference';
 
 export type PresetMode = 'LEARNING' | 'FLOW' | 'ZEN' | 'CUSTOM';
 
+export const PRESET_MODES: readonly PresetMode[] = ['LEARNING', 'FLOW', 'ZEN', 'CUSTOM'] as const;
+
 export interface PresetDefinition {
   id: PresetMode;
   name: string;

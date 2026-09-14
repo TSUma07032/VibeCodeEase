@@ -29,11 +29,12 @@ export class LlmInterventionService {
     public async createGeminiPlan(
         document: vscode.TextDocument,
         token: vscode.CancellationToken,
-        apiKey: string
+        apiKey: string,
+        modelName?: string
     ): Promise<LlmInterventionPlan> {
         this.validateDocument(document);
         const prompt = buildInterventionPrompt(document);
-        const rawResult = await this.geminiClient.generate(prompt, apiKey, token);
+        const rawResult = await this.geminiClient.generate(prompt, apiKey, token, modelName);
         return validatePlan(rawResult, document);
     }
 
@@ -42,11 +43,12 @@ export class LlmInterventionService {
      */
     public async createPlan(
         document: vscode.TextDocument,
-        token: vscode.CancellationToken
+        token: vscode.CancellationToken,
+        modelSelector?: string
     ): Promise<LlmInterventionPlan> {
         this.validateDocument(document);
         const prompt = buildInterventionPrompt(document);
-        const rawResult = await this.vscodeLmClient.generate(prompt, token);
+        const rawResult = await this.vscodeLmClient.generate(prompt, token, modelSelector);
         return validatePlan(rawResult, document);
     }
 }

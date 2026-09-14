@@ -49,4 +49,18 @@ suite('Types Utils Test Suite', () => {
       assert.strictEqual(clampPreferenceValue(NaN, 0.2), 0.2);
     });
   });
+
+  suite('PAIN_CATEGORY_LABELS & PRESET_MODES', () => {
+    test('すべての PainCategory に対応するラベルが定義されていること', () => {
+      const { PAIN_CATEGORIES, PAIN_CATEGORY_LABELS } = require('../types');
+      for (const cat of PAIN_CATEGORIES) {
+        assert.ok(typeof PAIN_CATEGORY_LABELS[cat] === 'string' && PAIN_CATEGORY_LABELS[cat].length > 0);
+      }
+    });
+
+    test('PRESET_MODES にすべてのプリセットが含まれること', () => {
+      const { PRESET_MODES } = require('../types');
+      assert.deepStrictEqual(Array.from(PRESET_MODES), ['LEARNING', 'FLOW', 'ZEN', 'CUSTOM']);
+    });
+  });
 });

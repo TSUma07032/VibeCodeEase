@@ -3,7 +3,7 @@ import { getNonce } from './getNonce';
 import { WebviewMessageHandler } from './WebviewMessageHandler';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
-  _view?: vscode.WebviewView;
+  private _view?: vscode.WebviewView;
   private readonly messageHandler: WebviewMessageHandler;
 
   constructor(

@@ -277,3 +277,105 @@ input[type="range"] {
   margin: 0;
   text-align: center;
 }
+
+/* LLM Settings UI */
+.llm-section {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  padding: 10px;
+}
+
+.llm-config-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-group label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.styled-select, .styled-input {
+  background: var(--vscode-input-background, #3c3c3c);
+  color: var(--vscode-input-foreground, #cccccc);
+  border: 1px solid var(--vscode-input-border, #3c3c3c);
+  padding: 6px 8px;
+  border-radius: 2px;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.styled-select:focus, .styled-input:focus {
+  border-color: var(--vscode-focusBorder, #007fd4);
+}
+
+.api-key-group {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--card-border);
+}
+
+.api-key-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(56, 142, 60, 0.1);
+  padding: 6px 8px;
+  border-radius: 3px;
+  border: 1px solid rgba(56, 142, 60, 0.3);
+}
+
+.status-badge.success {
+  color: #81c995;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.api-key-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.action-button.small, .secondary-button.small {
+  padding: 4px 8px;
+  font-size: 10px;
+}
+
+.secondary-button.danger {
+  color: #f48771;
+  border-color: rgba(244, 135, 113, 0.3);
+}
+.secondary-button.danger:hover {
+  background: rgba(244, 135, 113, 0.1);
+}
+
+.api-key-input-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.api-key-hint {
+  font-size: 10px;
+  text-align: right;
+}
+
+.api-key-hint a {
+  color: var(--vscode-textLink-foreground, #3794ff);
+  text-decoration: none;
+}
+.api-key-hint a:hover {
+  text-decoration: underline;
+}

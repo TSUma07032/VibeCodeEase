@@ -19,8 +19,7 @@ export class ActionLogService {
 
     constructor(workspaceRoot?: string) {
         if (workspaceRoot) {
-            this.logFilePath = path.join(workspaceRoot, 'research_action_log.csv');
-            this.ensureLogFile();
+            this.setWorkspaceRoot(workspaceRoot);
         }
     }
 

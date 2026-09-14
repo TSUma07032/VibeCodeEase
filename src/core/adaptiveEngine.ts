@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { PainCategory } from '../types';
+import { PainCategory, PAIN_CATEGORY_LABELS } from '../types';
 import { GlobalState } from '../state/globalState';
 
 export interface ActionRecord {
@@ -13,8 +13,8 @@ export interface ActionRecord {
  * 自動で介入レベルの昇格・変更を提案する適応エンジン
  */
 export class AdaptiveEngine {
-    private history: ActionRecord[] = [];
-    private consecutiveThreshold: number = 3; // 連続承認しきい値
+    private readonly history: ActionRecord[] = [];
+    private readonly consecutiveThreshold: number;
 
     constructor(threshold: number = 3) {
         this.consecutiveThreshold = threshold;
@@ -38,7 +38,8 @@ export class AdaptiveEngine {
     }
 
     /**
-     * 直近の連続承認回数を取得する
+     * 特定カテゴリに対する直近の連続承認回数を取得する。
+     * 最新の履歴から逆順に走査し、同カテゴリの承認が途切れる（REJECTに遭遇する）までをカウントする。
      */
     public getConsecutiveApproveCount(category: PainCategory): number {
         let count = 0;
@@ -64,7 +65,7 @@ export class AdaptiveEngine {
         const currentLevel = globalState.getInterventionLevel(category);
 
         if (count >= this.consecutiveThreshold && currentLevel !== 'SILENT') {
-            const categoryLabel = this.getCategoryLabel(category);
+            const categoryLabel = PAIN_CATEGORY_LABELS[category] || category;
             vscode.window.showInformationMessage(
                 `💡 【適応型提案】「${categoryLabel}」の修正を連続で承認しています。次回から自動修正（SILENT）に切り替えて、さらにバイブスを高めますか？`,
                 'はい (自動修正にする)',
@@ -80,13 +81,5 @@ export class AdaptiveEngine {
 
         return false;
     }
-
-    private getCategoryLabel(category: PainCategory): string {
-        switch (category) {
-            case 'SYNTAX_TYPO': return 'タイポ・誤記';
-            case 'INDENTATION_FORMATTING': return 'インデント整形';
-            case 'VAR_FUNC_MANAGEMENT': return '変数・関数管理';
-            case 'SYNTAX_ERROR_HANDLING': return '構文エラー';
-        }
-    }
 }
+

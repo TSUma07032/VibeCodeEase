@@ -106,4 +106,81 @@ suite('WebviewMessageHandler Test Suite', () => {
         // It calls setStatusBarMessage under the hood, but doesn't send message back to webview
         assert.strictEqual(postedMessages.length, 0);
     });
+
+    test('should handle SET_PRESET with valid and invalid preset', async () => {
+        // Valid preset
+        await messageHandler.handleMessage({
+            command: 'SET_PRESET',
+            payload: 'FLOW'
+        }, mockWebview);
+        assert.strictEqual(postedMessages.length, 1);
+        assert.strictEqual(postedMessages[0].payload.presetMode, 'FLOW');
+
+        postedMessages = [];
+
+        // Invalid preset should be ignored
+        await messageHandler.handleMessage({
+            command: 'SET_PRESET',
+            payload: 'INVALID_PRESET'
+        }, mockWebview);
+        assert.strictEqual(postedMessages.length, 0);
+    });
+
+    test('should handle SET_LLM_CONFIG correctly', async () => {
+        await messageHandler.handleMessage({
+            command: 'SET_LLM_CONFIG',
+            payload: { provider: 'vscode-lm', model: 'gpt-4o' }
+        }, mockWebview);
+        assert.strictEqual(postedMessages.length, 1);
+        assert.strictEqual(postedMessages[0].payload.llmConfig.provider, 'vscode-lm');
+        assert.strictEqual(postedMessages[0].payload.llmConfig.model, 'gpt-4o');
+    });
+
+    test('should handle SAVE_API_KEY and DELETE_API_KEY correctly', async () => {
+        let storedKey = '';
+        mockSecrets.store = (key: string, val: string) => { storedKey = val; return Promise.resolve(); };
+        mockSecrets.delete = (key: string) => { storedKey = ''; return Promise.resolve(); };
+        mockSecrets.get = (key: string) => Promise.resolve(storedKey || undefined);
+
+        await messageHandler.handleMessage({
+            command: 'SAVE_API_KEY',
+            payload: { apiKey: 'test-key' }
+        }, mockWebview);
+        assert.strictEqual(storedKey, 'test-key');
+        assert.strictEqual(postedMessages.length, 1);
+        assert.strictEqual(postedMessages[0].payload.hasGeminiApiKey, true);
+
+        postedMessages = [];
+
+        await messageHandler.handleMessage({
+            command: 'DELETE_API_KEY'
+        }, mockWebview);
+        assert.strictEqual(storedKey, '');
+        assert.strictEqual(postedMessages.length, 1);
+        assert.strictEqual(postedMessages[0].payload.hasGeminiApiKey, false);
+    });
+
+
+    test('should trigger actionCallback with REJECT on REJECT_PLAN', async () => {
+        let callbackAction: string | undefined;
+        messageHandler.setActionCallback((action) => {
+            callbackAction = action;
+        });
+
+        // pendingPlan を手動セット
+        (messageHandler as any).pendingPlan = {
+            documentUri: 'file:///dummy.ts',
+            documentVersion: 1,
+            plan: { summary: 'test plan', edits: [] }
+        };
+
+        await messageHandler.handleMessage({
+            command: 'REJECT_PLAN'
+        }, mockWebview);
+
+        assert.strictEqual(callbackAction, 'REJECT');
+        assert.strictEqual(postedMessages.length, 1);
+        assert.strictEqual(postedMessages[0].type, 'PLAN_REJECTED');
+        assert.strictEqual(messageHandler.getPendingPlan(), undefined);
+    });
 });

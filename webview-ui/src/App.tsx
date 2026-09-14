@@ -1,51 +1,19 @@
 import './App.css';
 import { useEffect, useState } from 'react';
+import type {
+  PainCategory,
+  PresetMode,
+  InterventionPlan,
+  SettingsPayload,
+  LlmConfig,
+  LlmProvider
+} from './types';
+import { CATEGORY_NAMES } from './types';
 
 // VS Code API を取得するための宣言
 declare const acquireVsCodeApi: any;
 const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
 
-type PainCategory =
-  | 'SYNTAX_TYPO'
-  | 'INDENTATION_FORMATTING'
-  | 'VAR_FUNC_MANAGEMENT'
-  | 'SYNTAX_ERROR_HANDLING';
-
-type PresetMode = 'LEARNING' | 'FLOW' | 'ZEN' | 'CUSTOM';
-
-interface ProposedEdit {
-  startLine: number;
-  startCharacter: number;
-  endLine: number;
-  endCharacter: number;
-  newText: string;
-  category: PainCategory;
-  reason: string;
-}
-
-interface InterventionPlan {
-  summary: string;
-  edits: ProposedEdit[];
-}
-
-interface SettingsPayload {
-  presetMode: PresetMode;
-  preferences: Record<PainCategory, number>;
-  presetDefinitions: Record<string, {
-    id: string;
-    name: string;
-    description: string;
-    icon: string;
-    preferences: Record<PainCategory, number>;
-  }>;
-}
-
-const CATEGORY_NAMES: Record<PainCategory, string> = {
-  SYNTAX_TYPO: 'タイポ・誤記',
-  INDENTATION_FORMATTING: 'インデント・整形',
-  VAR_FUNC_MANAGEMENT: '変数・関数の管理',
-  SYNTAX_ERROR_HANDLING: '構文エラー・ブロック'
-};
 
 function getInterventionBadge(val: number) {
   if (val >= 0.75) {
@@ -69,6 +37,12 @@ function App() {
   const [status, setStatus] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
 
+  // LLM / API Key State
+  const [llmConfig, setLlmConfig] = useState<LlmConfig>({ provider: 'gemini', model: 'gemini-2.5-flash' });
+  const [hasGeminiApiKey, setHasGeminiApiKey] = useState<boolean>(false);
+  const [apiKeyValue, setApiKeyValue] = useState<string>('');
+  const [isEditingApiKey, setIsEditingApiKey] = useState<boolean>(false);
+
   useEffect(() => {
     // 起動時に拡張機能へ設定取得リクエストを送る
     vscode?.postMessage({ command: 'GET_SETTINGS' });
@@ -82,6 +56,8 @@ function App() {
           const payload = data.payload as SettingsPayload;
           setPresetMode(payload.presetMode);
           setPreferences(payload.preferences);
+          if (payload.llmConfig) setLlmConfig(payload.llmConfig);
+          if (payload.hasGeminiApiKey !== undefined) setHasGeminiApiKey(payload.hasGeminiApiKey);
           break;
         }
         case 'ANALYSIS_STARTED':
@@ -142,12 +118,106 @@ function App() {
   const handleApply = () => vscode?.postMessage({ command: 'APPLY_PLAN' });
   const handleReject = () => vscode?.postMessage({ command: 'REJECT_PLAN' });
 
+  const handleLlmProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const provider = e.target.value as LlmProvider;
+    // providerが切り替わったらデフォルトモデルも切り替える
+    const model = provider === 'gemini' ? 'gemini-2.5-flash' : 'auto';
+    setLlmConfig({ provider, model });
+    vscode?.postMessage({ command: 'SET_LLM_CONFIG', payload: { provider, model } });
+  };
+
+  const handleLlmModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const model = e.target.value;
+    setLlmConfig(prev => ({ ...prev, model }));
+    vscode?.postMessage({ command: 'SET_LLM_CONFIG', payload: { provider: llmConfig.provider, model } });
+  };
+
+  const handleSaveApiKey = () => {
+    vscode?.postMessage({ command: 'SAVE_API_KEY', payload: { apiKey: apiKeyValue } });
+    setIsEditingApiKey(false);
+    setApiKeyValue('');
+  };
+
+  const handleDeleteApiKey = () => {
+    vscode?.postMessage({ command: 'DELETE_API_KEY' });
+    setIsEditingApiKey(false);
+    setApiKeyValue('');
+  };
+
   return (
     <div className="App">
       <header className="header">
         <h1>✨ vibeCodeEase</h1>
         <p>AI-assisted Flow & Learning Support</p>
       </header>
+
+      {/* AIモデル・API設定 */}
+      <section className="preset-section llm-section">
+        <h2 className="section-title">🤖 AIモデル & API設定</h2>
+        <div className="llm-config-box">
+          <div className="form-group">
+            <label>LLM プロバイダー</label>
+            <select value={llmConfig.provider} onChange={handleLlmProviderChange} className="styled-select">
+              <option value="gemini">💎 Google Gemini (推奨)</option>
+              <option value="vscode-lm">🤖 VS Code LM (Copilot等)</option>
+            </select>
+          </div>
+          
+          <div className="form-group">
+            <label>使用モデル</label>
+            <select value={llmConfig.model} onChange={handleLlmModelChange} className="styled-select">
+              {llmConfig.provider === 'gemini' ? (
+                <>
+                  <option value="gemini-2.5-flash">gemini-2.5-flash (推奨・高速)</option>
+                  <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                  <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                  <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+                  <option value="auto">自動選択 (Auto)</option>
+                </>
+              ) : (
+                <>
+                  <option value="auto">自動選択 (Default)</option>
+                  <option value="gpt-4o">gpt-4o</option>
+                  <option value="gpt-4o-mini">gpt-4o-mini</option>
+                  <option value="claude-3.5-sonnet">claude-3.5-sonnet</option>
+                </>
+              )}
+            </select>
+          </div>
+
+          {llmConfig.provider === 'gemini' && (
+            <div className="form-group api-key-group">
+              <label>Gemini API キー</label>
+              {hasGeminiApiKey && !isEditingApiKey ? (
+                <div className="api-key-status">
+                  <span className="status-badge success">✅ 設定済み (••••••••)</span>
+                  <div className="api-key-actions">
+                    <button className="action-button small" onClick={() => setIsEditingApiKey(true)}>変更</button>
+                    <button className="secondary-button small danger" onClick={handleDeleteApiKey}>削除</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="api-key-input-box">
+                  <input
+                    type="password"
+                    placeholder="AIza..."
+                    value={apiKeyValue}
+                    onChange={e => setApiKeyValue(e.target.value)}
+                    className="styled-input"
+                  />
+                  <div className="api-key-actions">
+                    <button className="action-button small" onClick={handleSaveApiKey}>保存</button>
+                    {hasGeminiApiKey && <button className="secondary-button small" onClick={() => setIsEditingApiKey(false)}>キャンセル</button>}
+                  </div>
+                  <div className="api-key-hint">
+                    <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">Google AI Studioでキーを取得</a>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* プリセット選択 */}
       <section className="preset-section">

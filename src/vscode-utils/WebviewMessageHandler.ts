@@ -1,6 +1,14 @@
 import * as vscode from 'vscode';
 import { LlmInterventionService } from '../core/llmInterventionService';
-import { LlmInterventionPlan, PainCategory, PresetMode, PRESET_DEFINITIONS, parsePainCategory, clampPreferenceValue } from '../types';
+import {
+    LlmInterventionPlan,
+    PainCategory,
+    PresetMode,
+    PRESET_DEFINITIONS,
+    PRESET_MODES,
+    parsePainCategory,
+    clampPreferenceValue
+} from '../types';
 import { GlobalState } from '../state/globalState';
 
 export interface PendingPlan {
@@ -41,14 +49,14 @@ export class WebviewMessageHandler {
 
         switch (message.command) {
             case 'GET_SETTINGS': {
-                this.sendCurrentSettings(webview);
+                await this.sendCurrentSettings(webview);
                 break;
             }
             case 'SET_PRESET': {
                 const preset = message.payload as PresetMode;
-                if (preset === 'LEARNING' || preset === 'FLOW' || preset === 'ZEN' || preset === 'CUSTOM') {
+                if (PRESET_MODES.includes(preset)) {
                     await GlobalState.getInstance().setPresetMode(preset);
-                    this.sendCurrentSettings(webview);
+                    await this.sendCurrentSettings(webview);
                 }
                 break;
             }
@@ -58,8 +66,33 @@ export class WebviewMessageHandler {
                     const validCategory = parsePainCategory(payload.category);
                     const validValue = clampPreferenceValue(payload.value);
                     await GlobalState.getInstance().updatePreference(validCategory, validValue);
-                    this.sendCurrentSettings(webview);
+                    await this.sendCurrentSettings(webview);
                 }
+                break;
+            }
+            case 'SET_LLM_CONFIG': {
+                const payload = message.payload as { provider: 'gemini' | 'vscode-lm', model: string } | undefined;
+                if (payload && (payload.provider === 'gemini' || payload.provider === 'vscode-lm') && typeof payload.model === 'string') {
+                    await GlobalState.getInstance().setLlmConfig(payload);
+                    await this.sendCurrentSettings(webview);
+                }
+                break;
+            }
+            case 'SAVE_API_KEY': {
+                const payload = message.payload as { apiKey: string } | undefined;
+                if (payload && typeof payload.apiKey === 'string') {
+                    if (payload.apiKey.trim() === '') {
+                        await this.secrets.delete('vibecodeease.geminiApiKey');
+                    } else {
+                        await this.secrets.store('vibecodeease.geminiApiKey', payload.apiKey.trim());
+                    }
+                    await this.sendCurrentSettings(webview);
+                }
+                break;
+            }
+            case 'DELETE_API_KEY': {
+                await this.secrets.delete('vibecodeease.geminiApiKey');
+                await this.sendCurrentSettings(webview);
                 break;
             }
             case 'ANALYZE_CURRENT_FILE': {
@@ -90,14 +123,17 @@ export class WebviewMessageHandler {
         }
     }
 
-    public sendCurrentSettings(webview: vscode.Webview): void {
+    public async sendCurrentSettings(webview: vscode.Webview): Promise<void> {
         const state = GlobalState.getInstance();
+        const apiKey = await this.secrets.get('vibecodeease.geminiApiKey');
         webview.postMessage({
             type: 'SETTINGS_DATA',
             payload: {
                 presetMode: state.presetMode,
                 preferences: state.preferences.preferences,
-                presetDefinitions: PRESET_DEFINITIONS
+                presetDefinitions: PRESET_DEFINITIONS,
+                llmConfig: state.llmConfig,
+                hasGeminiApiKey: !!apiKey
             }
         });
     }
@@ -119,10 +155,16 @@ export class WebviewMessageHandler {
                     cancellable: false
                 },
                 async () => {
-                    const apiKey = await this.secrets.get('vibecodeease.geminiApiKey');
-                    return apiKey
-                        ? await this.llmService.createGeminiPlan(editor.document, source.token, apiKey)
-                        : await this.llmService.createPlan(editor.document, source.token);
+                    const state = GlobalState.getInstance();
+                    if (state.llmProvider === 'gemini') {
+                        const apiKey = await this.secrets.get('vibecodeease.geminiApiKey');
+                        if (!apiKey) {
+                            throw new Error('Gemini APIキーが設定されていません。サイドバーからGemini APIキーを設定してください。');
+                        }
+                        return await this.llmService.createGeminiPlan(editor.document, source.token, apiKey, state.llmModel);
+                    } else {
+                        return await this.llmService.createPlan(editor.document, source.token, state.llmModel);
+                    }
                 }
             );
 
@@ -166,6 +208,9 @@ export class WebviewMessageHandler {
         }
 
         const applied = await vscode.workspace.applyEdit(edit);
+        if (applied && this.actionCallback) {
+            this.actionCallback('APPLY', pending.plan, pending.documentUri);
+        }
         this.pendingPlan = undefined;
         webview.postMessage({ type: applied ? 'PLAN_APPLIED' : 'ERROR', payload: applied ? undefined : '変更を適用できませんでした。' });
     }

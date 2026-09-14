@@ -23,8 +23,8 @@ export class GeminiClient {
     /**
      * Gemini APIへリクエストを送信し、生成された未検証のJSONレスポンスオブジェクトを返す
      */
-    public async generate(prompt: string, apiKey: string, token: vscode.CancellationToken): Promise<unknown> {
-        const candidateModels = await this.discoverModels(apiKey, token);
+    public async generate(prompt: string, apiKey: string, token: vscode.CancellationToken, modelName?: string): Promise<unknown> {
+        const candidateModels = await this.discoverModels(apiKey, token, modelName);
 
         for (const model of candidateModels) {
             const response = await this.request(
@@ -64,7 +64,7 @@ export class GeminiClient {
         throw new Error('利用可能なGeminiモデルが見つかりません。APIキーが新規ユーザー向けモデルを利用できるか確認してください。');
     }
 
-    private async discoverModels(apiKey: string, token: vscode.CancellationToken): Promise<GeminiModel[]> {
+    private async discoverModels(apiKey: string, token: vscode.CancellationToken, targetModelName?: string): Promise<GeminiModel[]> {
         const modelsResponse = await this.request(
             `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
             undefined,
@@ -76,7 +76,13 @@ export class GeminiClient {
 
         const models = (JSON.parse(modelsResponse.body) as GeminiModelsResponse).models ?? [];
         const availableModels = models.filter((model) => model.supportedGenerationMethods?.includes('generateContent'));
-        const preferredModels = this.preferredNames
+        
+        let prefs = [...this.preferredNames];
+        if (targetModelName && targetModelName !== 'auto') {
+            prefs.unshift(targetModelName);
+        }
+
+        const preferredModels = prefs
             .map((preferredName) => availableModels.find((model) => model.name.endsWith(`/${preferredName}`)))
             .filter((model): model is GeminiModel => model !== undefined);
 
