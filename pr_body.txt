@@ -1,0 +1,9 @@
+💡 **実施内容 (What):**
+`vscode.window.showInputBox`（Gemini APIキー入力）および `vscode.window.showQuickPick`（モード切替）を呼び出す際に、`title` プロパティを追加して拡張機能名とコンテキストを明記しました。
+
+🎯 **理由・目的 (Why):**
+`title` が未設定の場合、ユーザーにとってどの拡張機能が突然入力を求めてきたのかが分かりにくく、フィッシングや予期せぬ動作のように感じられ、不安を与えたりコンテキストスイッチによる混乱を招いたりする課題を解決するためです。VS Code の推奨UXパターンに従い、出所を明確にしました。
+
+📸 **Before/After:**
+- **Before:** ポップアップ上部にタイトルがなく、突然「Gemini APIキーを入力してください」やプレースホルダーが表示されるだけ。
+- **After:** ポップアップ上部に「vibeCodeEase: Configure Gemini API Key」や「vibeCodeEase: Select Mode」という明確なタイトルが表示され、入力の意図と出所が即座に理解できる。
