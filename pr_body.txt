@@ -1,0 +1,8 @@
+タイトル: 🏗️ Builder: Webviewメッセージの型安全性向上
+
+説明文 (Description):
+
+🎯 消化したTODO: Webviewから送信されるメッセージアクションの型安全性をさらに高めるリファクタリング
+💡 実装内容 (What): `WebviewMessage` インターフェースを `ExtensionMessage` として Discriminated Union (判別可能なユニオン) に再定義し、`WebviewMessageHandler` の `switch` 文で `payload` に型安全にアクセスできるようにリファクタリングしました。無駄な `as` キャストを排除しました。
+🔗 活用した基盤: 既存の `WebviewMessageHandler` および `src/types/webviewMessage.ts` の型定義を活用。
+📝 次のステップ: Webview側のメッセージ送信処理(postMessage)の型安全性を強化する。
