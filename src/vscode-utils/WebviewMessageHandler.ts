@@ -52,7 +52,7 @@ export class WebviewMessageHandler {
             return;
         }
 
-        const message = data as { command: string; payload?: unknown; data?: { message?: unknown } };
+        const message = data as import('../types').ExtensionMessage;
 
         switch (message.command) {
             case 'GET_SETTINGS': {
@@ -60,7 +60,7 @@ export class WebviewMessageHandler {
                 break;
             }
             case 'SET_PRESET': {
-                const preset = message.payload as PresetMode;
+                const preset = message.payload;
                 if (PRESET_MODES.includes(preset)) {
                     await GlobalState.getInstance().setPresetMode(preset);
                     await this.sendCurrentSettings(webview);
@@ -68,7 +68,7 @@ export class WebviewMessageHandler {
                 break;
             }
             case 'UPDATE_PREFERENCE_VALUE': {
-                const payload = message.payload as { category?: unknown; value?: unknown } | undefined;
+                const payload = message.payload;
                 if (payload && typeof payload.category === 'string' && typeof payload.value === 'number' && !isNaN(payload.value)) {
                     const validCategory = parsePainCategory(payload.category);
                     const validValue = clampPreferenceValue(payload.value);
@@ -78,7 +78,7 @@ export class WebviewMessageHandler {
                 break;
             }
             case 'SET_LLM_CONFIG': {
-                const payload = message.payload as { provider: 'gemini' | 'vscode-lm', model: string } | undefined;
+                const payload = message.payload;
                 if (payload && (payload.provider === 'gemini' || payload.provider === 'vscode-lm') && typeof payload.model === 'string') {
                     await GlobalState.getInstance().setLlmConfig(payload);
                     await this.sendCurrentSettings(webview);
@@ -86,7 +86,7 @@ export class WebviewMessageHandler {
                 break;
             }
             case 'SAVE_API_KEY': {
-                const payload = message.payload as { apiKey: string } | undefined;
+                const payload = message.payload;
                 if (payload && typeof payload.apiKey === 'string') {
                     if (payload.apiKey.trim() === '') {
                         await this.secrets.delete('vibecodeease.geminiApiKey');
@@ -103,7 +103,7 @@ export class WebviewMessageHandler {
                 break;
             }
             case 'SET_LLM_TRIGGER_MODE': {
-                const payload = message.payload as LlmTriggerMode | undefined;
+                const payload = message.payload;
                 if (payload && ['continuous', 'on-save', 'disabled'].includes(payload)) {
                     await GlobalState.getInstance().setLlmTriggerMode(payload);
                     await this.sendCurrentSettings(webview);
@@ -111,7 +111,7 @@ export class WebviewMessageHandler {
                 break;
             }
             case 'SET_EDITOR_APPEAL_LEVEL': {
-                const payload = message.payload as EditorAppealLevel | undefined;
+                const payload = message.payload;
                 if (payload && ['high', 'medium', 'low'].includes(payload)) {
                     await GlobalState.getInstance().setEditorAppealLevel(payload);
                     await this.sendCurrentSettings(webview);
@@ -136,7 +136,7 @@ export class WebviewMessageHandler {
             }
             case 'JUMP_TO_ISSUE': {
                 // Grammarly パネルから問題行へジャンプ
-                const payload = message.payload as { line?: unknown; character?: unknown } | undefined;
+                const payload = message.payload;
                 if (payload && typeof payload.line === 'number' && typeof payload.character === 'number') {
                     const editor = vscode.window.activeTextEditor;
                     if (editor) {
@@ -149,7 +149,7 @@ export class WebviewMessageHandler {
                 break;
             }
             case 'APPLY_LIVE_ISSUE': {
-                const issue = message.payload as LiveIssue | undefined;
+                const issue = message.payload;
                 const editor = vscode.window.activeTextEditor;
                 if (issue && issue.replacementText !== undefined && editor) {
                     const edit = new vscode.WorkspaceEdit();
@@ -178,7 +178,7 @@ export class WebviewMessageHandler {
                 break;
             }
             case 'REJECT_LIVE_ISSUE': {
-                const issue = message.payload as LiveIssue | undefined;
+                const issue = message.payload;
                 if (issue && issue.id) {
                     SharedAnalysisCache.getInstance().ignoreIssue(issue.id);
                     vscode.commands.executeCommand('vibecodeease.refreshLiveIssues');
