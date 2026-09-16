@@ -1,0 +1,4 @@
+🚨 **深刻度 (Severity):** CRITICAL
+💡 **脆弱性 (Vulnerability):** APIキーが`settings.json`（workspace settings）から平文で読み込まれる実装になっており、リポジトリへの誤コミットやローカル環境での漏洩リスクがありました。
+🎯 **影響 (Impact):** APIキーが漏洩し、不正利用によるリソース枯渇や不正請求が発生するリスクがあります。
+🔧 **修正内容 (Fix):** `package.json`から設定項目を削除し、APIキーの取得を`vscode.SecretStorage`のみに限定して、フォールバックとして`vscode.workspace.getConfiguration`を使用するコードを削除しました。
