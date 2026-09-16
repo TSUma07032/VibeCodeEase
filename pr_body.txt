@@ -1,0 +1,9 @@
+💡 **実施内容 (What):**
+`src/commands.ts` 内の `vscode.window.showInputBox` および `vscode.window.showQuickPick` 呼び出しに `title` オプションを追加しました。
+
+🎯 **理由・目的 (Why):**
+ユーザー入力を求める際、タイトルが指定されていないと、どの拡張機能からの要求か不明瞭になり、ユーザーを混乱させる可能性があるためです。タイトルを追加することで、直ちにコンテキストを提供し、VS Code UXのベストプラクティスに準拠します。
+
+📸 **Before/After:**
+Before: `vibeCodeEase の動作モードを選択してください` などのプレースホルダーのみ表示され、タイトルなし。
+After: 入力・選択画面の上部に `vibeCodeEase: Configure Gemini API Key` や `vibeCodeEase: Select Mode` のように拡張機能名と要求内容がタイトルとして明確に表示されるようになりました。
