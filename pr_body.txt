@@ -1,0 +1,3 @@
+💡 実施内容 (What): `src/commands.ts` 内の `vscode.window.showInputBox` と `vscode.window.showQuickPick` のオプションに、拡張機能名と目的を示す `title` を追加しました。
+🎯 理由・目的 (Why): ユーザー入力を求める際にコンテキスト（どの拡張機能からの要求か）を明確にし、突然プロンプトが表示されたように感じる不安や混乱を防ぎ、UXを向上させるためです。
+📸 Before/After: タイトルがない入力ボックスやクイックピックから、上部に「vibeCodeEase: Configure Gemini API Key」や「vibeCodeEase: 動作モードの選択」といった明確なタイトルが表示されるようになりました。
