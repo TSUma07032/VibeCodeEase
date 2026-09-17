@@ -141,5 +141,7 @@
   - [ ] 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。(次にやるべきこと)
 - [ ] AST（抽象構文木）操作・高度なコード修正案生成ロジックの拡充
 - [ ] LLM Structured Outputs（Zod + JSON Schema）の更なる厳格化
-- [ ] Webviewから送信されるメッセージアクションの型安全性をさらに高めるリファクタリング
+- [x] Webviewから送信されるメッセージアクションの型安全性をさらに高めるリファクタリング
+  - Jules Memo: `WebviewMessage`（`ExtensionMessage`）を `command` プロパティを持つ厳格な Discriminated Union 型にリファクタリングし、ペイロードへの安全なアクセスを保証。`WebviewMessageHandler.ts` での安全な型推論を実現。
 - [ ] Tabキーによるワンタッチ適用の機能を、より広い範囲（インライン補完や複数候補時の選択UI）に拡張する。
+- [ ] LLM Structured Outputs（Zod + JSON Schema）の更なる厳格化（依存関係確認済み）

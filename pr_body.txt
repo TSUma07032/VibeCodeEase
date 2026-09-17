@@ -1,0 +1,12 @@
+🎯 消化したTODO:
+- Webviewから送信されるメッセージアクションの型安全性をさらに高めるリファクタリング
+
+💡 実装内容 (What):
+- `src/types/webviewMessage.ts` にて、拡張機能とWebview間で送受信されるメッセージを各アクション固有のペイロードを持つ Discriminated Union (タグ付きユニオン) `WebviewMessage` に再定義しました。
+- `WebviewMessageHandler.ts` において、`as` による危険なキャストを排除し、TypeScriptの型推論を活用した安全なペイロードアクセスを実現しました。
+
+🔗 活用した基盤:
+- 既存の `WebviewMessageHandler` の通信フローを維持しつつ、型定義のみを強固にしました。
+
+📝 次のステップ:
+- LLM Structured Outputs（Zod + JSON Schema）の更なる厳格化（依存関係確認済み）
