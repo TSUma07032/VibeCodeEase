@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { LlmEdit, LlmInterventionPlan, PAIN_CATEGORIES } from '../../types';
+import { llmInterventionPlanSchema } from './zodSchemas';
 
 /**
  * 渡された文字列の改行コード（CRLF / LF）を考慮して正規化後オフセットから元の文字列オフセットへ変換する
@@ -22,39 +23,25 @@ export function toOriginalOffset(text: string, normalizedOffset: number): number
  * LLMから受け取った生のオブジェクトを検証し、TextDocument上の正確な位置にマップされた LlmInterventionPlan を構築する
  */
 export function validatePlan(value: unknown, document: vscode.TextDocument): LlmInterventionPlan {
-    if (!value || typeof value !== 'object') {
+    const parseResult = llmInterventionPlanSchema.safeParse(value);
+
+    if (!parseResult.success) {
         throw new Error('LLMの介入プラン形式が不正です。');
     }
 
-    const candidate = value as { summary?: unknown; edits?: unknown };
-    if (typeof candidate.summary !== 'string' || !Array.isArray(candidate.edits)) {
-        throw new Error('LLMの介入プランに必要な項目がありません。');
-    }
+    const candidate = parseResult.data;
 
-    const edits = candidate.edits.map((edit): LlmEdit => {
-        if (!edit || typeof edit !== 'object') {
-            throw new Error('LLMの変更案形式が不正です。');
-        }
-        const item = edit as Record<string, unknown>;
-        const positions = ['startLine', 'startCharacter', 'endLine', 'endCharacter'];
-        if (!positions.every((key) => Number.isInteger(item[key]) && (item[key] as number) >= 0) ||
-            typeof item.newText !== 'string' || typeof item.category !== 'string' ||
-            !PAIN_CATEGORIES.includes(item.category as LlmEdit['category']) || typeof item.reason !== 'string') {
-            throw new Error('LLMの変更案に不正な値があります。');
-        }
+    const edits = candidate.edits.map((item): LlmEdit => {
+        const startLine = item.startLine;
+        const endLine = item.endLine;
+        const startCharacter = item.startCharacter;
+        const endCharacter = item.endCharacter;
 
-        const startLine = item.startLine as number;
-        const endLine = item.endLine as number;
-        const startCharacter = item.startCharacter as number;
-        const endCharacter = item.endCharacter as number;
-        if (typeof item.oldText !== 'string' || !item.oldText) {
-            throw new Error('LLMの変更案にoldTextがありません。');
-        }
         if (startLine >= document.lineCount || endLine >= document.lineCount) {
             throw new Error(`LLMの変更範囲がファイル外を指しています。要求範囲: ${startLine}:${startCharacter}-${endLine}:${endCharacter}、ファイル: ${document.lineCount}行です。`);
         }
 
-        const resolvedRange = findOriginalTextRange(document, item.oldText as string, startLine, startCharacter);
+        const resolvedRange = findOriginalTextRange(document, item.oldText, startLine, startCharacter);
         if (!resolvedRange) {
             throw new Error(`LLMが指定したoldTextをファイル内で見つけられません。要求範囲: ${startLine}:${startCharacter}-${endLine}:${endCharacter}`);
         }
@@ -64,10 +51,10 @@ export function validatePlan(value: unknown, document: vscode.TextDocument): Llm
             startCharacter: resolvedRange.start.character,
             endLine: resolvedRange.end.line,
             endCharacter: resolvedRange.end.character,
-            oldText: item.oldText as string,
-            newText: item.newText as string,
+            oldText: item.oldText,
+            newText: item.newText,
             category: item.category as LlmEdit['category'],
-            reason: item.reason as string
+            reason: item.reason
         };
     });
 
@@ -78,7 +65,7 @@ export function validatePlan(value: unknown, document: vscode.TextDocument): Llm
  * 現在のドキュメントから元のテキストを検索し、正しいRangeを返す
  */
 export function findOriginalTextRange(document: vscode.TextDocument, oldText: string, hintLine: number, hintCharacter: number): vscode.Range | undefined {
-    if (!oldText) return undefined;
+    if (!oldText) {return undefined;}
     
     const documentText = document.getText();
     const normalizedDocumentText = documentText.replace(/\r\n/g, '\n');

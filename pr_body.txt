@@ -1,0 +1,13 @@
+🎯 消化したTODO:
+- `LlmInterventionPlan` / `LlmEdit` に対応するZodスキーマを定義する。
+
+💡 実装内容 (What):
+- Zodスキーマ (`llmInterventionPlanSchema`, `llmEditSchema`) を定義しました。
+- `planValidator.ts` で手動で行っていた型チェックを、Zodによる厳格な `safeParse` に置き換えました。
+
+🔗 活用した基盤:
+- 既存の `LlmInterventionPlan`, `LlmEdit` インターフェース
+- 既存の `planValidator` テストスイート
+
+📝 次のステップ:
+- 定義したZodスキーマをLLM APIのレスポンス検証に組み込む

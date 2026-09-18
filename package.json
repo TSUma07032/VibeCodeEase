@@ -68,7 +68,10 @@
         },
         "vibecodeease.llmProvider": {
           "type": "string",
-          "enum": ["gemini", "vscode-lm"],
+          "enum": [
+            "gemini",
+            "vscode-lm"
+          ],
           "default": "gemini",
           "description": "LLM Provider to use (gemini or vscode-lm)"
         },
@@ -113,5 +116,9 @@
     "eslint": "^9.34.0",
     "npm-run-all": "^4.1.5",
     "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "zod": "^3.22.4",
+    "zod-to-json-schema": "^3.22.4"
   }
 }
