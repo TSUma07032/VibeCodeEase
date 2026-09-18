@@ -61,11 +61,6 @@
     "configuration": {
       "title": "vibeCodeEase",
       "properties": {
-        "vibecodeease.geminiApiKey": {
-          "type": "string",
-          "default": "",
-          "description": "Gemini API Key (Note: It is highly recommended to use the sidebar or command palette to store it securely in SecretStorage instead of this plain text setting.)"
-        },
         "vibecodeease.llmProvider": {
           "type": "string",
           "enum": ["gemini", "vscode-lm"],

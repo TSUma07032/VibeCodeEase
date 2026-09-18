@@ -1,0 +1,4 @@
+🚨 深刻度 (Severity): CRITICAL
+💡 脆弱性 (Vulnerability): package.jsonのconfigurationにAPIキー設定が定義されており、平文保存されるリスクがあった
+🎯 影響 (Impact): ユーザーのAPIキーがワークスペース設定等に平文で保存・漏洩するリスク
+🔧 修正内容 (Fix): package.jsonから設定を削除し、コード内のフォールバック取得処理を除去してSecretStorageのみを使用するように修正した
