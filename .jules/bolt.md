@@ -31,3 +31,6 @@
 ## 2026-09-07 - 重複した解析処理のキャッシュによる削減
 **学び:** `CodeAnalyzer`のような重いパース処理を、`HoverProvider`, `CodeActionProvider`, `SilentFixService`など複数のプロバイダーで個別に実行すると、キー入力や保存時などの高頻度イベントで無駄なCPU時間とメモリを消費する。
 **アクション:** 対象となるドキュメントのバージョン（`document.version`）をキーにしたシングルトンキャッシュ（`SharedAnalysisCache`など）を導入し、複数プロバイダー間で解析結果を共有することで、重複処理を排除し全体のパフォーマンスを向上させる。
+## 2026-09-19 - Fast Pre-filtering for Regex in High-frequency Loops
+**学び:** 行ごとの末尾スペース検出のように、高頻度で呼ばれるループ内で `RegExp.match()` や `RegExp.test()` を直接実行すると正規表現エンジンのオーバーヘッドが累積します。
+**アクション:** 正規表現を実行する前に、`String.prototype.endsWith(' ')` などの $O(1)$ の文字列メソッドで早期リターン可能な条件を設け、不要な正規表現の実行をバイパスするパターンを適用します。
