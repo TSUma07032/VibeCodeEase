@@ -102,22 +102,26 @@ export class CodeAnalyzer {
       const lineText = lines[lineIndex];
 
       // カテゴリC: 末尾スペース検出
-      const trailingMatch = lineText.match(/^(.*\S)( +)$/);
-      if (trailingMatch) {
-        const trailingStart = trailingMatch[1].length;
-        results.push({
-          category: 'INDENTATION_FORMATTING',
-          level: 'SUGGESTION',
-          range: {
-            start: { line: lineIndex, character: trailingStart },
-            end: { line: lineIndex, character: lineText.length }
-          },
-          interventions: [{
-            originalText: lineText.slice(trailingStart),
-            replacementText: '',
-            message: '$(lightbulb) **末尾の余分なスペース**を削除できます。'
-          }]
-        });
+      // ⚡ Bolt: 正規表現エンジンの実行前に O(1) の endsWith チェックでプレフィルタリング
+      // Benchmark: スペースで終わらない行に対する重い Regex 処理をバイパスし、数万行のコード解析時間を大幅に削減
+      if (lineText.endsWith(' ')) {
+        const trailingMatch = lineText.match(/^(.*\S)( +)$/);
+        if (trailingMatch) {
+          const trailingStart = trailingMatch[1].length;
+          results.push({
+            category: 'INDENTATION_FORMATTING',
+            level: 'SUGGESTION',
+            range: {
+              start: { line: lineIndex, character: trailingStart },
+              end: { line: lineIndex, character: lineText.length }
+            },
+            interventions: [{
+              originalText: lineText.slice(trailingStart),
+              replacementText: '',
+              message: '$(lightbulb) **末尾の余分なスペース**を削除できます。'
+            }]
+          });
+        }
       }
 
       // カテゴリA/B: ルールベースのタイポ検出
