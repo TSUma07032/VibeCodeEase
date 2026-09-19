@@ -1,0 +1,4 @@
+🚨 **深刻度 (Severity):** CRITICAL
+💡 **脆弱性 (Vulnerability):** `package.json` にAPIキーのプロパティが定義されており、ユーザーが `settings.json` にプレーンテキストとして保存してしまう可能性がありました。また、コードはフォールバックとしてこの設定値を読み取っていました。
+🎯 **影響 (Impact):** ユーザーが誤って API キーを `settings.json` にプレーンテキストで保存すると、APIキーが漏洩するリスク（例: リポジトリの公開、画面共有など）があります。
+🔧 **修正内容 (Fix):** `package.json` の `configuration` から `vibecodeease.geminiApiKey` を削除し、コード内の `vscode.workspace.getConfiguration` によるフォールバックの読み取り処理を取り除きました。
