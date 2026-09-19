@@ -130,7 +130,7 @@ export class LlmBackgroundService implements vscode.Disposable {
 
             // plan.edits を AnalysisResult[] に変換してキャッシュにマージ
             const results: AnalysisResult[] = plan.edits.map(edit => ({
-                category: edit.category,
+                category: edit.category as AnalysisResult['category'],
                 level: 'SUGGESTION', // バックグラウンド解析は基本提案とする
                 source: 'llm',
                 range: {
