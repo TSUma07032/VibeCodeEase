@@ -124,6 +124,7 @@
 
 ## 💡 Julesからの提案 (Backlog)
 <!-- Julesへ: 作業中に気づいた課題、将来追加すべき機能、技術的負債、考慮漏れのエッジケースなどを発見した場合は、メインのロードマップは直接書き換えずに、以下に箇条書きで追記してください -->
+- [ ] ZodスキーマからJSON Schemaを自動生成し、OpenAI等の直接APIのStructured Outputsへ渡す。
 - [x] VibeStatusBar に対して、介入判定エンジンやユーザー設定画面（Webview）からのモード変更イベントを連携させる処理を実装する。
   - Jules Memo: VibeStatusBarのCUSTOMモード時に現在の設定詳細を反映する機能を追加し連携を確認しました。
 - [x] CodeAnalyzerの検出結果をHoverProviderに統合する。
@@ -134,7 +135,8 @@
 - [ ] 介入判定エンジン (サイレント修正 vs ポップアップ提案) を実装し、ユーザー設定に基づいて CodeAction と Hover の表示を動的に制御する。
 - [ ] LLM Structured Outputs（Zod + JSON Schema）を導入する。
   - 説明: LLMの介入プランをアプリケーション側の型定義から生成したJSON Schemaに拘束し、構造化された応答を型安全に受け取る。
-  - [ ] `LlmInterventionPlan` / `LlmEdit` に対応するZodスキーマを定義する。
+  - [x] `LlmInterventionPlan` / `LlmEdit` に対応するZodスキーマを定義する。
+    - Jules Memo: LlmInterventionPlan と LlmEdit に対応する Zodスキーマを `src/types/llmIntervention.ts` に定義し、型推論（`z.infer`）を用いるようにリファクタリングしました。
   - [ ] ZodスキーマからJSON Schemaを自動生成し、OpenAI等の直接APIのStructured Outputs（`strict: true`）へ渡す。
   - [ ] 直接API用のLLMプロバイダー抽象化を追加し、VS Code Language Model APIと切り替え可能にする。
   - [ ] Zodによるレスポンス再検証と、スキーマ不一致・拒否応答・タイムアウト時のエラー処理を追加する。
