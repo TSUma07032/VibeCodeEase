@@ -5,3 +5,7 @@
 **脆弱性:** `ActionLogService`の`setWorkspaceRoot`で、`rootPath.startsWith(workspacePath)`を使用していたため、`workspace-hacked`のようなプレフィックスが一致するディレクトリへのパストラバーサルを許可してしまう問題がありました。
 **学び:** `startsWith`を単に文字列に対して使用すると、パスセパレータを考慮しないため、意図しないディレクトリへのアクセスを許可してしまう可能性があります。
 **予防策:** パスを検証する際は、必ず`path.resolve()`でパスを正規化し、ベースパスに`path.sep`（例: `/`や`\`）を付けた文字列で`startsWith`判定を行うか、完全一致をチェックする必要があります。
+## 2024-05-24 - [Critical] settings.jsonへのAPIキー平文保存の防止
+**脆弱性:** package.jsonのconfigurationプロパティとしてAPIキーを定義すると、ユーザーが気付かぬうちにsettings.jsonに平文で保存されるリスクがあった。
+**学び:** VS Code拡張機能では、シークレットな情報を扱う場合、package.jsonのconfigurationではなく必ず`vscode.SecretStorage`のみを使用する必要がある。
+**予防策:** APIキーの設定をpackage.jsonから完全に削除し、シークレットへのアクセスは`vscode.SecretStorage`のみを信頼するように実装を修正した。
