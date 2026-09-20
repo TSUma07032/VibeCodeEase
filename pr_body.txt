@@ -1,0 +1,14 @@
+🎯 消化したTODO:
+- `LlmInterventionPlan` / `LlmEdit` に対応するZodスキーマを定義する。
+
+💡 実装内容 (What):
+- `src/types/llmIntervention.ts` に Zod スキーマ `LlmEditSchema` および `LlmInterventionPlanSchema` を定義しました。
+- DRY原則に従い、`z.infer` を用いてTypeScriptの型 `LlmEdit` と `LlmInterventionPlan` を導出するように変更しました。
+- `src/core/llm/planValidator.ts` にて、従来の手動型チェックを `LlmInterventionPlanSchema.safeParse` を使用したバリデーションに置き換え、堅牢性を向上させました。
+
+🔗 活用した基盤:
+- 既存の `PAIN_CATEGORIES` を Zod の Enum のバリデーションに再利用しました。
+- 既存の CRLF/LF オフセット解決や `oldText` の検索ロジック (`findOriginalTextRange`) は維持し、Zod バリデーション後に適用するようにしました。
+
+📝 次のステップ:
+- ZodスキーマからJSON Schemaを自動生成するロジックを実装し、PromptBuilderへ統合する。

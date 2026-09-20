@@ -90,8 +90,8 @@ suite('PlanValidator Test Suite', () => {
         test('不正な形式のプランはエラーをスローすること', () => {
             const doc = createMockDocument('test');
             assert.throws(() => validatePlan(null, doc), /LLMの介入プラン形式が不正です/);
-            assert.throws(() => validatePlan({}, doc), /LLMの介入プランに必要な項目がありません/);
-            assert.throws(() => validatePlan({ summary: 123, edits: [] }, doc), /LLMの介入プランに必要な項目がありません/);
+            assert.throws(() => validatePlan({}, doc), /LLMの介入プラン形式が不正です/);
+            assert.throws(() => validatePlan({ summary: 123, edits: [] }, doc), /LLMの介入プラン形式が不正です/);
         });
 
         test('ファイル内に存在しないoldTextはエラーをスローすること', () => {
@@ -133,7 +133,7 @@ suite('PlanValidator Test Suite', () => {
                 ]
             };
 
-            assert.throws(() => validatePlan(rawPlan, doc), /LLMの変更案に不正な値があります/);
+            assert.throws(() => validatePlan(rawPlan, doc), /LLMの介入プラン形式が不正です/);
         });
     });
 });
