@@ -1,0 +1,12 @@
+💡 実施内容 (What):
+`vscode.window.showInputBox`（Gemini APIキー設定）および `vscode.window.showQuickPick`（モード切り替え）を呼び出す際に、`title`オプションを追加しました。
+
+🎯 理由・目的 (Why):
+ユーザーに入力を求める際、どの拡張機能からのプロンプトであるかという文脈を明確にするためです。これにより、突然の入力プロンプトに対するユーザーの不信感や混乱を防ぎ、VS CodeのUXベストプラクティスに従った非侵入型で明確な体験を提供します。
+
+📸 Before/After:
+Before:
+`showInputBox` や `showQuickPick` が呼び出された際、プロンプト上部にタイトルが表示されず、突然入力欄や選択肢のみが現れていた。
+
+After:
+プロンプトの上部にそれぞれ `vibeCodeEase: Configure Gemini API Key` や `vibeCodeEase: Select Preset Mode` というタイトルが表示され、コンテキストが直感的に理解できるようになりました。
