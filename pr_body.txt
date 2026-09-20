@@ -1,0 +1,4 @@
+🚨 深刻度 (Severity): CRITICAL
+💡 脆弱性 (Vulnerability): package.jsonにAPIキーのconfigurationプロパティが定義されており、settings.jsonに平文で保存される（情報漏洩）リスクがあった。
+🎯 影響 (Impact): ユーザーのローカル環境からAPIキーが漏洩し、不正利用される可能性がある。
+🔧 修正内容 (Fix): package.jsonからAPIキーのconfiguration設定を削除し、関連コード（`llmBackgroundService.ts`, `WebviewMessageHandler.ts`）において`vscode.workspace.getConfiguration`へのフォールバックを削除。完全に`vscode.SecretStorage`のみを使用するように修正した。
