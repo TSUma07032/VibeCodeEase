@@ -1,0 +1,9 @@
+💡 実施内容 (What):
+`showInputBox` および `showQuickPick` のオプションに `title` プロパティを追加しました。
+
+🎯 理由・目的 (Why):
+VS Code のベストプラクティスに従い、入力プロンプトがどの拡張機能からのものかを明確にすることで、ユーザーのコンテキスト理解を助け、唐突なポップアップによる混乱を防ぐため。
+
+📸 Before/After:
+Before: 入力ボックスやクイックピックにタイトルがなく、コンテキストが不明確。
+After: `vibeCodeEase: Configure Gemini API Key` などのタイトルが表示され、コンテキストが明確になる。
