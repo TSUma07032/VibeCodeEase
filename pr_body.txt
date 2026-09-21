@@ -1,0 +1,4 @@
+🚨 深刻度 (Severity): CRITICAL
+💡 脆弱性 (Vulnerability): package.json の設定として Gemini APIキーが定義されており、平文で settings.json に保存されてしまう状態になっていました。
+🎯 影響 (Impact): ユーザーの Gemini APIキーが平文でディスク上に保存され、他の拡張機能やプロセスから読み取られて悪用されるリスクがありました。
+🔧 修正内容 (Fix): package.json から `vibecodeease.geminiApiKey` の設定項目を削除し、コード内の getConfiguration() を使用したフォールバック処理を削除しました。これにより、APIキーの保存先を安全な vscode.SecretStorage に限定しました。
