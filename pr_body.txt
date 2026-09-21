@@ -1,0 +1,12 @@
+🎯 消化したTODO:
+- `LlmInterventionPlan` / `LlmEdit` に対応するZodスキーマを定義する。
+
+💡 実装内容 (What):
+- `zod`パッケージを利用し、`src/types/llmIntervention.ts`に`LlmInterventionPlanSchema`と`LlmEditSchema`を追加しました。
+- 既存のインターフェースを`z.infer`を利用した型定義に置き換え、スキーマと型のDRY（Don't Repeat Yourself）を保つようにリファクタリングしました。
+
+🔗 活用した基盤:
+- 既存の`PainCategory`型および`PAIN_CATEGORIES`定数を利用して`z.enum`でスキーマ制約を定義しました。
+
+📝 次のステップ:
+- ZodスキーマからJSON Schemaを自動生成し、OpenAI等の直接APIのStructured Outputs（`strict: true`）へ渡すプロバイダーの作成。
