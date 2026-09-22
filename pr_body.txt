@@ -1,0 +1,9 @@
+💡 実施内容 (What):
+- `src/commands.ts` における `vscode.window.showInputBox` (APIキー設定) と `vscode.window.showQuickPick` (モード切替) のオプションに `title` プロパティを追加しました。
+
+🎯 理由・目的 (Why):
+- VS Code UX のベストプラクティスに従い、入力プロンプトがどの拡張機能から呼び出されたものかを明確にするためです。これにより、突然見知らぬ入力ボックスが表示されたような不信感をユーザーに与えることを防ぎ、安心して操作できるようにします。
+
+📸 Before/After:
+- Before: タイトルがなく、プロンプト文やプレースホルダーのみが表示される状態。
+- After: `vibeCodeEase: Configure Gemini API Key` や `vibeCodeEase: Select Operation Mode` のように、明確なタイトルが表示される状態。
