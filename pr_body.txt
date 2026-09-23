@@ -1,0 +1,4 @@
+🎯 消化したTODO: LLM Structured Outputs（Zod + JSON Schema）を導入する。 -> `LlmInterventionPlan` / `LlmEdit` に対応するZodスキーマを定義する。
+💡 実装内容 (What): `src/types/llmIntervention.ts`において、`zod`を用いて`LlmEditSchema`と`LlmInterventionPlanSchema`を定義し、TypeScriptのインターフェースを`z.infer`で導出するようにリファクタリングしました。
+🔗 活用した基盤: 既存の`PainCategory`型と一致するように`z.enum`でリテラルを定義しました。
+📝 次のステップ: ZodスキーマからJSON Schemaを自動生成し、OpenAI等の直接APIのStructured Outputsへ渡す。
