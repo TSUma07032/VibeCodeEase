@@ -1,0 +1,9 @@
+💡 実施内容 (What):
+- `src/commands.ts` の `vscode.window.showInputBox`（APIキー設定時）および `vscode.window.showQuickPick`（モード切り替え時）の呼び出しにおいて、`title` オプションを追加しました。
+
+🎯 理由・目的 (Why):
+- VS Code UX のベストプラクティスに従い、プロンプトがどの拡張機能から呼び出されているかをユーザーに明確に伝えるためです。タイトルが欠けていると、予期せぬ入力ダイアログが表示された際に不安を感じる原因となります。
+
+📸 Before/After:
+- **Before**: "Gemini APIキーを入力してください" や "vibeCodeEase の動作モードを選択してください" というプレースホルダーのみでタイトルバーには何も表示されないか汎用的な表示でした。
+- **After**: ダイアログ上部に "vibeCodeEase: Configure Gemini API Key" や "vibeCodeEase: Select Mode" という明確なタイトルが表示されるようになりました。
