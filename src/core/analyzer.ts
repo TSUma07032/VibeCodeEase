@@ -102,22 +102,25 @@ export class CodeAnalyzer {
       const lineText = lines[lineIndex];
 
       // カテゴリC: 末尾スペース検出
-      const trailingMatch = lineText.match(/^(.*\S)( +)$/);
-      if (trailingMatch) {
-        const trailingStart = trailingMatch[1].length;
-        results.push({
-          category: 'INDENTATION_FORMATTING',
-          level: 'SUGGESTION',
-          range: {
-            start: { line: lineIndex, character: trailingStart },
-            end: { line: lineIndex, character: lineText.length }
-          },
-          interventions: [{
-            originalText: lineText.slice(trailingStart),
-            replacementText: '',
-            message: '$(lightbulb) **末尾の余分なスペース**を削除できます。'
-          }]
-        });
+      // ⚡ Bolt: 正規表現の前に高速なO(1)文字列検索(endsWith)を追加し、マッチしない行での正規表現エンジンのオーバーヘッドを回避
+      if (lineText.endsWith(' ')) {
+        const trailingMatch = lineText.match(/^(.*\S)( +)$/);
+        if (trailingMatch) {
+          const trailingStart = trailingMatch[1].length;
+          results.push({
+            category: 'INDENTATION_FORMATTING',
+            level: 'SUGGESTION',
+            range: {
+              start: { line: lineIndex, character: trailingStart },
+              end: { line: lineIndex, character: lineText.length }
+            },
+            interventions: [{
+              originalText: lineText.slice(trailingStart),
+              replacementText: '',
+              message: '$(lightbulb) **末尾の余分なスペース**を削除できます。'
+            }]
+          });
+        }
       }
 
       // カテゴリA/B: ルールベースのタイポ検出
