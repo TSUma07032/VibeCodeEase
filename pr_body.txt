@@ -1,0 +1,12 @@
+💡 実施内容 (What):
+- `src/commands.ts` において、`showInputBox` (Gemini APIキー設定) と `showQuickPick` (モード切替) を呼び出す際に、`title` プロパティを追加しました。
+
+🎯 理由・目的 (Why):
+- VS Code の標準的な UX/DX プラクティスに準拠するためです。
+- 入力や選択を求めるUIで `title` を明示することにより、その要求がどの拡張機能 (vibeCodeEase) からのものであるかのコンテキストをユーザーへ提供し、突然のポップアップ表示による混乱や不信感を防ぎます。
+
+📸 Before/After:
+**Before:**
+- APIキー入力やモード切り替えの QuickPick にタイトルがなく、何のための入力か一目で分かりにくかった。
+**After:**
+- 各 UI の上部に `vibeCodeEase: Configure Gemini API Key` や `vibeCodeEase: 動作モードの選択` と表示されるようになり、コンテキストが明確になった。
