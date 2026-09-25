@@ -259,27 +259,6 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 	context.subscriptions.push(tabToApplyCommand);
 
-	const configureGeminiKey = vscode.commands.registerCommand('vibecodeease.configureGeminiKey', async () => {
-		const apiKey = await vscode.window.showInputBox({
-			title: 'vibeCodeEase: Configure Gemini API Key',
-			prompt: 'Gemini APIキーを入力してください。キーはVS CodeのSecretStorageに保存されます。',
-			password: true,
-			ignoreFocusOut: true,
-			placeHolder: 'AIza...'
-		});
-		if (apiKey === undefined) {
-			return;
-		}
-		if (!apiKey.trim()) {
-			await context.secrets.delete('vibecodeease.geminiApiKey');
-			vscode.window.setStatusBarMessage('$(check) Gemini APIキーを削除しました。', 3000);
-			return;
-		}
-		await context.secrets.store('vibecodeease.geminiApiKey', apiKey.trim());
-		vscode.window.setStatusBarMessage('$(check) Gemini APIキーを安全に保存しました。', 3000);
-	});
-	context.subscriptions.push(configureGeminiKey);
-
 	const statusBar = new VibeStatusBar();
 	context.subscriptions.push(statusBar);
 
