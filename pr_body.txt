@@ -1,0 +1,10 @@
+💡 **実施内容 (What):**
+- `src/commands.ts` の `showInputBox` と `showQuickPick` に `title` プロパティを追加し、入力ダイアログが vibeCodeEase 拡張機能からのものであることを明示しました。
+- `src/extension.ts` に重複して登録されていた `configureGeminiKey` コマンドを削除し、コードを整理しました。
+
+🎯 **理由・目的 (Why):**
+- `title` が無いダイアログは突然表示されたように見え、特にAPIキーなどのシークレット情報を入力する際にユーザーに不安を与えるため、拡張機能のコンテキストを明示して安心感を向上させる必要がありました。
+
+📸 **Before/After:**
+- Before: `showInputBox` や `showQuickPick` を開くと、VS Codeのデフォルトタイトル（またはタイトルなし）で表示され、コンテキストが不明瞭。
+- After: ダイアログ上部に "vibeCodeEase: Configure Gemini API Key" や "vibeCodeEase: モード選択" などのタイトルが表示され、入力の目的が明確化される。
