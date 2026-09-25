@@ -5,3 +5,7 @@
 **脆弱性:** `ActionLogService`の`setWorkspaceRoot`で、`rootPath.startsWith(workspacePath)`を使用していたため、`workspace-hacked`のようなプレフィックスが一致するディレクトリへのパストラバーサルを許可してしまう問題がありました。
 **学び:** `startsWith`を単に文字列に対して使用すると、パスセパレータを考慮しないため、意図しないディレクトリへのアクセスを許可してしまう可能性があります。
 **予防策:** パスを検証する際は、必ず`path.resolve()`でパスを正規化し、ベースパスに`path.sep`（例: `/`や`\`）を付けた文字列で`startsWith`判定を行うか、完全一致をチェックする必要があります。
+## 2026-09-25 - [Critical] Remove Plain-Text API Key Configuration
+**脆弱性:** `package.json` において `vibecodeease.geminiApiKey` が設定として定義されており、ソースコード内で `vscode.workspace.getConfiguration` を介した平文でのフォールバック取得が行われていたため、APIキーが意図せず `settings.json` に平文で保存されてしまう脆弱性がありました。
+**学び:** `package.json` の `configuration.properties` にシークレット項目を定義すると、VS CodeのUI上に自動的に設定項目として表示され、ユーザーが平文で保存してしまうリスクがあります。
+**予防策:** 拡張機能の開発において、APIキーやトークンなどの機密情報は `package.json` の `configuration` に定義せず、常に `vscode.SecretStorage` を使用して安全に保存・取得するようにします。
