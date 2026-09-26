@@ -1,0 +1,4 @@
+🚨 **深刻度 (Severity):** CRITICAL
+💡 **脆弱性 (Vulnerability):** `package.json` で `vibecodeease.geminiApiKey` を `configuration` プロパティとして定義しており、さらにコード内で `vscode.workspace.getConfiguration` をフォールバックとして使用していました。これにより、VS Codeの設定UIを通じてユーザーがAPIキーを入力し、`settings.json` に平文で保存されてしまうリスクがありました。
+🎯 **影響 (Impact):** ユーザーのGemini APIキーが平文の状態で `settings.json` に保存され、リポジトリへの誤コミットやローカル環境へのアクセスによる機密情報の漏洩（クレデンシャル情報流出）につながる恐れがありました。
+🔧 **修正内容 (Fix):** `package.json` の `configuration` から `vibecodeease.geminiApiKey` プロパティを削除し、設定UIでの入力を無効化しました。さらに、`src/core/llmBackgroundService.ts` と `src/vscode-utils/WebviewMessageHandler.ts` 内の `vscode.workspace.getConfiguration` を使用した平文設定からのフォールバックを削除し、APIキーの取得を `SecretStorage` (`context.secrets.get()`) のみに強制するように変更しました。

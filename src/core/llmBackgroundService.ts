@@ -96,10 +96,9 @@ export class LlmBackgroundService implements vscode.Disposable {
         let apiKey: string | undefined = undefined;
 
         if (state.llmProvider === 'gemini') {
+            // [Sentinel] セキュリティ保護: Workspace settings (settings.json) からの
+            // プレーンテキスト API キーの取得を無効化し、SecretStorage を強制しています
             apiKey = await this.secrets.get('vibecodeease.geminiApiKey');
-            if (!apiKey) {
-                apiKey = vscode.workspace.getConfiguration('vibecodeease').get<string>('geminiApiKey');
-            }
             if (!apiKey) {
                 // API キー未設定: サイレントに無視
                 return;
