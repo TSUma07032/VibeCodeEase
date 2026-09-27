@@ -78,7 +78,7 @@ export function validatePlan(value: unknown, document: vscode.TextDocument): Llm
  * 現在のドキュメントから元のテキストを検索し、正しいRangeを返す
  */
 export function findOriginalTextRange(document: vscode.TextDocument, oldText: string, hintLine: number, hintCharacter: number): vscode.Range | undefined {
-    if (!oldText) return undefined;
+    if (!oldText) {return undefined;}
     
     const documentText = document.getText();
     const normalizedDocumentText = documentText.replace(/\r\n/g, '\n');
