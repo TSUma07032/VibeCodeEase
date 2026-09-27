@@ -1,0 +1,11 @@
+🎯 消化したTODO:
+- [x] `LlmInterventionPlan` / `LlmEdit` に対応するZodスキーマを定義する。
+
+💡 実装内容 (What):
+`src/types/llmIntervention.ts` にて `LlmInterventionPlanSchema` と `LlmEditSchema` を Zod で定義し、`z.infer` を使って型を導出するようにリファクタリング。`src/core/llm/planValidator.ts` にて生データのバリデーションに Zod スキーマを活用するよう改修。テストのバリデーションエラーチェックをZodの出力に適合。
+
+🔗 活用した基盤:
+既存の `PainCategory` 型定義と `validatePlan` ロジック。
+
+📝 次のステップ:
+- [ ] ZodスキーマからJSON Schemaを自動生成し、OpenAI等の直接APIのStructured Outputs（`strict: true`）へ渡す。
