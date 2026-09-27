@@ -1,0 +1,4 @@
+🚨 **深刻度 (Severity):** CRITICAL
+💡 **脆弱性 (Vulnerability):** package.json に `vibecodeease.geminiApiKey` プロパティが定義されており、ユーザーの `settings.json` にAPIキーが平文で保存される脆弱性、およびコード内から `vscode.workspace.getConfiguration` 経由で取得される脆弱性がありました。
+🎯 **影響 (Impact):** ユーザーのローカル環境で `settings.json` が閲覧される、またはリポジトリに誤ってコミットされた場合、APIキーが流出し、不正利用される危険性があります。
+🔧 **修正内容 (Fix):** package.json から `vibecodeease.geminiApiKey` 設定を削除し、コード内の `getConfiguration` によるフォールバック取得処理を削除しました。これにより、APIキーの管理は安全な `vscode.SecretStorage` に完全に統一されます。
