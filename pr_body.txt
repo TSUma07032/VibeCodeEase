@@ -1,0 +1,11 @@
+💡 実施内容 (What):
+`src/commands.ts` における `showInputBox` (APIキー設定) と `showQuickPick` (モード切替) に、拡張機能名を含む `title` オプションを追加しました。
+
+🎯 理由・目的 (Why):
+`title` がない場合、コマンドパレット等から呼び出した際に「どの拡張機能がこの入力を求めているのか」が直感的に分からず、特にAPIキーのような機密情報を入力する際に不信感を与えかねません。VS Code の UX ベストプラクティスに従い、入力を求めるUIに明確なコンテキストを提供するためです。
+
+📸 Before/After:
+* Before:
+  * 入力ボックスや選択メニューの上部にタイトルが表示されず、唐突にプロンプトのみが表示される。
+* After:
+  * 上部に「vibeCodeEase: Configure Gemini API Key」や「vibeCodeEase: Switch Mode」といったタイトルが表示され、コンテキストが明確になる。
