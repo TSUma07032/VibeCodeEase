@@ -5,3 +5,7 @@
 **脆弱性:** `ActionLogService`の`setWorkspaceRoot`で、`rootPath.startsWith(workspacePath)`を使用していたため、`workspace-hacked`のようなプレフィックスが一致するディレクトリへのパストラバーサルを許可してしまう問題がありました。
 **学び:** `startsWith`を単に文字列に対して使用すると、パスセパレータを考慮しないため、意図しないディレクトリへのアクセスを許可してしまう可能性があります。
 **予防策:** パスを検証する際は、必ず`path.resolve()`でパスを正規化し、ベースパスに`path.sep`（例: `/`や`\`）を付けた文字列で`startsWith`判定を行うか、完全一致をチェックする必要があります。
+## 2025-02-28 - Gemini API Key Configuration
+**脆弱性:** The Gemini API key was defined in `package.json` under configuration properties, which could lead to it being saved in plaintext in the user's `settings.json`. Additionally, fallback code read this plaintext setting.
+**学び:** Sensitive information should never be defined as a configuration property that can be stored in plaintext. VS Code extensions should exclusively use `vscode.SecretStorage` for such credentials.
+**予防策:** Ensure `package.json` does not include API keys in configuration properties and ensure codebase strictly uses `SecretStorage` for API keys, without fallbacks to workspace configuration.
