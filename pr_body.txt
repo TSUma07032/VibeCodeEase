@@ -1,0 +1,4 @@
+🚨 深刻度 (Severity): CRITICAL
+💡 脆弱性 (Vulnerability): The Gemini API key was defined as a plaintext configuration property (`vibecodeease.geminiApiKey`) in `package.json` and read via `vscode.workspace.getConfiguration`.
+🎯 影響 (Impact): The API key could be saved in plaintext in `settings.json`, potentially exposing it to anyone with access to the user's settings file or dotfiles repository.
+🔧 修正内容 (Fix): Removed `vibecodeease.geminiApiKey` from `package.json` configuration and eliminated fallback logic that read the API key from workspace settings. The extension now exclusively uses `vscode.SecretStorage` for the API key.
