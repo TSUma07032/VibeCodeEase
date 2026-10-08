@@ -4,7 +4,7 @@ export type PainCategory =
   | 'VAR_FUNC_MANAGEMENT'
   | 'SYNTAX_ERROR_HANDLING';
 
-export type PresetMode = 'LEARNING' | 'FLOW' | 'ZEN' | 'CUSTOM';
+export type PresetMode = 'HINT' | 'ARCHITECTURE' | 'BUG_TYPO' | 'CUSTOM';
 
 /** LLMバックグラウンドサービスのトリガーモード */
 export type LlmTriggerMode = 'continuous' | 'on-save' | 'disabled';

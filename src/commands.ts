@@ -1,4 +1,4 @@
-﻿import * as vscode from 'vscode';
+import * as vscode from 'vscode';
 import { ActionLogService } from './core/actionLogService';
 import { GlobalState } from './state/globalState';
 import { PresetMode, PRESET_DEFINITIONS } from './types';
@@ -68,19 +68,19 @@ export function registerCommands(context: vscode.ExtensionContext, deps: Command
     const switchModeCommand = vscode.commands.registerCommand('vibecodeease.switchMode', async () => {
         const items: PresetQuickPickItem[] = [
             {
-                label: '$(mortar-board) 学習モード (Learning)',
-                description: PRESET_DEFINITIONS.LEARNING.description,
-                preset: 'LEARNING'
+                label: `$(lightbulb) ヒントモード (Hint)`,
+                description: PRESET_DEFINITIONS.HINT.description,
+                preset: 'HINT'
             },
             {
-                label: '$(zap) フローモード (Flow)',
-                description: PRESET_DEFINITIONS.FLOW.description,
-                preset: 'FLOW'
+                label: `$(versions) アーキテクチャモード (Architecture)`,
+                description: PRESET_DEFINITIONS.ARCHITECTURE.description,
+                preset: 'ARCHITECTURE'
             },
             {
-                label: '$(eye-closed) 職人モード (Zen)',
-                description: PRESET_DEFINITIONS.ZEN.description,
-                preset: 'ZEN'
+                label: `$(bug) バグ・タイポ修正 (Bug/Typo)`,
+                description: PRESET_DEFINITIONS.BUG_TYPO.description,
+                preset: 'BUG_TYPO'
             },
             {
                 label: '$(settings) カスタム調整 (Custom)',

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 
 // Make sure we have the same types as backend, simplified for UI
 type SituationId = 'learning' | 'ideation' | 'design_review' | 'implementation' | 'debugging' | 'deadline_rush';
@@ -62,26 +62,10 @@ export function PersonalizationPanel({ vscode, profile, metrics, candidates, isB
     });
   };
 
-  const handleSummarize = () => {
-    vscode.postMessage({ command: 'PZ_SUMMARIZE' });
-  };
-
-  const handleReset = () => {
-    if (confirm('すべてのパーソナライズデータをリセットします。よろしいですか？')) {
-      vscode.postMessage({ command: 'PZ_RESET' });
-    }
-  };
-
   if (!profile || !metrics) return <div>Loading personalization state...</div>;
-
-  const hitRate = metrics.acceptedCount > 0 ? Math.round((metrics.preferenceHits / metrics.acceptedCount) * 100) : 0;
-  const acceptRate = metrics.totalInteractions > 0 ? Math.round((metrics.acceptedCount / metrics.totalInteractions) * 100) : 0;
-  const regenRate = metrics.totalInteractions > 0 ? Math.round((metrics.regenerationCount / metrics.totalInteractions) * 100) : 0;
 
   return (
     <div className="personalization-panel">
-      <h2 className="section-title">🧠 AIに相談 (Personalized)</h2>
-      
       <div className="pz-controls" style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
         <div>
           <label>現在の状況: </label>
@@ -107,42 +91,6 @@ export function PersonalizationPanel({ vscode, profile, metrics, candidates, isB
             <option value="fixed:exploration">探究型 (A)</option>
             <option value="fixed:learning">学習型 (B)</option>
             <option value="fixed:quality">品質・設計型 (D)</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="pz-controls uiux-controls" style={{ display: 'flex', gap: '10px', marginBottom: '10px', flexWrap: 'wrap' }}>
-        <div>
-          <label>通知・提示の強さ: </label>
-          <select
-            value={profile.visibilityLevel}
-            onChange={e => vscode.postMessage({ command: 'PZ_SET_UIUX', payload: { visibility: e.target.value } })}
-          >
-            <option value="stealth">Stealth (最小限)</option>
-            <option value="subtle">Subtle (控えめ)</option>
-            <option value="active">Active (積極的)</option>
-          </select>
-        </div>
-        <div>
-          <label>理由説明の表示量: </label>
-          <select
-            value={profile.explanationVerbosity}
-            onChange={e => vscode.postMessage({ command: 'PZ_SET_UIUX', payload: { verbosity: e.target.value } })}
-          >
-            <option value="minimal">Minimal (1行要約)</option>
-            <option value="summary">Summary (箇条書き)</option>
-            <option value="detailed">Detailed (詳細)</option>
-          </select>
-        </div>
-        <div>
-          <label>差分適用の自動化: </label>
-          <select
-            value={profile.applicationAutomation}
-            onChange={e => vscode.postMessage({ command: 'PZ_SET_UIUX', payload: { automation: e.target.value } })}
-          >
-            <option value="manual">Manual (手動確認)</option>
-            <option value="bulk">Bulk (ファイル一括)</option>
-            <option value="auto">Auto (保存時自動適用)</option>
           </select>
         </div>
       </div>
@@ -200,28 +148,8 @@ export function PersonalizationPanel({ vscode, profile, metrics, candidates, isB
           </details>
         </div>
       )}
-
-      <hr style={{ margin: '20px 0', borderColor: 'var(--vscode-widget-border)' }} />
-
-      <div className="pz-summary">
-        <h3>LLMによる人格要約 <button onClick={handleSummarize} disabled={isBusy}>更新</button></h3>
-        <p><strong>全体傾向:</strong> {profile.personaSummary || '（データ不足）'}</p>
-        <p><strong>詳細な好み:</strong> {profile.preferenceSummary || '（データ不足）'}</p>
-      </div>
-
-      <div className="pz-metrics" style={{ marginTop: '20px', fontSize: '0.9em' }}>
-        <h4>指標</h4>
-        <ul>
-          <li>Hit率 (1位採用率): {hitRate}%</li>
-          <li>採用率: {acceptRate}%</li>
-          <li>再生成率: {regenRate}%</li>
-          <li>合計利用回数: {metrics.totalInteractions}</li>
-        </ul>
-        <button onClick={handleReset} style={{ marginTop: '10px', background: 'var(--vscode-errorForeground)', color: 'white' }}>
-          パーソナライズデータをリセット
-        </button>
-      </div>
     </div>
   );
 }
+
 

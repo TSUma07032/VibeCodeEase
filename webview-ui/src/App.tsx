@@ -1,63 +1,27 @@
-﻿import './App.css';
+import './App.css';
 import { useEffect, useState } from 'react';
 import type {
-  PainCategory,
   PresetMode,
-  InterventionPlan,
   SettingsPayload,
   LlmConfig,
   LlmProvider,
-  LiveIssue,
-  RuleSummary,
-  LlmTriggerMode,
-  EditorAppealLevel
+  LlmTriggerMode
 } from './types';
-import { CATEGORY_NAMES } from './types';
 import { PersonalizationPanel } from './components/PersonalizationPanel';
 
 // VS Code API を取得するための宣言
 declare const acquireVsCodeApi: any;
 const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
 
-
-function getInterventionBadge(val: number) {
-  if (val >= 0.75) {
-    return <span className="level-badge badge-silent">⚡ 自動修正</span>;
-  }
-  if (val >= 0.40) {
-    return <span className="level-badge badge-suggestion">💡 提案</span>;
-  }
-  return <span className="level-badge badge-ignore">🧘 自力解決</span>;
-}
-
 /** プリセット選択時の嗜好値プレビュー用 */
 
 
 function App() {
-  const [presetMode, setPresetMode] = useState<PresetMode>('LEARNING');
-  const [preferences, setPreferences] = useState<Record<PainCategory, number>>({
-    SYNTAX_TYPO: 0.8,
-    INDENTATION_FORMATTING: 0.7,
-    VAR_FUNC_MANAGEMENT: 0.3,
-    SYNTAX_ERROR_HANDLING: 0.4
-  });
-  const [plan, setPlan] = useState<InterventionPlan | null>(null);
-  const [status, setStatus] = useState<string>('');
-  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
-  const [isBackgroundAnalyzing, setIsBackgroundAnalyzing] = useState<boolean>(false);
-
-  // Grammarly パネル: ライブ問題一覧
-  const [liveIssues, setLiveIssues] = useState<LiveIssue[]>([]);
-
-  // ルールカタログ
-  const [activeRules, setActiveRules] = useState<RuleSummary[]>([]);
-  const [catalogOpen, setCatalogOpen] = useState<boolean>(false);
-  const [catalogSearch, setCatalogSearch] = useState<string>('');
-
-  // LLMトリガーモードとエディタアピール度
+  const [presetMode, setPresetMode] = useState<PresetMode>('HINT');
+  
+  // LLMトリガーモード
   const [llmTriggerMode, setLlmTriggerMode] = useState<LlmTriggerMode>('on-save');
-  const [editorAppealLevel, setEditorAppealLevel] = useState<EditorAppealLevel>('medium');
-
+  
   // LLM / API Key State
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({ provider: 'gemini', model: 'gemini-3.6-flash' });
   const [hasGeminiApiKey, setHasGeminiApiKey] = useState<boolean>(false);
@@ -71,6 +35,7 @@ function App() {
   const [pzCandidates, setPzCandidates] = useState<any[]>([]);
   const [pzBusy, setPzBusy] = useState<boolean>(false);
   const [pzError, setPzError] = useState<string>('');
+
   useEffect(() => {
     // 起動時に拡張機能へ設定取得リクエストを送る
     vscode?.postMessage({ command: 'GET_SETTINGS' });
@@ -83,49 +48,11 @@ function App() {
         case 'SETTINGS_DATA': {
           const payload = data.payload as SettingsPayload;
           setPresetMode(payload.presetMode);
-          setPreferences(payload.preferences);
           if (payload.llmConfig) setLlmConfig(payload.llmConfig);
           if (payload.hasGeminiApiKey !== undefined) setHasGeminiApiKey(payload.hasGeminiApiKey);
-          if (payload.activeRules) setActiveRules(payload.activeRules);
           if (payload.llmTriggerMode) setLlmTriggerMode(payload.llmTriggerMode);
-          if (payload.editorAppealLevel) setEditorAppealLevel(payload.editorAppealLevel);
           break;
         }
-        case 'ANALYSIS_STARTED':
-          setIsAnalyzing(true);
-          setStatus('ファイルを解析しています...');
-          setPlan(null);
-          break;
-        case 'BACKGROUND_ANALYSIS_STARTED':
-          setIsBackgroundAnalyzing(true);
-          break;
-        case 'BACKGROUND_ANALYSIS_COMPLETED':
-          setIsBackgroundAnalyzing(false);
-          break;
-        case 'INTERVENTION_PLAN': {
-          setIsAnalyzing(false);
-          setStatus('');
-          const p = data.payload?.plan ?? data.payload;
-          setPlan(p as InterventionPlan);
-          break;
-        }
-        case 'PLAN_APPLIED':
-          setIsAnalyzing(false);
-          setPlan(null);
-          setStatus('変更を適用しました。');
-          break;
-        case 'PLAN_REJECTED':
-          setIsAnalyzing(false);
-          setPlan(null);
-          setStatus('提案を却下しました。');
-          break;
-        case 'ERROR':
-          setIsAnalyzing(false);
-          setStatus(data.payload as string);
-          break;
-        case 'LIVE_ISSUES_UPDATE':
-          setLiveIssues(data.payload as LiveIssue[]);
-          break;
         case 'PZ_STATE':
           setPzProfile(data.payload.profile);
           setPzMetrics(data.payload.metrics);
@@ -150,36 +77,6 @@ function App() {
   const handleSelectPreset = (preset: PresetMode) => {
     setPresetMode(preset);
     vscode?.postMessage({ command: 'SET_PRESET', payload: preset });
-  };
-
-  const handleSliderChange = (category: PainCategory, value: number) => {
-    setPreferences(prev => ({ ...prev, [category]: value }));
-    setPresetMode('CUSTOM');
-    vscode?.postMessage({
-      command: 'UPDATE_PREFERENCE_VALUE',
-      payload: { category, value }
-    });
-  };
-
-  const handleAnalyze = () => {
-    if (vscode) {
-      vscode.postMessage({ command: 'ANALYZE_CURRENT_FILE' });
-    } else {
-      setStatus('VS Code APIを利用できません。');
-    }
-  };
-
-  const handleApply = () => vscode?.postMessage({ command: 'APPLY_PLAN' });
-  const handleReject = () => vscode?.postMessage({ command: 'REJECT_PLAN' });
-
-  const handleApplyIssue = (e: React.MouseEvent, issue: LiveIssue) => {
-    e.stopPropagation();
-    vscode?.postMessage({ command: 'APPLY_LIVE_ISSUE', payload: issue });
-  };
-
-  const handleRejectIssue = (e: React.MouseEvent, issue: LiveIssue) => {
-    e.stopPropagation();
-    vscode?.postMessage({ command: 'REJECT_LIVE_ISSUE', payload: issue });
   };
 
   const handleLlmProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -207,104 +104,153 @@ function App() {
     setIsEditingApiKey(false);
     setApiKeyValue('');
   };
-
   return (
     <div className="App">
-      <header className="header">
-        <h1>✨ vibeCodeEase</h1>
-        <p>AI-assisted Flow & Learning Support</p>
-      </header>
+      {/* Section 1: UIUX 設定 */}
+      <section className="card uiux-section">
+        <h2 className="section-title">🖥️ Section 1: UIUX Settings (AIとの接し方)</h2>
+        <div className="form-group">
+          <label>Trigger Mode (AI介入の発生タイミング)</label>
+          <div className="radio-group">
+            {[
+              { value: 'continuous', label: '10秒ごと(連続)', desc: '作業中に自動で継続的に解析・生成' },
+              { value: 'on-save', label: '保存時のみ', desc: '推奨・APIコスト節約' },
+              { value: 'disabled', label: '無効（生成しない）', desc: 'LLM解析を完全に停止' },
+            ].map(opt => (
+              <label key={opt.value} className={`radio-option ${llmTriggerMode === opt.value ? 'radio-selected' : ''}`}>
+                <input
+                  type="radio"
+                  name="llm-trigger"
+                  value={opt.value}
+                  checked={llmTriggerMode === opt.value}
+                  onChange={() => {
+                    vscode?.postMessage({ command: 'SET_LLM_TRIGGER_MODE', payload: opt.value });
+                  }}
+                />
+                <span className="radio-label-text">
+                  <strong>{opt.label}</strong>
+                  <small>{opt.desc}</small>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
 
-      <div style={{ padding: '15px', margin: '20px', background: 'var(--vscode-editorWidget-background)', border: '1px solid var(--vscode-widget-border)', borderRadius: '6px' }}>
-        <h2 className="section-title" style={{ marginTop: 0 }}>🎭 AI人格・パーソナライズ設定</h2>
+        <div className="pz-controls uiux-controls" style={{ display: 'flex', gap: '10px', marginBottom: '10px', flexWrap: 'wrap' }}>
+          <div>
+            <label>Visibility Level (通知・提示の強さ): </label>
+            <select
+              value={pzProfile?.visibilityLevel || 'subtle'}
+              onChange={e => vscode?.postMessage({ command: 'PZ_SET_UIUX', payload: { visibility: e.target.value } })}
+              className="styled-select"
+            >
+              <option value="stealth">Stealth (最小限)</option>
+              <option value="subtle">Subtle (控えめ)</option>
+              <option value="active">Active (積極的)</option>
+            </select>
+          </div>
+          <div>
+            <label>Explanation Verbosity (理由説明の表示量): </label>
+            <select
+              value={pzProfile?.explanationVerbosity || 'summary'}
+              onChange={e => vscode?.postMessage({ command: 'PZ_SET_UIUX', payload: { verbosity: e.target.value } })}
+              className="styled-select"
+            >
+              <option value="minimal">Minimal (1行要約)</option>
+              <option value="summary">Summary (箇条書き)</option>
+              <option value="detailed">Detailed (詳細)</option>
+            </select>
+          </div>
+          <div>
+            <label>Application Automation (差分適用の自動化): </label>
+            <select
+              value={pzProfile?.applicationAutomation || 'manual'}
+              onChange={e => vscode?.postMessage({ command: 'PZ_SET_UIUX', payload: { automation: e.target.value } })}
+              className="styled-select"
+            >
+              <option value="manual">Manual (手動確認)</option>
+              <option value="bulk">Bulk (ファイル一括)</option>
+              <option value="auto">Auto (保存時自動適用)</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      {/* Section 2: 生成物の設定 */}
+      <section className="card generation-section">
+        <h2 className="section-title">🧠 Section 2: AI Content Settings (生成物の方向性)</h2>
         <div style={{ display: 'flex', gap: '20px', marginBottom: '15px' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-            <input type="radio" checked={isPersonalizedMode} onChange={() => setIsPersonalizedMode(true)} />
-            <span>🧠 パーソナライズ (動的学習)</span>
-          </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
             <input type="radio" checked={!isPersonalizedMode} onChange={() => setIsPersonalizedMode(false)} />
             <span>🔧 既存人格 (固定プリセット)</span>
           </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+            <input type="radio" checked={isPersonalizedMode} onChange={() => setIsPersonalizedMode(true)} />
+            <span>🧠 パーソナライズ (動的学習)</span>
+          </label>
         </div>
-        
-        {isPersonalizedMode ? (
-          <>
-            <PersonalizationPanel 
-              vscode={vscode} 
-              profile={pzProfile} 
-              metrics={pzMetrics} 
-              candidates={pzCandidates} 
-              isBusy={pzBusy} 
-              error={pzError} 
-            />
-            <div style={{ marginTop: '15px', padding: '10px', background: 'var(--vscode-input-background)', borderRadius: '4px' }}>
-              <div style={{ fontSize: '12px', color: 'var(--vscode-descriptionForeground)', marginBottom: '5px' }}>📝 現在の生成プロンプト（パーソナライズ）:</div>
-              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: '12px', color: 'var(--vscode-editor-foreground)' }}>{pzProfile?.preferenceSummary || '学習データがありません。'}</pre>
+
+        {!isPersonalizedMode ? (
+          <div className="preset-grid" style={{ display: 'flex', gap: '10px' }}>
+            <div
+              className={`preset-card ${presetMode === 'HINT' ? 'active' : ''}`}
+              onClick={() => handleSelectPreset('HINT')}
+              style={{ flex: 1, padding: '10px', textAlign: 'center', cursor: 'pointer', border: presetMode === 'HINT' ? '2px solid var(--vscode-button-background)' : '1px solid var(--vscode-widget-border)', borderRadius: '4px' }}
+            >
+              <div>💡 ヒント中心</div>
             </div>
-          </>
+            <div
+              className={`preset-card ${presetMode === 'ARCHITECTURE' ? 'active' : ''}`}
+              onClick={() => handleSelectPreset('ARCHITECTURE')}
+              style={{ flex: 1, padding: '10px', textAlign: 'center', cursor: 'pointer', border: presetMode === 'ARCHITECTURE' ? '2px solid var(--vscode-button-background)' : '1px solid var(--vscode-widget-border)', borderRadius: '4px' }}
+            >
+              <div>📐 設計思想中心</div>
+            </div>
+            <div
+              className={`preset-card ${presetMode === 'BUG_TYPO' ? 'active' : ''}`}
+              onClick={() => handleSelectPreset('BUG_TYPO')}
+              style={{ flex: 1, padding: '10px', textAlign: 'center', cursor: 'pointer', border: presetMode === 'BUG_TYPO' ? '2px solid var(--vscode-button-background)' : '1px solid var(--vscode-widget-border)', borderRadius: '4px' }}
+            >
+              <div>🐛 タイポやバグの温床を中心</div>
+            </div>
+          </div>
         ) : (
-          <>
-            <div className="preset-grid">
-              <div
-                className={`preset-card ${presetMode === 'LEARNING' ? 'active' : ''}`}
-                onClick={() => handleSelectPreset('LEARNING')}
-              >
-                <div className="preset-card-header">
-                  <span>🎓 学習モード(Learning)</span>
-                </div>
-                <div className="preset-card-desc">
-                  タイポを手軽に直しつつ、構文・ロジックは解説ヒントを提示。コード理解を最優先。
-                </div>
-              </div>
-              <div
-                className={`preset-card ${presetMode === 'FLOW' ? 'active' : ''}`}
-                onClick={() => handleSelectPreset('FLOW')}
-              >
-                <div className="preset-card-header">
-                  <span>⚡ フローモード(Flow)</span>
-                </div>
-                <div className="preset-card-desc">
-                  タイポや構文ミスを裏で自動修正。思考のノリとバイブスを最優先。
-                </div>
-              </div>
-              <div
-                className={`preset-card ${presetMode === 'ZEN' ? 'active' : ''}`}
-                onClick={() => handleSelectPreset('ZEN')}
-              >
-                <div className="preset-card-header">
-                  <span>🛠️ 職人モード(Zen)</span>
-                </div>
-                <div className="preset-card-desc">
-                  AI介入を最小限に抑え、自力でコードを紡ぐクラフト重視。
-                </div>
-              </div>
-            </div>
-            <div style={{ marginTop: '15px', padding: '10px', background: 'var(--vscode-input-background)', borderRadius: '4px' }}>
-              <div style={{ fontSize: '12px', color: 'var(--vscode-descriptionForeground)', marginBottom: '5px' }}>📝 現在の生成プロンプト（プリセット）:</div>
-              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: '12px', color: 'var(--vscode-editor-foreground)' }}>{presetMode === 'LEARNING' ? 'タイポを手軽に直しつつ、構文・ロジックはあえて解説ヒントを提示。コード理解を最優先。' : presetMode === 'FLOW' ? '面倒なタイポや整形・構文修正を自動化。思考の流れとバイブスを最優先。' : 'AIの介入を最小限に。自力・手でじっくりコードを紡ぎたい時に。'}</pre>
-            </div>
-          </>
+          <PersonalizationPanel 
+            vscode={vscode} 
+            profile={pzProfile} 
+            metrics={pzMetrics} 
+            candidates={pzCandidates} 
+            isBusy={pzBusy} 
+            error={pzError} 
+          />
         )}
-      </div>
 
-      <hr style={{ margin: '20px 0', borderColor: 'var(--vscode-widget-border)' }} />
+        <div style={{ marginTop: '15px', padding: '10px', background: 'var(--vscode-input-background)', borderRadius: '4px' }}>
+          <div style={{ fontSize: '12px', color: 'var(--vscode-descriptionForeground)', marginBottom: '5px' }}>📝 現在の生成プロンプト（簡易表示）:</div>
+          <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: '12px', color: 'var(--vscode-editor-foreground)' }}>
+            {isPersonalizedMode ? 
+              (pzProfile?.preferenceSummary || '学習データがありません。') : 
+              (presetMode === 'HINT' ? 'タイポを手軽に直しつつ、構文・ロジックは解説ヒントを提示。コード理解を最優先。' : 
+               presetMode === 'ARCHITECTURE' ? 'AI介入を最小限に抑え、自力でコードを紡ぐクラフト重視。アーキテクチャの提案を主に行う。' : 
+               '面倒なタイポや整形・構文修正を自動化。バグの温床となる箇所を積極的に修正。')}
+          </pre>
+        </div>
+      </section>
 
-
-      {/* AIモデル・API設定 */}
-      <section className="preset-section llm-section">
-        <h2 className="section-title">🤖 AIモデル & API設定</h2>
+      {/* Section 3: LLM & API 設定 */}
+      <section className="card llm-section">
+        <h2 className="section-title">⚙️ Section 3: LLM & API Settings</h2>
         <div className="llm-config-box">
           <div className="form-group">
-            <label>LLM プロバイダー</label>
+            <label>Provider</label>
             <select value={llmConfig.provider} onChange={handleLlmProviderChange} className="styled-select">
-              <option value="gemini">💎 Google Gemini (推奨)</option>
-              <option value="vscode-lm">🤖 VS Code LM (Copilot等)</option>
+              <option value="gemini">Google Gemini</option>
+              <option value="vscode-lm">VS Code LM</option>
             </select>
           </div>
           
           <div className="form-group">
-            <label>使用モデル</label>
+            <label>Model</label>
             <select value={llmConfig.model} onChange={handleLlmModelChange} className="styled-select">
               {llmConfig.provider === 'gemini' ? (
                 <>
@@ -328,10 +274,10 @@ function App() {
 
           {llmConfig.provider === 'gemini' && (
             <div className="form-group api-key-group">
-              <label>Gemini API キー</label>
+              <label>API Key</label>
               {hasGeminiApiKey && !isEditingApiKey ? (
                 <div className="api-key-status">
-                  <span className="status-badge success">✅ 設定済み (••••••••)</span>
+                  <span className="status-badge success">✅ 設定済み</span>
                   <div className="api-key-actions">
                     <button className="action-button small" onClick={() => setIsEditingApiKey(true)}>変更</button>
                     <button className="secondary-button small danger" onClick={handleDeleteApiKey}>削除</button>
@@ -341,301 +287,23 @@ function App() {
                 <div className="api-key-input-box">
                   <input
                     type="password"
-                    placeholder="AIza..."
                     value={apiKeyValue}
                     onChange={e => setApiKeyValue(e.target.value)}
+                    placeholder="APIキーを入力"
                     className="styled-input"
                   />
                   <div className="api-key-actions">
-                    <button className="action-button small" onClick={handleSaveApiKey}>保存</button>
+                    <button className="action-button small" onClick={handleSaveApiKey} disabled={!apiKeyValue}>保存</button>
                     {hasGeminiApiKey && <button className="secondary-button small" onClick={() => setIsEditingApiKey(false)}>キャンセル</button>}
                   </div>
-                  <div className="api-key-hint">
-                    <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">Google AI Studioでキーを取得</a>
-                  </div>
                 </div>
               )}
             </div>
           )}
         </div>
       </section>
-
-
-
-      {/* スライダーセクション */}
-      <section className="slider-section">
-        <h2 className="section-title">わずらわしさ (Pain) マトリクス</h2>
-        {(Object.keys(CATEGORY_NAMES) as PainCategory[]).map(category => {
-          const val = preferences[category] ?? 0.5;
-          return (
-            <div key={category} className="slider-group">
-              <div className="slider-header">
-                <span className="category-name">{CATEGORY_NAMES[category]}</span>
-                {getInterventionBadge(val)}
-              </div>
-              <input
-                type="range"
-                min="0.0"
-                max="1.0"
-                step="0.05"
-                value={val}
-                onChange={e => handleSliderChange(category, parseFloat(e.target.value))}
-              />
-              <div className="slider-labels">
-                <span>🧘 0.0 自分で気づいて学ぶ</span>
-                <span>💡 0.4 ヒントを出して</span>
-                <span>⚡ 1.0 全部任せる</span>
-              </div>
-            </div>
-          );
-        })}
-      </section>
-
-      {/* ファイル解析・レビュー */}
-      <section className="preset-section">
-        <h2 className="section-title">スマート一括解析</h2>
-        <button
-          className="action-button"
-          onClick={handleAnalyze}
-          disabled={isAnalyzing}
-        >
-          {isAnalyzing ? '⚡ 解析中...' : '🔍 現在のファイルを解析'}
-        </button>
-        {status && <p className="status-message">{status}</p>}
-      </section>
-
-      {/* プラン表示・学習ポイント */}
-      {plan && (
-        <section className="plan-section">
-          <h2>📋 介入プラン</h2>
-          <p className="plan-summary">{plan.summary}</p>
-
-          {presetMode === 'LEARNING' && (
-            <div className="learning-box">
-              <strong>🎓 学習ポイント:</strong>
-              <ul className="learning-points">
-                {plan.edits.map((edit, i) => (
-                  <li key={i} className="learning-point-item">
-                    <span className="learning-category">{CATEGORY_NAMES[edit.category] || edit.category}</span>
-                    <span className="learning-reason">{edit.reason}</span>
-                  </li>
-                ))}
-              </ul>
-              <p className="learning-tip">💡 「なぜこう変えると良いのか」を確認してから承認すると、コードへの理解が深まります。</p>
-            </div>
-          )}
-
-          <ul className="edit-list">
-            {plan.edits.map((edit, index) => (
-              <li key={`${edit.startLine}-${edit.startCharacter}-${index}`} className="edit-item">
-                <div><strong>{CATEGORY_NAMES[edit.category] || edit.category}</strong>: {edit.reason}</div>
-                <pre>{edit.newText}</pre>
-              </li>
-            ))}
-          </ul>
-
-          <div className="button-group">
-            <button
-              className="action-button"
-              onClick={handleApply}
-              disabled={plan.edits.length === 0}
-              style={{ flex: 1 }}
-            >
-              承認して適用
-            </button>
-            <button className="secondary-button" onClick={handleReject}>
-              却下
-            </button>
-          </div>
-        </section>
-      )}
-
-      {/* ─── Grammarly パネル: ライブ問題一覧 ─── */}
-      <section className="card grammarly-panel">
-        <div className="section-title">
-          🔍 現在の問題
-          <span className={`issue-count-badge ${liveIssues.length === 0 ? 'badge-ok' : 'badge-warn'}`}>
-            {liveIssues.length === 0 ? '✅ なし' : `${liveIssues.length}件`}
-          </span>
-          {isBackgroundAnalyzing && <span className="bg-analysis-loader">🤖 AI考え中...</span>}
-        </div>
-        {liveIssues.length === 0 ? (
-          <div className="no-issues">✅ 問題は検出されていません</div>
-        ) : (
-          <ul className="issue-list">
-            {liveIssues.map((issue, i) => (
-              <li
-                key={i}
-                className={`issue-item issue-${issue.source}`}
-                onClick={() => vscode?.postMessage({ command: 'JUMP_TO_ISSUE', payload: { line: issue.line, character: issue.character } })}
-                title={`行 ${issue.line + 1} へジャンプ`}
-              >
-                <span className="issue-location">L{issue.line + 1}</span>
-                <span className="issue-source-badge">
-                  {issue.source === 'llm' ? '🤖' : issue.source === 'ast' ? '🌲' : '🔤'}
-                </span>
-                <span className="issue-category">{CATEGORY_NAMES[issue.category]}</span>
-                
-                <div className="issue-content">
-                  {issue.message.includes('🤖 **AI 提案**: ') ? (
-                    <div className="ai-reason-bubble">
-                      <div className="ai-reason-header">🤖 AI 提案</div>
-                      <div className="ai-reason-body">{issue.message.replace('🤖 **AI 提案**: ', '')}</div>
-                    </div>
-                  ) : (
-                    <div className="issue-message">{issue.message}</div>
-                  )}
-                  
-                  {(issue.originalText || issue.replacementText) && (
-                    <div className="issue-diff">
-                      {issue.originalText && (
-                        <div className="diff-line diff-old">
-                          <span className="diff-indicator">-</span>
-                          <pre>{issue.originalText}</pre>
-                        </div>
-                      )}
-                      {issue.replacementText && (
-                        <div className="diff-line diff-new">
-                          <span className="diff-indicator">+</span>
-                          <pre>{issue.replacementText}</pre>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="issue-actions">
-                  <button className="issue-btn-apply" onClick={(e) => { e.stopPropagation(); vscode?.postMessage({ command: 'SHOW_DIFF' }); }}>🔍 差分</button>
-                  <button className="issue-btn-apply" onClick={(e) => handleApplyIssue(e, issue)}>✓ 適用</button>
-                  <button className="issue-btn-reject" onClick={(e) => handleRejectIssue(e, issue)}>✕ 却下</button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* ─── AI グラビティーモード & アピール度 ─── */}
-      <section className="card ai-mode-section">
-        <div className="section-title">🤖 AI グラビティーモード</div>
-        <div className="ai-mode-desc">LLM による高度な解析のトリガーを選択します。</div>
-        <div className="radio-group">
-          {([
-            { value: 'continuous' as LlmTriggerMode, label: '10秒ごと(連続)', desc: '作業中に自動で継続的に解析・生成' },
-            { value: 'on-save' as LlmTriggerMode, label: '保存時のみ', desc: '推奨 · APIコスト約1/6' },
-            { value: 'disabled' as LlmTriggerMode, label: '無効', desc: 'LLM解析を完全に停止' },
-          ] as const).map(opt => (
-            <label key={opt.value} className={`radio-option ${llmTriggerMode === opt.value ? 'radio-selected' : ''}`}>
-              <input
-                type="radio"
-                name="llm-trigger"
-                value={opt.value}
-                checked={llmTriggerMode === opt.value}
-                onChange={() => {
-                  setLlmTriggerMode(opt.value);
-                  vscode?.postMessage({ command: 'SET_LLM_TRIGGER_MODE', payload: opt.value });
-                }}
-              />
-              <span className="radio-label-text">
-                <strong>{opt.label}</strong>
-                <small>{opt.desc}</small>
-              </span>
-            </label>
-          ))}
-        </div>
-
-        <div className="section-title" style={{ marginTop: '20px' }}>🎨 エディタでのアピール度</div>
-        <div className="ai-mode-desc">エディタ画面上での提案の目立ち具合（自己主張）を調整します。</div>
-        <div className="radio-group">
-          {([
-            { value: 'high' as EditorAppealLevel, label: 'High', desc: 'インライン装飾＋波線で強くアピール' },
-            { value: 'medium' as EditorAppealLevel, label: 'Medium', desc: 'Gutterアイコン＋CodeLensで程よく表示' },
-            { value: 'low' as EditorAppealLevel, label: 'Low', desc: 'Gutterアイコンのみで控えめに表示' },
-          ] as const).map(opt => (
-            <label key={opt.value} className={`radio-option ${editorAppealLevel === opt.value ? 'radio-selected' : ''}`}>
-              <input
-                type="radio"
-                name="editor-appeal"
-                value={opt.value}
-                checked={editorAppealLevel === opt.value}
-                onChange={() => {
-                  setEditorAppealLevel(opt.value);
-                  vscode?.postMessage({ command: 'SET_EDITOR_APPEAL_LEVEL', payload: opt.value });
-                }}
-              />
-              <span className="radio-label-text">
-                <strong>{opt.label}</strong>
-                <small>{opt.desc}</small>
-              </span>
-            </label>
-          ))}
-        </div>
-      </section>
-
-      {/* ─── ルールカタログ ─── */}
-      <section className="card catalog-section">
-        <button
-          className="catalog-toggle"
-          onClick={() => setCatalogOpen(v => !v)}
-          aria-expanded={catalogOpen}
-        >
-          <span>📖 アクティブなルール一覧 ({activeRules.length}件)</span>
-          <span className="catalog-chevron">{catalogOpen ? '▲' : '▼'}</span>
-        </button>
-        {catalogOpen && (
-          <div className="catalog-body">
-            <input
-              className="catalog-search"
-              type="text"
-              placeholder="ルールを検索... (例: retrun)"
-              value={catalogSearch}
-              onChange={e => setCatalogSearch(e.target.value)}
-            />
-            <div className="catalog-groups">
-              {(['SYNTAX_TYPO', 'INDENTATION_FORMATTING', 'VAR_FUNC_MANAGEMENT', 'SYNTAX_ERROR_HANDLING'] as const).map(cat => {
-                const filtered = activeRules.filter(r =>
-                  r.category === cat &&
-                  (catalogSearch === '' ||
-                    r.pattern.includes(catalogSearch) ||
-                    r.replacement.includes(catalogSearch))
-                );
-                if (filtered.length === 0) return null;
-                return (
-                  <div key={cat} className="catalog-group">
-                    <div className="catalog-group-title">{CATEGORY_NAMES[cat]}</div>
-                    <ul className="catalog-list">
-                      {filtered.map((rule, i) => (
-                        <li key={i} className="catalog-rule">
-                          <code className="rule-pattern">{rule.pattern}</code>
-                          <span className="rule-arrow">→</span>
-                          <code className="rule-replacement">{rule.replacement}</code>
-                          {rule.languageId && (
-                            <span className="rule-lang">{rule.languageId.join(', ')}</span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                );
-              })}
-              {activeRules.filter(r =>
-                catalogSearch === '' ||
-                r.pattern.includes(catalogSearch) ||
-                r.replacement.includes(catalogSearch)
-              ).length === 0 && (
-                <div className="catalog-empty">「{catalogSearch}」に一致するルールがありません</div>
-              )}
-            </div>
-          </div>
-        )}
-      </section>
-
     </div>
   );
 }
 
 export default App;
-
-
-
-

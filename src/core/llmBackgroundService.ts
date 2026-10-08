@@ -23,7 +23,7 @@ export class LlmBackgroundService implements vscode.Disposable {
     private readonly _onDidStartAnalysis = new vscode.EventEmitter<void>();
     public readonly onDidStartAnalysis = this._onDidStartAnalysis.event;
 
-    private readonly _onDidCompleteAnalysis = new vscode.EventEmitter<void>();
+    private readonly _onDidCompleteAnalysis = new vscode.EventEmitter<vscode.Uri>();
     public readonly onDidCompleteAnalysis = this._onDidCompleteAnalysis.event;
 
     constructor(private readonly secrets: vscode.SecretStorage) {
@@ -133,9 +133,9 @@ export class LlmBackgroundService implements vscode.Disposable {
             // LLM呼び出し
             let plan;
             if (state.llmProvider === 'gemini' && apiKey) {
-                plan = await this._llmService.createGeminiPlan(document, token, apiKey, state.llmModel);
+                plan = await this._llmService.createGeminiPlan(document, token, apiKey, state.llmModel, undefined, state.presetMode);
             } else {
-                plan = await this._llmService.createPlan(document, token, state.llmModel);
+                plan = await this._llmService.createPlan(document, token, state.llmModel, undefined, state.presetMode);
             }
             
             statusBarDisposable.dispose();
@@ -182,7 +182,7 @@ export class LlmBackgroundService implements vscode.Disposable {
                 console.error('[LlmBackgroundService] Analysis failed:', error);
             }
         } finally {
-            this._onDidCompleteAnalysis.fire();
+            this._onDidCompleteAnalysis.fire(document.uri);
         }
     }
 

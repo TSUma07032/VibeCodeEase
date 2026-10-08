@@ -41,8 +41,8 @@ export class VibeCodeActionProvider implements vscode.CodeActionProvider {
             if (range.contains(resultRange.start) || range.contains(resultRange.end) || range.intersection(resultRange) || range.start.line === resultRange.start.line) {
                 for (const intervention of result.interventions) {
                     if (intervention.replacementText) {
-                        const isLearning = globalState.presetMode === 'LEARNING';
-                        const titlePrefix = isLearning ? '$(mortar-board) [学習ヒント] ' : '$(zap) ';
+                        const isHint = globalState.presetMode === 'HINT';
+                        const titlePrefix = isHint ? '$(lightbulb) [学習ヒント] ' : '$(zap) ';
                         const title = `${titlePrefix}Change '${intervention.originalText}' to '${intervention.replacementText}'`;
                         const fix = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
                         fix.isPreferred = true;

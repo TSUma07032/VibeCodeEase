@@ -32,7 +32,7 @@ suite('WebviewMessageHandler Test Suite', () => {
 
         messageHandler = new WebviewMessageHandler(mockSecrets as any);
 
-        // モックされたcontextでGlobalStateを初期化する
+        // モチE��されたcontextでGlobalStateを�E期化する
         const mockContext: any = {
             globalState: {
                 get: (key: string) => undefined,
@@ -74,22 +74,22 @@ suite('WebviewMessageHandler Test Suite', () => {
 
         await messageHandler.handleMessage(data, mockWebview);
 
-        // 成功すると sendCurrentSettings が呼ばれて設定データがポストされるはず
+        // 成功すると sendCurrentSettings が呼ばれて設定データが�EストされるはぁE
         assert.strictEqual(postedMessages.length, 1);
         assert.strictEqual(postedMessages[0].type, 'SETTINGS_DATA');
-        // モック上で実際に更新されているか確認
+        // モチE��上で実際に更新されてぁE��か確誁E
         assert.strictEqual(postedMessages[0].payload.preferences['SYNTAX_TYPO'], 0.5);
     });
 
     test('should ignore update preference if value is out of bounds or invalid', async () => {
-        // valueがない
+        // valueがなぁE
         await messageHandler.handleMessage({
             command: 'UPDATE_PREFERENCE_VALUE',
             payload: { category: 'SYNTAX_TYPO' }
         }, mockWebview);
         assert.strictEqual(postedMessages.length, 0);
 
-        // categoryが文字列じゃない
+        // categoryが文字�EじゃなぁE
         await messageHandler.handleMessage({
             command: 'UPDATE_PREFERENCE_VALUE',
             payload: { category: 123, value: 0.5 }
@@ -111,10 +111,10 @@ suite('WebviewMessageHandler Test Suite', () => {
         // Valid preset
         await messageHandler.handleMessage({
             command: 'SET_PRESET',
-            payload: 'FLOW'
+            payload: 'ARCHITECTURE'
         }, mockWebview);
         assert.strictEqual(postedMessages.length, 1);
-        assert.strictEqual(postedMessages[0].payload.presetMode, 'FLOW');
+        assert.strictEqual(postedMessages[0].payload.presetMode, 'ARCHITECTURE');
 
         postedMessages = [];
 
@@ -167,7 +167,7 @@ suite('WebviewMessageHandler Test Suite', () => {
             callbackAction = action;
         });
 
-        // pendingPlan を手動セット
+        // pendingPlan を手動セチE��
         (messageHandler as any).pendingPlan = {
             documentUri: 'file:///dummy.ts',
             documentVersion: 1,

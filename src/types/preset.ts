@@ -1,9 +1,9 @@
 import { PainCategory } from './painCategory';
 import { UserPreferenceProfile } from './userPreference';
 
-export type PresetMode = 'LEARNING' | 'FLOW' | 'ZEN' | 'CUSTOM';
+export type PresetMode = 'HINT' | 'ARCHITECTURE' | 'BUG_TYPO' | 'CUSTOM';
 
-export const PRESET_MODES: readonly PresetMode[] = ['LEARNING', 'FLOW', 'ZEN', 'CUSTOM'] as const;
+export const PRESET_MODES: readonly PresetMode[] = ['HINT', 'ARCHITECTURE', 'BUG_TYPO', 'CUSTOM'] as const;
 
 export interface PresetDefinition {
   id: PresetMode;
@@ -14,46 +14,46 @@ export interface PresetDefinition {
 }
 
 export const PRESET_DEFINITIONS: Record<Exclude<PresetMode, 'CUSTOM'>, PresetDefinition> = {
-  LEARNING: {
-    id: 'LEARNING',
-    name: '学習モード (Learning)',
-    description: 'タイポは手軽に直しつつ、構文やロジックはあえて解説ヒントを提示。コード理解を最優先。',
-    icon: '$(mortar-board)',
+  HINT: {
+    id: 'HINT',
+    name: 'ヒントモード (Hint)',
+    description: 'AI avoids writing exact solution code, suggests comments/hint texts for fixing/improving.',
+    icon: '$(lightbulb)',
     preferences: {
-      SYNTAX_TYPO: 0.8,
-      INDENTATION_FORMATTING: 0.7,
+      SYNTAX_TYPO: 0.3,
+      INDENTATION_FORMATTING: 0.3,
       VAR_FUNC_MANAGEMENT: 0.3,
       SYNTAX_ERROR_HANDLING: 0.4
     }
   },
-  FLOW: {
-    id: 'FLOW',
-    name: 'フローモード (Flow)',
-    description: '面倒なタイポ・整形・構文修正を自動化。思考の流れとバイブスを最優先。',
-    icon: '$(zap)',
+  ARCHITECTURE: {
+    id: 'ARCHITECTURE',
+    name: 'アーキテクチャモード (Architecture)',
+    description: 'Heavily focuses on refactoring, architecture, separation of concerns, scalability, and design patterns.',
+    icon: '$(versions)',
     preferences: {
-      SYNTAX_TYPO: 1.0,
-      INDENTATION_FORMATTING: 1.0,
-      VAR_FUNC_MANAGEMENT: 0.8,
-      SYNTAX_ERROR_HANDLING: 0.85
+      SYNTAX_TYPO: 0.5,
+      INDENTATION_FORMATTING: 0.8,
+      VAR_FUNC_MANAGEMENT: 1.0,
+      SYNTAX_ERROR_HANDLING: 0.6
     }
   },
-  ZEN: {
-    id: 'ZEN',
-    name: '職人モード (Zen)',
-    description: 'AIの介入を最小限に。自分の手でじっくりコードを紡ぎたい時に。',
-    icon: '$(eye-closed)',
+  BUG_TYPO: {
+    id: 'BUG_TYPO',
+    name: 'バグ・タイポ修正 (Bug/Typo)',
+    description: 'Focuses strictly on fixing typos, null exceptions, vulnerabilities, and simple bugs while leaving overall logic untouched.',
+    icon: '$(bug)',
     preferences: {
-      SYNTAX_TYPO: 0.2,
-      INDENTATION_FORMATTING: 0.2,
+      SYNTAX_TYPO: 1.0,
+      INDENTATION_FORMATTING: 0.8,
       VAR_FUNC_MANAGEMENT: 0.1,
-      SYNTAX_ERROR_HANDLING: 0.2
+      SYNTAX_ERROR_HANDLING: 1.0
     }
   }
 };
 
-export const DEFAULT_PRESET_MODE: PresetMode = 'LEARNING';
+export const DEFAULT_PRESET_MODE: PresetMode = 'HINT';
 
 export const DEFAULT_USER_PREFERENCES: UserPreferenceProfile = {
-  preferences: { ...PRESET_DEFINITIONS.LEARNING.preferences }
+  preferences: { ...PRESET_DEFINITIONS.HINT.preferences }
 };

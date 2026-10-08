@@ -4,6 +4,7 @@ import { buildInterventionPrompt } from './llm/promptBuilder';
 import { validatePlan } from './llm/planValidator';
 import { GeminiClient } from './llm/geminiClient';
 import { VscodeLmClient } from './llm/vscodeLmClient';
+import { PresetMode } from '../types/preset';
 
 export class LlmInterventionService {
     constructor(
@@ -31,10 +32,11 @@ export class LlmInterventionService {
         token: vscode.CancellationToken,
         apiKey: string,
         modelName?: string,
-        preferenceSummary?: string
+        preferenceSummary?: string,
+        presetMode?: PresetMode
     ): Promise<LlmInterventionPlan> {
         this.validateDocument(document);
-        const prompt = buildInterventionPrompt(document, preferenceSummary);
+        const prompt = buildInterventionPrompt(document, preferenceSummary, presetMode);
         const rawResult = await this.geminiClient.generate(prompt, apiKey, token, modelName);
         return validatePlan(rawResult, document);
     }
@@ -46,10 +48,11 @@ export class LlmInterventionService {
         document: vscode.TextDocument,
         token: vscode.CancellationToken,
         modelSelector?: string,
-        preferenceSummary?: string
+        preferenceSummary?: string,
+        presetMode?: PresetMode
     ): Promise<LlmInterventionPlan> {
         this.validateDocument(document);
-        const prompt = buildInterventionPrompt(document, preferenceSummary);
+        const prompt = buildInterventionPrompt(document, preferenceSummary, presetMode);
         const rawResult = await this.vscodeLmClient.generate(prompt, token, modelSelector);
         return validatePlan(rawResult, document);
     }

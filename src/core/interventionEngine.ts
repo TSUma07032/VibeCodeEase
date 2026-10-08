@@ -50,9 +50,9 @@ export class InterventionEngine {
     category: PainCategory,
     originalText: string,
     replacementText: string,
-    presetMode: PresetMode = 'LEARNING'
+    presetMode: PresetMode = 'HINT'
   ): string {
-    if (presetMode !== 'LEARNING') {
+    if (presetMode !== 'HINT') {
       return `💡 **Did you mean:** \`${replacementText}\`?`;
     }
 

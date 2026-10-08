@@ -1,4 +1,4 @@
-﻿import * as vscode from 'vscode';
+import * as vscode from 'vscode';
 import { LlmInterventionService } from '../core/llmInterventionService';
 import { DEFAULT_TYPO_RULES } from '../core/analyzer';
 import {
@@ -368,9 +368,9 @@ export class WebviewMessageHandler {
                         if (!apiKey) {
                             throw new Error('Gemini APIキーが設定されていません。設定(Settings)またはサイドバーからGemini APIキーを設定してください。');
                         }
-                        return await this.llmService.createGeminiPlan(editor.document, source.token, apiKey, state.llmModel);
+                        return await this.llmService.createGeminiPlan(editor.document, source.token, apiKey, state.llmModel, undefined, state.presetMode);
                     } else {
-                        return await this.llmService.createPlan(editor.document, source.token, state.llmModel);
+                        return await this.llmService.createPlan(editor.document, source.token, state.llmModel, undefined, state.presetMode);
                     }
                 }
             );

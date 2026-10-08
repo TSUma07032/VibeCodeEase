@@ -8,6 +8,10 @@ export class DiffProvider implements vscode.TextDocumentContentProvider {
     onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri>();
     onDidChange = this.onDidChangeEmitter.event;
 
+    public update(uri: vscode.Uri) {
+        this.onDidChangeEmitter.fire(uri);
+    }
+
     provideTextDocumentContent(uri: vscode.Uri): string {
         // uri format: vibecodeease-diff://modified/path/to/file.ts
         const originalUri = vscode.Uri.file(uri.path);
