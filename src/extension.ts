@@ -1,5 +1,6 @@
 ﻿import * as vscode from 'vscode';
 import { PanelProvider } from './vscode-utils/PanelProvider';
+import { SidebarProvider } from './vscode-utils/SidebarProvider';
 import { LlmBackgroundService, LlmSettings } from './core/llmBackgroundService';
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -12,6 +13,14 @@ export async function activate(context: vscode.ExtensionContext) {
 	};
 
 	const llmBackgroundService = new LlmBackgroundService(currentSettings);
+
+	const sidebarProvider = new SidebarProvider(context.extensionUri);
+	context.subscriptions.push(
+		vscode.window.registerWebviewViewProvider(
+			'vibecodeease.sidebarView',
+			sidebarProvider
+		)
+	);
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand('vibecodeease.recordAccept', (proposal) => {
