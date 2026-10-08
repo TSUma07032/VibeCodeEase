@@ -81,6 +81,24 @@ export class PersonalizationService {
         await this.store.save();
     }
 
+    public async setVisibilityLevel(level: 'stealth' | 'subtle' | 'active'): Promise<void> {
+        const profile = this.store.getProfile();
+        profile.visibilityLevel = level;
+        await this.store.save();
+    }
+
+    public async setExplanationVerbosity(level: 'minimal' | 'summary' | 'detailed'): Promise<void> {
+        const profile = this.store.getProfile();
+        profile.explanationVerbosity = level;
+        await this.store.save();
+    }
+
+    public async setApplicationAutomation(level: 'manual' | 'bulk' | 'auto'): Promise<void> {
+        const profile = this.store.getProfile();
+        profile.applicationAutomation = level;
+        await this.store.save();
+    }
+
     public async ask(query: string, contextCode: string | undefined, token: vscode.CancellationToken): Promise<ScoredCandidate[]> {
         const profile = this.store.getProfile();
         

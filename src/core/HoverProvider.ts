@@ -1,11 +1,11 @@
-import * as vscode from 'vscode';
+﻿import * as vscode from 'vscode';
 import { SharedAnalysisCache } from './analyzer';
 import { AnalysisResult } from '../types';
 import { GlobalState } from '../state/globalState';
 import { InterventionEngine } from './interventionEngine';
 
 export class VibeHoverProvider implements vscode.HoverProvider {
-    constructor() {}
+    constructor(private readonly personalizationService?: any) {}
 
     provideHover(document: vscode.TextDocument, position: vscode.Position, _token: vscode.CancellationToken): vscode.ProviderResult<vscode.Hover> {
         const results = SharedAnalysisCache.getInstance().getResults(document);
@@ -42,7 +42,12 @@ export class VibeHoverProvider implements vscode.HoverProvider {
                         );
                     }
 
-                    const md = new vscode.MarkdownString(hintText);
+                    let finalHintText = hintText;
+                    if (this.personalizationService) {
+                        const verbosity = this.personalizationService.getProfile().explanationVerbosity;
+                        if (verbosity === 'minimal') { finalHintText = finalHintText.split('\\n')[0]; }
+                    }
+                    const md = new vscode.MarkdownString(finalHintText);
                     md.supportThemeIcons = true;
                     md.isTrusted = true;
 
@@ -61,3 +66,4 @@ export class VibeHoverProvider implements vscode.HoverProvider {
         return null;
     }
 }
+

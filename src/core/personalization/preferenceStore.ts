@@ -1,4 +1,4 @@
-import * as vscode from 'vscode';
+﻿import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { PersonalizationProfile } from '../../types/personalization';
@@ -35,7 +35,10 @@ export class PreferenceStore {
             preferenceSummary: '',
             currentPersonaMode: 'adaptive',
             currentSituation: 'learning',
-            personaSummary: ''
+            personaSummary: '',
+            visibilityLevel: 'subtle',
+            explanationVerbosity: 'summary',
+            applicationAutomation: 'manual'
         };
     }
 

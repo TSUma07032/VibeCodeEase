@@ -1,4 +1,4 @@
-import * as vscode from 'vscode';
+﻿import * as vscode from 'vscode';
 import { SidebarProvider } from './vscode-utils/SidebarProvider';
 import { VibeHoverProvider } from './core/HoverProvider';
 import { VibeCodeActionProvider } from './core/CodeActionProvider';
@@ -27,10 +27,18 @@ export function activate(context: vscode.ExtensionContext) {
 	const actionLogService = new ActionLogService(workspaceRoot);
 	const adaptiveEngine = new AdaptiveEngine(3);
 	const diagnosticsService = new DiagnosticsService();
-	const silentFixService = new SilentFixService();
 	const llmBackgroundService = new LlmBackgroundService(context.secrets);
 	const editorDecorator = new EditorDecorator();
-	const codeLensProvider = new ProposalCodeLensProvider();
+
+	const { PersonalizationService } = require('./core/personalization/personalizationService');
+	const { GeminiClient } = require('./core/llm/geminiClient');
+	const { VscodeLmClient } = require('./core/llm/vscodeLmClient');
+	const getApiKey = async () => { let key = await context.secrets.get('vibecodeease.geminiApiKey'); if (!key) key = vscode.workspace.getConfiguration('vibecodeease').get('geminiApiKey'); return key; };
+	const personalizationService = new PersonalizationService(context.globalStorageUri, new GeminiClient(), new VscodeLmClient(), getApiKey);
+	personalizationService.initialize();
+
+	const silentFixService = new SilentFixService(personalizationService);
+	const codeLensProvider = new ProposalCodeLensProvider(personalizationService);
 
 	// 保存時自動修正（SILENT）のコールバック配線
 	silentFixService.setOnFixAppliedCallback((fixCount, docUri) => {
@@ -45,7 +53,7 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	// サイドバーProviderの初期化とアクションコールバック配線
-	const sidebarProvider = new SidebarProvider(context.extensionUri, context.secrets, llmBackgroundService);
+	const sidebarProvider = new SidebarProvider(context.extensionUri, context.secrets, llmBackgroundService, personalizationService);
 	sidebarProvider.getMessageHandler().setActionCallback((action, plan, docUri) => {
 		// ログ記録
 		actionLogService.log({
@@ -79,7 +87,7 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 	context.subscriptions.push(
-		vscode.languages.registerHoverProvider('*', new VibeHoverProvider())
+		vscode.languages.registerHoverProvider('*', new VibeHoverProvider(personalizationService))
 	);
 
 	context.subscriptions.push(
@@ -295,4 +303,5 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {}
+
 

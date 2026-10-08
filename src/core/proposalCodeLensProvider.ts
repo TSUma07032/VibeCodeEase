@@ -1,4 +1,4 @@
-import * as vscode from 'vscode';
+﻿import * as vscode from 'vscode';
 import { GlobalState } from '../state/globalState';
 import { SharedAnalysisCache } from './analyzer';
 
@@ -7,7 +7,7 @@ export class ProposalCodeLensProvider implements vscode.CodeLensProvider, vscode
     public readonly onDidChangeCodeLenses = this._onDidChangeCodeLenses.event;
     private readonly disposables: vscode.Disposable[] = [];
 
-    constructor() {
+    constructor(private readonly personalizationService?: any) {
         this.disposables.push(
             vscode.workspace.onDidChangeTextDocument(() => {
                 this._onDidChangeCodeLenses.fire();
@@ -31,6 +31,10 @@ export class ProposalCodeLensProvider implements vscode.CodeLensProvider, vscode
 
         // CodeLens is shown only for 'high' and 'medium'
         if (appealLevel === 'low') {
+            return [];
+        }
+        const visibility = this.personalizationService ? this.personalizationService.getProfile().visibilityLevel : 'subtle';
+        if (visibility === 'stealth') {
             return [];
         }
 
@@ -84,3 +88,4 @@ export class ProposalCodeLensProvider implements vscode.CodeLensProvider, vscode
         this.disposables.forEach(d => d.dispose());
     }
 }
+

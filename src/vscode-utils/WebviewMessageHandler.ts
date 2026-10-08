@@ -1,4 +1,4 @@
-import * as vscode from 'vscode';
+﻿import * as vscode from 'vscode';
 import { LlmInterventionService } from '../core/llmInterventionService';
 import { DEFAULT_TYPO_RULES } from '../core/analyzer';
 import {
@@ -223,6 +223,19 @@ export class WebviewMessageHandler {
                 }
                 break;
             }
+            case 'PZ_SET_UIUX': {
+                if (this.personalizationService && message.payload) {
+                    const { visibility, verbosity, automation } = message.payload as any;
+                    if (visibility) await this.personalizationService.setVisibilityLevel(visibility);
+                    if (verbosity) await this.personalizationService.setExplanationVerbosity(verbosity);
+                    if (automation) await this.personalizationService.setApplicationAutomation(automation);
+                    webview.postMessage({
+                        type: 'PZ_STATE',
+                        payload: { profile: this.personalizationService.getProfile(), metrics: this.personalizationService.getMetrics() }
+                    });
+                }
+                break;
+            }
             case 'PZ_ASK': {
                 if (this.personalizationService) {
                     const payload = message.payload as { query: string; useSelection?: boolean };
@@ -431,3 +444,4 @@ export class WebviewMessageHandler {
         );
     }
 }
+

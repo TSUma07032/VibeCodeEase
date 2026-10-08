@@ -35,6 +35,10 @@ export interface PersonaWeights {
   quality: number;
 }
 
+export type VisibilityLevel = 'stealth' | 'subtle' | 'active';
+export type ExplanationVerbosity = 'minimal' | 'summary' | 'detailed';
+export type ApplicationAutomation = 'manual' | 'bulk' | 'auto';
+
 export interface PersonalizationProfile {
   userId: string;
   likedRecords: ResponseRecord[];
@@ -46,6 +50,11 @@ export interface PersonalizationProfile {
   currentPersonaMode: PersonaMode;
   currentSituation: SituationId;
   personaSummary: string;
+  
+  // UIUX Personalization Axes
+  visibilityLevel: VisibilityLevel;
+  explanationVerbosity: ExplanationVerbosity;
+  applicationAutomation: ApplicationAutomation;
 }
 
 export interface PzMetrics {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 
 // Make sure we have the same types as backend, simplified for UI
 type SituationId = 'learning' | 'ideation' | 'design_review' | 'implementation' | 'debugging' | 'deadline_rush';
@@ -17,6 +17,9 @@ interface Profile {
   personaSummary: string;
   preferenceSummary: string;
   likedRecords: any[];
+  visibilityLevel: 'stealth' | 'subtle' | 'active';
+  explanationVerbosity: 'minimal' | 'summary' | 'detailed';
+  applicationAutomation: 'manual' | 'bulk' | 'auto';
 }
 
 interface Metrics {
@@ -108,6 +111,42 @@ export function PersonalizationPanel({ vscode, profile, metrics, candidates, isB
         </div>
       </div>
 
+      <div className="pz-controls uiux-controls" style={{ display: 'flex', gap: '10px', marginBottom: '10px', flexWrap: 'wrap' }}>
+        <div>
+          <label>通知・提示の強さ: </label>
+          <select
+            value={profile.visibilityLevel}
+            onChange={e => vscode.postMessage({ command: 'PZ_SET_UIUX', payload: { visibility: e.target.value } })}
+          >
+            <option value="stealth">Stealth (最小限)</option>
+            <option value="subtle">Subtle (控えめ)</option>
+            <option value="active">Active (積極的)</option>
+          </select>
+        </div>
+        <div>
+          <label>理由説明の表示量: </label>
+          <select
+            value={profile.explanationVerbosity}
+            onChange={e => vscode.postMessage({ command: 'PZ_SET_UIUX', payload: { verbosity: e.target.value } })}
+          >
+            <option value="minimal">Minimal (1行要約)</option>
+            <option value="summary">Summary (箇条書き)</option>
+            <option value="detailed">Detailed (詳細)</option>
+          </select>
+        </div>
+        <div>
+          <label>差分適用の自動化: </label>
+          <select
+            value={profile.applicationAutomation}
+            onChange={e => vscode.postMessage({ command: 'PZ_SET_UIUX', payload: { automation: e.target.value } })}
+          >
+            <option value="manual">Manual (手動確認)</option>
+            <option value="bulk">Bulk (ファイル一括)</option>
+            <option value="auto">Auto (保存時自動適用)</option>
+          </select>
+        </div>
+      </div>
+
       <div className="pz-input" style={{ marginBottom: '10px' }}>
         <textarea 
           placeholder="質問を入力..." 
@@ -185,3 +224,4 @@ export function PersonalizationPanel({ vscode, profile, metrics, candidates, isB
     </div>
   );
 }
+
