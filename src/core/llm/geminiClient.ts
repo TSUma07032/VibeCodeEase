@@ -148,7 +148,7 @@ export class GeminiClient {
         token: vscode.CancellationToken,
         body?: string
     ): Promise<{ statusCode: number; body: string }> {
-        const maxRetries = 2;
+        const maxRetries = 1;
         let attempt = 0;
 
         while (true) {
@@ -160,7 +160,8 @@ export class GeminiClient {
                     return response;
                 }
                 attempt++;
-                const delayMs = attempt === 1 ? 2000 : 4000;
+                // 待機時間を短縮（UIのフリーズ感を軽減）
+                const delayMs = 1000;
                 await new Promise(resolve => setTimeout(resolve, delayMs));
                 continue;
             }

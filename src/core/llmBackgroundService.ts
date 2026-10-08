@@ -73,7 +73,7 @@ export class LlmBackgroundService implements vscode.Disposable {
 
     private _scheduleContinuousAnalysis(document: vscode.TextDocument) {
         const now = Date.now();
-        const THROTTLE_MS = 2000; // 2秒間隔でスロットリング
+        const THROTTLE_MS = 1000; // 1秒間隔でスロットリング（俊敏に）
         
         if (this._continuousTimer) {
             clearTimeout(this._continuousTimer);
@@ -193,10 +193,10 @@ export class LlmBackgroundService implements vscode.Disposable {
                 
                 if (errorMessage.toLowerCase().includes('quota')) {
                     vscode.window.setStatusBarMessage(`$(error) AI API Quota 超過: プランまたは課金情報を確認してください`, 10000);
-                    this._backoffUntil = Date.now() + 1000 * 60 * 5; // 5分間バックオフ
+                    this._backoffUntil = Date.now() + 1000 * 30; // 30秒間に短縮（元5分は長すぎるため）
                 } else if (errorMessage.includes('503') || errorMessage.includes('429')) {
                     vscode.window.setStatusBarMessage(`$(error) AI通信エラー: サーバーが混雑しています (${errorMessage.includes('503') ? '503' : '429'})`, 10000);
-                    this._backoffUntil = Date.now() + 1000 * 60; // 1分間バックオフ
+                    this._backoffUntil = Date.now() + 1000 * 10; // 10秒間に短縮（元1分から短縮）
                 } else {
                     vscode.window.setStatusBarMessage('$(error) AI通信エラー: 解析に失敗しました', 5000);
                 }

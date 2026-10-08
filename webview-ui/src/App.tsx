@@ -94,7 +94,7 @@ function App() {
     vscode?.postMessage({ command: 'SET_LLM_CONFIG', payload: { provider, model } });
   };
 
-  const handleLlmModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleLlmModelChange = (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>) => {
     const model = e.target.value;
     setLlmConfig(prev => ({ ...prev, model }));
     vscode?.postMessage({ command: 'SET_LLM_CONFIG', payload: { provider: llmConfig.provider, model } });
@@ -264,25 +264,32 @@ function App() {
           
           <div className="form-group">
             <label>Model</label>
-            <select value={llmConfig.model} onChange={handleLlmModelChange} className="styled-select">
+            <input 
+              list="model-list" 
+              value={llmConfig.model} 
+              onChange={handleLlmModelChange} 
+              className="styled-input" 
+              placeholder="モデル名を入力または選択"
+            />
+            <datalist id="model-list">
               {llmConfig.provider === 'gemini' ? (
                 <>
-                  <option value="gemini-3.6-flash">gemini-3.6-flash (推奨・最速)</option>
-                  <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-                  <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-                  <option value="gemini-1.5-flash">gemini-1.5-flash</option>
-                  <option value="gemini-1.5-pro">gemini-1.5-pro</option>
-                  <option value="auto">自動選択 (Auto)</option>
+                  <option value="gemini-3.6-flash" />
+                  <option value="gemini-2.5-flash" />
+                  <option value="gemini-2.0-flash" />
+                  <option value="gemini-1.5-flash" />
+                  <option value="gemini-1.5-pro" />
+                  <option value="auto" />
                 </>
               ) : (
                 <>
-                  <option value="auto">自動選択 (Default)</option>
-                  <option value="gpt-4o">gpt-4o</option>
-                  <option value="gpt-4o-mini">gpt-4o-mini</option>
-                  <option value="claude-3.5-sonnet">claude-3.5-sonnet</option>
+                  <option value="auto" />
+                  <option value="gpt-4o" />
+                  <option value="gpt-4o-mini" />
+                  <option value="claude-3.5-sonnet" />
                 </>
               )}
-            </select>
+            </datalist>
           </div>
 
           {llmConfig.provider === 'gemini' && (
