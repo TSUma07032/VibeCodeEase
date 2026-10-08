@@ -35,6 +35,7 @@ function App() {
   const [pzCandidates, setPzCandidates] = useState<any[]>([]);
   const [pzBusy, setPzBusy] = useState<boolean>(false);
   const [pzError, setPzError] = useState<string>('');
+  const [llmError, setLlmError] = useState<string>('');
 
   useEffect(() => {
     // 起動時に拡張機能へ設定取得リクエストを送る
@@ -66,6 +67,12 @@ function App() {
           break;
         case 'PZ_ERROR':
           setPzError(data.payload);
+          break;
+        case 'BACKGROUND_ANALYSIS_STARTED':
+          setLlmError('');
+          break;
+        case 'LLM_ERROR':
+          setLlmError(data.payload as string);
           break;
       }
     };
@@ -106,6 +113,12 @@ function App() {
   };
   return (
     <div className="App">
+      {llmError && (
+        <div style={{ padding: '10px', backgroundColor: '#5a1d1d', color: '#ffb3b3', borderRadius: '4px', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div><strong>❌ AI Communication Error:</strong> {llmError}</div>
+          <button style={{ marginLeft: '10px', padding: '2px 8px', cursor: 'pointer' }} onClick={() => setLlmError('')}>Dismiss</button>
+        </div>
+      )}
       {/* Section 1: UIUX 設定 */}
       <section className="card uiux-section">
         <h2 className="section-title">🖥️ Section 1: UIUX Settings (AIとの接し方)</h2>

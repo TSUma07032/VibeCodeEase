@@ -26,6 +26,9 @@ export class LlmBackgroundService implements vscode.Disposable {
     private readonly _onDidCompleteAnalysis = new vscode.EventEmitter<vscode.Uri>();
     public readonly onDidCompleteAnalysis = this._onDidCompleteAnalysis.event;
 
+    private readonly _onDidError = new vscode.EventEmitter<string>();
+    public readonly onDidError = this._onDidError.event;
+
     constructor(private readonly secrets: vscode.SecretStorage) {
         // onDidChangeTextDocument (ポーリング用: スロットリング対応)
         this._disposables.push(
@@ -180,6 +183,8 @@ export class LlmBackgroundService implements vscode.Disposable {
         } catch (error) {
             if (!token.isCancellationRequested) {
                 console.error('[LlmBackgroundService] Analysis failed:', error);
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                this._onDidError.fire(errorMessage);
             }
         } finally {
             this._onDidCompleteAnalysis.fire(document.uri);

@@ -81,6 +81,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           this._view?.webview.postMessage({ type: 'BACKGROUND_ANALYSIS_COMPLETED' });
         })
       );
+      this._disposables.push(
+        this.llmBackgroundService.onDidError((errorMessage) => {
+          this._view?.webview.postMessage({ type: 'LLM_ERROR', payload: errorMessage });
+        })
+      );
     }
   }
 
