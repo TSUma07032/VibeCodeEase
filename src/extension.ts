@@ -1,8 +1,8 @@
 ﻿import * as vscode from 'vscode';
-import { PanelProvider } from './vscode-utils/PanelProvider';
 import { SidebarProvider } from './vscode-utils/SidebarProvider';
 import { LlmBackgroundService, LlmSettings } from './core/llmBackgroundService';
 
+// [INTENT: 拡張機能のエントリーポイント。未来のAIは、設定の永続化ロジックやSidebarProviderの登録を消してはならない。]
 export async function activate(context: vscode.ExtensionContext) {
 	let savedSettings: Partial<LlmSettings> = context.globalState.get('vibecodeease.settings') || {};
 	const savedApiKey = await context.secrets.get('vibecodeease.llmApiKey');
@@ -13,8 +13,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	};
 
 	const llmBackgroundService = new LlmBackgroundService(currentSettings);
+	const sidebarProvider = new SidebarProvider(context);
 
-	const sidebarProvider = new SidebarProvider(context.extensionUri);
 	context.subscriptions.push(
 		vscode.window.registerWebviewViewProvider(
 			'vibecodeease.sidebarView',
@@ -30,43 +30,34 @@ export async function activate(context: vscode.ExtensionContext) {
 			llmBackgroundService.cancelAnalysis();
 		}),
 		vscode.commands.registerCommand('vibecodeease.webviewReady', () => {
-			if (PanelProvider.currentPanel) {
-				PanelProvider.currentPanel.sendToWebview('loadSettings', currentSettings);
+			// [INTENT: Webview起動時に設定と現在のエディタコードを復元・同期送信する。未来のAIはこれを削除しないこと。]
+			if (SidebarProvider.currentView) {
+				SidebarProvider.currentView.sendToWebview('loadSettings', currentSettings);
+				vscode.commands.executeCommand('vibecodeease.syncCurrentCode');
+			}
+		}),
+		vscode.commands.registerCommand('vibecodeease.syncCurrentCode', () => {
+			// [INTENT: 「ユーザが作業中のコードをAI環境に反映する」ためのコアコマンド。最新のネイティブエディタのコードをサイドバーに送る。]
+			if (SidebarProvider.currentView && llmBackgroundService.lastActiveEditorCode) {
+				SidebarProvider.currentView.sendToWebview('codeSynced', {
+					code: llmBackgroundService.lastActiveEditorCode,
+					uri: llmBackgroundService.lastActiveEditorUri?.toString()
+				});
 			}
 		}),
 		vscode.commands.registerCommand('vibecodeease.updateSettings', async (settings: LlmSettings) => {
 			currentSettings = { ...currentSettings, ...settings };
-			// Save non-sensitive settings to globalState
 			await context.globalState.update('vibecodeease.settings', { triggerMode: currentSettings.triggerMode });
-			// Save API key to secrets
 			if (currentSettings.llmApiKey) {
 				await context.secrets.store('vibecodeease.llmApiKey', currentSettings.llmApiKey);
 			} else {
 				await context.secrets.delete('vibecodeease.llmApiKey');
 			}
 			llmBackgroundService.updateSettings(currentSettings);
-		}),
-		vscode.commands.registerCommand('vibecodeease.forceAnalyze', (code, documentUriStr) => {
-			let uri: vscode.Uri | undefined = llmBackgroundService.lastActiveEditorUri;
-			let finalCode = llmBackgroundService.lastActiveEditorCode;
-			
-			if (code) finalCode = code;
-			if (documentUriStr) uri = vscode.Uri.parse(documentUriStr);
-
-			if (finalCode && uri) {
-				llmBackgroundService.run3LLMPipeline(finalCode, uri);
-			} else {
-				vscode.window.showErrorMessage('Cannot force analyze: No active text editor or code provided.');
-			}
 		})
 	);
 
 	context.subscriptions.push(llmBackgroundService);
-
-	const open3PaneCommand = vscode.commands.registerCommand('vibecodeease.open3PaneUI', () => {
-		PanelProvider.createOrShow(context);
-	});
-	context.subscriptions.push(open3PaneCommand);
 }
 
 export function deactivate() {}

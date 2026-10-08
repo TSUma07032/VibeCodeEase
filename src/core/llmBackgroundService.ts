@@ -1,5 +1,5 @@
 ﻿import * as vscode from 'vscode';
-import { PanelProvider } from '../vscode-utils/PanelProvider';
+import { SidebarProvider } from '../vscode-utils/SidebarProvider';
 import { GeminiClient } from './llm/geminiClient';
 import { INTERVENTION_RESPONSE_SCHEMA } from './llm/promptBuilder';
 
@@ -120,17 +120,17 @@ ${code}`;
         documentUri: documentUri.toString()
       };
 
-      if (PanelProvider.currentPanel) {
-        PanelProvider.currentPanel.sendToWebview('aiProposalsComplete', { proposals: [proposal] });
+      if (SidebarProvider.currentView) {
+        SidebarProvider.currentView.sendToWebview('aiProposalsComplete', { proposals: [proposal] });
       }
 
     } catch (e: unknown) {
       if (e instanceof vscode.CancellationError || token.isCancellationRequested) {
          return;
       }
-      if (PanelProvider.currentPanel) {
+      if (SidebarProvider.currentView) {
         const msg = e instanceof Error ? e.message : String(e);
-        PanelProvider.currentPanel.sendToWebview('aiProposalsError', { error: msg });
+        SidebarProvider.currentView.sendToWebview('aiProposalsError', { error: msg });
       }
     } finally {
       if (this._tokenSource) {
@@ -167,14 +167,14 @@ ${code}`;
     }
 
     const newTrend = `Updated ${new Date().toLocaleTimeString()}: User prefers backend refactoring.`;
-    if (PanelProvider.currentPanel) {
-      PanelProvider.currentPanel.sendToWebview('personalizationUpdated', { trend: newTrend });
+    if (SidebarProvider.currentView) {
+      SidebarProvider.currentView.sendToWebview('personalizationUpdated', { trend: newTrend });
     }
   }
 
   private sendStageUpdate(stage: string) {
-    if (PanelProvider.currentPanel) {
-      PanelProvider.currentPanel.sendToWebview('aiStageUpdate', { stage });
+    if (SidebarProvider.currentView) {
+      SidebarProvider.currentView.sendToWebview('aiStageUpdate', { stage });
     }
   }
 
@@ -186,4 +186,5 @@ ${code}`;
     this._disposables.forEach(d => d.dispose());
   }
 }
+
 

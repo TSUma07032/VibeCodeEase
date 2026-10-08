@@ -6,6 +6,7 @@ import type { Proposal, Settings } from './types/index';
 import { getVSCodeAPI } from './vscode';
 import { useVSCodeMessage } from './hooks/useVSCodeMessage';
 
+// [INTENT: サイドバー内にマウントされるReactのルートコンポーネント。未来のAIはUIの基本レイアウトを壊してはならない。]
 export default function App() {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [settings, setSettings] = useState<Settings>({
@@ -13,30 +14,31 @@ export default function App() {
     personalizationTrend: 'Standard mode. Adapting to user...',
     llmApiKey: ''
   });
-  const [isSettingsOpen, setIsSettingsOpen] = useState(true);
+  
+  const [currentSyncCode, setCurrentSyncCode] = useState<string>('');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [currentStage, setCurrentStage] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [currentStage, setCurrentStage] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Send initial settings
+  // Send initial ready signal
   useEffect(() => {
-        getVSCodeAPI().postMessage({ command: 'webviewReady' });
+    getVSCodeAPI().postMessage({ command: 'webviewReady' });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const messageHandlers = {
     onStageUpdate: useCallback((stage: string) => {
-      setIsProcessing(true);
       setCurrentStage(stage);
-      setErrorMsg(null);
+      setIsProcessing(true);
     }, []),
     onProposalsComplete: useCallback((newProposals: Proposal[]) => {
+      setProposals(prev => [...prev, ...newProposals]);
       setIsProcessing(false);
       setCurrentStage('');
-      setProposals((prev) => [...newProposals, ...prev]);
     }, []),
     onPersonalizationUpdated: useCallback((trend: string) => {
-      setSettings((prev) => ({ ...prev, personalizationTrend: trend }));
+      setSettings(prev => ({ ...prev, personalizationTrend: trend }));
     }, []),
     onError: useCallback((error: string) => {
       setIsProcessing(false);
@@ -45,64 +47,55 @@ export default function App() {
     }, []),
     onLoadSettings: useCallback((loadedSettings: Partial<Settings>) => {
       setSettings(prev => ({ ...prev, ...loadedSettings }));
+    }, []),
+    onCodeSynced: useCallback((data: { code: string; uri?: string }) => {
+      // [INTENT: 「ユーザが作業中のコードをAI環境に反映する」機能。同期されたコードを保存。]
+      setCurrentSyncCode(data.code);
+      setErrorMsg(null);
     }, [])
   };
 
   useVSCodeMessage(messageHandlers);
 
-  const handleAcceptProposal = useCallback((id: string) => {
-    setProposals((prev) => {
-      const acceptedProposal = prev.find(p => p.id === id);
-      if (acceptedProposal) {
-        getVSCodeAPI().postMessage({ 
-          command: 'acceptProposal', 
-          proposal: acceptedProposal 
-        });
-      }
-      return prev.map(p => p.id === id ? { ...p, status: 'accepted' } : p);
-    });
-  }, []);
-
-  const handleSettingsChange = useCallback((newSettings: Settings) => {
-    setSettings(newSettings);
-    getVSCodeAPI().postMessage({ command: 'updateSettings', settings: newSettings });
-  }, []);
-
-  const handleForceAnalyze = useCallback(() => {
-    getVSCodeAPI().postMessage({ command: 'forceAnalyze', code: '', documentUri: '' });
-  }, []);
+  const handleSyncClick = () => {
+    // [INTENT: ユーザー手動による同期ボタン押下イベント。未来のAIはこれを削除しない。]
+    getVSCodeAPI().postMessage({ command: 'syncCurrentCode' });
+  };
 
   return (
     <div className="app-container">
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {errorMsg && (
-          <div className="error-toast" onClick={() => setErrorMsg(null)} style={{ margin: '10px 20px 0 20px' }}>
-            笶・Error: {errorMsg}
-          </div>
-        )}
-        <CenterPane 
-          proposals={proposals} 
-          isProcessing={isProcessing} 
-          currentStage={currentStage} 
-          onAccept={handleAcceptProposal} 
-          onForceAnalyze={handleForceAnalyze}
-        />
+      <div className="sidebar-header">
+        <h2>AI Workspace</h2>
+        <div style={{ display: 'flex', gap: '5px' }}>
+          <button onClick={handleSyncClick} title="Sync Current Editor Code">🔄 Sync</button>
+          <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} title="Settings">⚙️</button>
+        </div>
       </div>
-      {!isSettingsOpen && (
-        <button 
-          className="settings-toggle-btn"
-          onClick={() => setIsSettingsOpen(true)}
-        >
-          笞呻ｸ・Settings
-        </button>
+      
+      {errorMsg && (
+        <div className="error-toast">
+          <span>❌ Error: {errorMsg}</span>
+          <button onClick={() => setErrorMsg(null)}>Dismiss</button>
+        </div>
       )}
-      <RightPane 
-        isOpen={isSettingsOpen} 
-        settings={settings} 
-        onSettingsChange={handleSettingsChange} 
-        onToggle={() => setIsSettingsOpen(false)} 
+
+      {isSettingsOpen && (
+        <RightPane 
+          isOpen={isSettingsOpen} 
+          settings={settings} 
+          onSettingsChange={setSettings} 
+          onToggle={() => setIsSettingsOpen(false)} 
+        />
+      )}
+
+      <CenterPane 
+        proposals={proposals}
+        currentSyncCode={currentSyncCode}
+        currentStage={currentStage}
+        isProcessing={isProcessing}
+        onAccept={(p) => getVSCodeAPI().postMessage({ command: 'acceptProposal', proposal: p, codeBefore: currentSyncCode })}
+        onDismiss={(id) => setProposals(prev => prev.filter(p => p.id !== id))}
       />
     </div>
   );
 }
-

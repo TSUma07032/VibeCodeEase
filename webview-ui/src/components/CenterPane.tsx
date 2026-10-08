@@ -1,78 +1,93 @@
-﻿import { useState } from 'react';
-import type { Proposal } from '../types/index';
+﻿import type { Proposal } from '../types/index';
 import { DiffView } from './DiffView';
+import { getVSCodeAPI } from '../vscode';
+import { useState } from 'react';
 
 interface CenterPaneProps {
   proposals: Proposal[];
-  isProcessing: boolean;
+  currentSyncCode: string;
   currentStage: string;
-  onAccept: (id: string) => void;
-  onForceAnalyze: () => void;
+  isProcessing: boolean;
+  onAccept: (proposal: Proposal) => void;
+  onDismiss: (id: string) => void;
 }
 
-export function CenterPane({ proposals, isProcessing, currentStage, onAccept, onForceAnalyze }: CenterPaneProps) {
-  const [expandedExplanations, setExpandedExplanations] = useState<Record<string, boolean>>({});
+// [INTENT: お客様の真の要望「同期されたコードが表示され、そこに対する差分が履歴として蓄積されるGitHub風UI」を実現するためのコンポーネント]
+export function CenterPane({ proposals, currentSyncCode, currentStage, isProcessing, onAccept, onDismiss }: CenterPaneProps) {
+  const [expandedReasons, setExpandedReasons] = useState<Set<string>>(new Set());
 
-  const toggleExplanation = (id: string) => {
-    setExpandedExplanations(prev => ({ ...prev, [id]: !prev[id] }));
+  const toggleReason = (id: string) => {
+    setExpandedReasons(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleForceAnalyze = () => {
+    // [INTENT: 「今すぐ介入」ボタン。同期されたコードまたは現在のエディタのコードを分析に回す]
+    getVSCodeAPI().postMessage({ command: 'forceAnalyze', code: currentSyncCode });
   };
 
   return (
-    <div className="pane center-pane">
-      <div className="center-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-        <h3>AI Workspace</h3>
-        <button 
-          onClick={onForceAnalyze} 
-          disabled={isProcessing}
-          style={{ padding: '5px 10px', backgroundColor: 'var(--vscode-button-background)', color: 'var(--vscode-button-foreground)', border: 'none', cursor: 'pointer' }}
-        >
-          {isProcessing ? 'Thinking...' : '⚡ Intervene Now'}
+    <div className="pane center-pane" style={{ padding: '10px' }}>
+      <div className="status-bar" style={{ marginBottom: '10px' }}>
+        <span className="status-indicator" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className={`led ${isProcessing ? 'blinking' : 'on'}`} />
+          {isProcessing ? currentStage : 'AI Idle'}
+        </span>
+        <button className="secondary" onClick={handleForceAnalyze} disabled={isProcessing}>
+          ⚡ Intervene Now
         </button>
       </div>
 
-      {isProcessing && (
-        <div className="status-badge">
-          ⏳ AI is thinking: {currentStage}
+      {!currentSyncCode && proposals.length === 0 && (
+        <div className="empty-state">
+          <p>No code synced yet. Click "🔄 Sync" above to mirror your current VS Code editor!</p>
         </div>
       )}
 
-      {proposals.length === 0 && !isProcessing && (
-        <div style={{ opacity: 0.5, marginTop: '20px' }}>
-          No proposals yet. Start typing in your VS Code editor to see AI suggestions here!
+      {currentSyncCode && proposals.length === 0 && (
+        <div className="empty-state" style={{ textAlign: 'left' }}>
+          <h4>Mirrored Workspace</h4>
+          <p style={{ opacity: 0.7, fontSize: '0.8em', marginBottom: '10px' }}>Code successfully synced. Awaiting AI proposals...</p>
+          <pre style={{ background: 'var(--vscode-editor-background)', color: 'var(--vscode-editor-foreground)', padding: '10px', overflowX: 'auto', fontSize: '12px', border: '1px solid var(--vscode-editorGroup-border)' }}>
+            <code>{currentSyncCode}</code>
+          </pre>
         </div>
       )}
 
-      {proposals.map(p => (
-        <div key={p.id} className="proposal-card">
-          <div className="proposal-header">
-            <span>✨ AI Suggestion</span>
-            <span style={{ color: p.status === 'accepted' ? 'var(--vscode-testing-iconPassed)' : 'var(--vscode-descriptionForeground)' }}>
-              {p.status === 'accepted' ? '✓ Accepted' : 'Pending'}
-            </span>
-          </div>
-          <div className="proposal-content">
+      <div className="proposals-list" style={{ display: 'flex', flexDirection: 'column-reverse', gap: '15px' }}>
+        {proposals.map(p => (
+          <div key={p.id} className="proposal-card" style={{ border: '1px solid var(--vscode-editorGroup-border)', background: 'var(--vscode-editor-background)', borderRadius: '4px', overflow: 'hidden' }}>
             <div 
-              onClick={() => toggleExplanation(p.id)}
-              style={{ cursor: 'pointer', padding: '10px 15px', fontSize: '0.85em', opacity: 0.8, backgroundColor: 'var(--vscode-editorGroupHeader-noTabsBackground, #1e1e1e)', userSelect: 'none' }}
+              className="proposal-header" 
+              onClick={() => toggleReason(p.id)}
+              style={{ padding: '8px 12px', background: 'var(--vscode-editorGroupHeader-tabsBackground)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}
             >
-              ▶ <strong>Reason / Memo</strong> (Click to {expandedExplanations[p.id] ? 'collapse' : 'expand'})
+              <span>{expandedReasons.has(p.id) ? '▼' : '▶'} Reason / Memo</span>
+              <span style={{ fontSize: '0.8em', opacity: 0.6 }}>{new Date(parseInt(p.id)).toLocaleTimeString()}</span>
             </div>
-            {expandedExplanations[p.id] && (
-              <div style={{ padding: '10px 15px', fontSize: '0.85em', borderTop: '1px solid var(--vscode-panel-border)' }}>
-                {p.explanation.split('\n').map((line, i) => <div key={i}>{line}</div>)}
+            
+            {expandedReasons.has(p.id) && (
+              <div className="proposal-reason" style={{ padding: '10px', borderBottom: '1px solid var(--vscode-editorGroup-border)', fontSize: '0.9em', color: 'var(--vscode-descriptionForeground)' }}>
+                {p.explanation}
               </div>
             )}
-            <pre className="code-diff" style={{ overflowX: 'auto', whiteSpace: 'pre', fontSize: '0.9em' }}>
+
+            <div className="proposal-diff" style={{ padding: '10px', fontSize: '12px', overflowX: 'auto' }}>
               <DiffView original={p.originalText} proposed={p.proposedText} />
-            </pre>
-          </div>
-          {p.status !== 'accepted' && (
-            <div className="proposal-actions">
-              <button onClick={() => onAccept(p.id)}>Accept Change</button>
             </div>
-          )}
-        </div>
-      ))}
+            
+            <div className="proposal-actions" style={{ padding: '10px', display: 'flex', gap: '10px', borderTop: '1px solid var(--vscode-editorGroup-border)' }}>
+              <button onClick={() => onAccept(p)} style={{ flex: 1 }}>✅ Accept & Merge</button>
+              <button className="secondary" onClick={() => onDismiss(p.id)} style={{ padding: '4px 12px' }}>Dismiss</button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
+

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+﻿import { useEffect } from 'react';
 import type { Proposal } from '../types/index';
 
 type MessagePayload = 
@@ -6,7 +6,8 @@ type MessagePayload =
   | { command: 'aiProposalsComplete'; data: { proposals: Proposal[] } }
   | { command: 'personalizationUpdated'; data: { trend: string } }
   | { command: 'aiProposalsError'; data: { error: string } }
-  | { command: 'loadSettings'; data: any };
+  | { command: 'loadSettings'; data: any }
+  | { command: 'codeSynced'; data: { code: string; uri?: string } };
 
 export function useVSCodeMessage(handlers: {
   onStageUpdate: (stage: string) => void;
@@ -14,6 +15,7 @@ export function useVSCodeMessage(handlers: {
   onPersonalizationUpdated: (trend: string) => void;
   onError: (error: string) => void;
   onLoadSettings?: (settings: any) => void;
+  onCodeSynced?: (data: { code: string; uri?: string }) => void;
 }) {
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -33,6 +35,9 @@ export function useVSCodeMessage(handlers: {
           break;
         case 'loadSettings':
           if (handlers.onLoadSettings) handlers.onLoadSettings(message.data);
+          break;
+        case 'codeSynced':
+          if (handlers.onCodeSynced) handlers.onCodeSynced(message.data);
           break;
       }
     };
