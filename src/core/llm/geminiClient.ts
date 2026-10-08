@@ -142,7 +142,30 @@ export class GeminiClient {
         return candidateModels;
     }
 
-    private request(
+    private async request(
+        urlString: string,
+        options: https.RequestOptions = {},
+        token: vscode.CancellationToken,
+        body?: string
+    ): Promise<{ statusCode: number; body: string }> {
+        const maxRetries = 2;
+        let attempt = 0;
+
+        while (true) {
+            const response = await this.doRequest(urlString, options, token, body);
+            
+            if ((response.statusCode === 503 || response.statusCode === 429) && attempt < maxRetries && !token.isCancellationRequested) {
+                attempt++;
+                const delayMs = attempt === 1 ? 2000 : 4000;
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+                continue;
+            }
+            
+            return response;
+        }
+    }
+
+    private doRequest(
         urlString: string,
         options: https.RequestOptions = {},
         token: vscode.CancellationToken,

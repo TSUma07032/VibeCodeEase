@@ -185,6 +185,12 @@ export class LlmBackgroundService implements vscode.Disposable {
                 console.error('[LlmBackgroundService] Analysis failed:', error);
                 const errorMessage = error instanceof Error ? error.message : String(error);
                 this._onDidError.fire(errorMessage);
+                
+                if (errorMessage.includes('503') || errorMessage.includes('429')) {
+                    vscode.window.setStatusBarMessage(`$(error) AI通信エラー: サーバーが混雑しています (${errorMessage.includes('503') ? '503' : '429'})`, 10000);
+                } else {
+                    vscode.window.setStatusBarMessage('$(error) AI通信エラー: 解析に失敗しました', 5000);
+                }
             }
         } finally {
             this._onDidCompleteAnalysis.fire(document.uri);
