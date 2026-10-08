@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --vscode-font-family: var(--vscode-editor-font-family, Consolas, 'Courier New', monospace);
 }
 
@@ -196,4 +196,5 @@ button.secondary:hover {
 }
 
 .error-toast { background-color: var(--vscode-inputValidation-errorBackground, #5a1d1d); color: var(--vscode-inputValidation-errorForeground, #f88070); padding: 10px; margin-bottom: 15px; border-radius: 4px; cursor: pointer; border: 1px solid var(--vscode-inputValidation-errorBorder, #8a2e2e); }
-.left-pane { width: 340px; background-color: var(--vscode-sideBar-background, #252526); border-right: 1px solid var(--vscode-sideBar-border, #333); padding: 20px; display: flex; flex-direction: column; overflow-y: auto; }
+
+

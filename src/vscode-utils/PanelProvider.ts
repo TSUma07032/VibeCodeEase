@@ -44,10 +44,7 @@ export class PanelProvider {
     this._panel.webview.onDidReceiveMessage(
       async (message) => {
         switch (message.command) {
-          case 'analyzeCode':
-            // Will handle 3-LLM logic here
-            vscode.commands.executeCommand('vibecodeease.run3LLM', message.code, message.settings);
-            break;
+          
           case 'acceptProposal':
             vscode.commands.executeCommand('vibecodeease.recordAccept', message.proposal, message.codeBefore);
             break;
@@ -114,4 +111,5 @@ export class PanelProvider {
       </html>`;
   }
 }
+
 

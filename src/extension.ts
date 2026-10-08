@@ -2,11 +2,17 @@
 import { PanelProvider } from './vscode-utils/PanelProvider';
 import { LlmBackgroundService, LlmSettings } from './core/llmBackgroundService';
 
-export function activate(context: vscode.ExtensionContext) {
-	let currentSettings: LlmSettings = context.globalState.get('vibecodeease.settings') || { llmApiKey: '', triggerMode: 'on-save' };
+export async function activate(context: vscode.ExtensionContext) {
+	let savedSettings: Partial<LlmSettings> = context.globalState.get('vibecodeease.settings') || {};
+	const savedApiKey = await context.secrets.get('vibecodeease.llmApiKey');
+	
+	let currentSettings: LlmSettings = { 
+		llmApiKey: savedApiKey || '', 
+		triggerMode: savedSettings.triggerMode || 'on-save' 
+	};
+
 	const llmBackgroundService = new LlmBackgroundService(currentSettings);
 
-	// Load settings command internally sets it in the webview
 	context.subscriptions.push(
 		vscode.commands.registerCommand('vibecodeease.recordAccept', (proposal) => {
 			llmBackgroundService.recordAccept(proposal);
@@ -19,9 +25,16 @@ export function activate(context: vscode.ExtensionContext) {
 				PanelProvider.currentPanel.sendToWebview('loadSettings', currentSettings);
 			}
 		}),
-		vscode.commands.registerCommand('vibecodeease.updateSettings', (settings) => {
+		vscode.commands.registerCommand('vibecodeease.updateSettings', async (settings: LlmSettings) => {
 			currentSettings = { ...currentSettings, ...settings };
-			context.globalState.update('vibecodeease.settings', currentSettings);
+			// Save non-sensitive settings to globalState
+			await context.globalState.update('vibecodeease.settings', { triggerMode: currentSettings.triggerMode });
+			// Save API key to secrets
+			if (currentSettings.llmApiKey) {
+				await context.secrets.store('vibecodeease.llmApiKey', currentSettings.llmApiKey);
+			} else {
+				await context.secrets.delete('vibecodeease.llmApiKey');
+			}
 			llmBackgroundService.updateSettings(currentSettings);
 		}),
 		vscode.commands.registerCommand('vibecodeease.forceAnalyze', (code, documentUriStr) => {
@@ -48,4 +61,3 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {}
-

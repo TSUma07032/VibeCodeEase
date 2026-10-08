@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+﻿import { useState, useCallback, useEffect } from 'react';
 import './App.css';
 import { CenterPane } from './components/CenterPane';
 import { RightPane } from './components/RightPane';
@@ -20,8 +20,7 @@ export default function App() {
 
   // Send initial settings
   useEffect(() => {
-    // getVSCodeAPI().postMessage({ command: 'updateSettings', settings });
-    getVSCodeAPI().postMessage({ command: 'webviewReady' });
+        getVSCodeAPI().postMessage({ command: 'webviewReady' });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -78,7 +77,7 @@ export default function App() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {errorMsg && (
           <div className="error-toast" onClick={() => setErrorMsg(null)} style={{ margin: '10px 20px 0 20px' }}>
-            ❌ Error: {errorMsg}
+            笶・Error: {errorMsg}
           </div>
         )}
         <CenterPane 
@@ -94,7 +93,7 @@ export default function App() {
           className="settings-toggle-btn"
           onClick={() => setIsSettingsOpen(true)}
         >
-          ⚙️ Settings
+          笞呻ｸ・Settings
         </button>
       )}
       <RightPane 
@@ -106,3 +105,4 @@ export default function App() {
     </div>
   );
 }
+
