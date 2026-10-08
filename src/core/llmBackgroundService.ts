@@ -1,110 +1,148 @@
 ﻿import * as vscode from 'vscode';
 import { PanelProvider } from '../vscode-utils/PanelProvider';
+import { GeminiClient } from './llm/geminiClient';
+import { INTERVENTION_RESPONSE_SCHEMA } from './llm/promptBuilder';
+
+export interface LlmSettings {
+  llmApiKey: string;
+  interventionLevel: number;
+}
 
 export class LlmBackgroundService implements vscode.Disposable {
-  private _abortController: AbortController | null = null;
+  private _tokenSource: vscode.CancellationTokenSource | null = null;
   private _disposables: vscode.Disposable[] = [];
   private _typingTimeout: NodeJS.Timeout | null = null;
   private _lastProcessedCode: string = '';
-
-  constructor() {
-    this._disposables.push(
-      vscode.commands.registerCommand('vibecodeease.recordAccept', this.recordAccept.bind(this)),
-      vscode.commands.registerCommand('vibecodeease.cancelAnalysis', this.cancelAnalysis.bind(this))
-    );
-
-    // Listen to native VS Code text changes
-    this._disposables.push(
-      vscode.workspace.onDidChangeTextDocument((e) => {
-        // Only run if the AI panel is open and we're typing in a real file
-        if (!PanelProvider.currentPanel || e.document.uri.scheme !== 'file') {
-          return;
-        }
-
-        const currentCode = e.document.getText();
-        if (currentCode === this._lastProcessedCode) {
-          return;
-        }
-
-        // Debounce typing (1.5 seconds)
-        if (this._typingTimeout) {
-          clearTimeout(this._typingTimeout);
-        }
-
-        // Cancel any ongoing LLM processing
-        this.cancelAnalysis();
-
-        this._typingTimeout = setTimeout(() => {
-          this._lastProcessedCode = currentCode;
-          this.run3LLMPipeline(currentCode, e.document.uri);
-        }, 1500);
-      })
-    );
-  }
+  private _geminiClient = new GeminiClient();
 
   public cancelAnalysis() {
-    if (this._abortController) {
-      this._abortController.abort();
-      this._abortController = null;
+    if (this._tokenSource) {
+      this._tokenSource.cancel();
+      this._tokenSource.dispose();
+      this._tokenSource = null;
     }
   }
 
-  public async run3LLMPipeline(code: string, documentUri: vscode.Uri) {
+  public handleDocumentChange(e: vscode.TextDocumentChangeEvent, settings: LlmSettings) {
+    if (!PanelProvider.currentPanel || e.document.uri.scheme !== 'file') {
+      return;
+    }
+
+    const currentCode = e.document.getText();
+    if (currentCode === this._lastProcessedCode) {
+      return;
+    }
+
     this.cancelAnalysis();
-    this._abortController = new AbortController();
-    const signal = this._abortController.signal;
+
+    if (settings.interventionLevel < 10) {
+      return;
+    }
+    
+    let debounceTime = 1500;
+    if (settings.interventionLevel < 40) {
+      debounceTime = 3000;
+    } else if (settings.interventionLevel > 80) {
+      debounceTime = 800;
+    }
+
+    if (this._typingTimeout) {
+      clearTimeout(this._typingTimeout);
+    }
+
+    this._typingTimeout = setTimeout(() => {
+      this._lastProcessedCode = currentCode;
+      this.run3LLMPipeline(currentCode, e.document.uri, settings);
+    }, debounceTime);
+  }
+
+  public async run3LLMPipeline(code: string, documentUri: vscode.Uri, settings: LlmSettings) {
+    this.cancelAnalysis();
+    this._tokenSource = new vscode.CancellationTokenSource();
+    const token = this._tokenSource.token;
 
     try {
-      this.sendStageUpdate('Candidate Generation (LLM 1)...');
-      await this.sleep(1000);
-      if (signal.aborted) return;
+      const apiKey = settings.llmApiKey;
+      if (!apiKey) {
+        throw new Error('Gemini API key is not set. Please configure it in Settings.');
+      }
 
-      this.sendStageUpdate('Vector Reranking (DB Match)...');
-      await this.sleep(800);
-      if (signal.aborted) return;
+      this.sendStageUpdate('AI Analysis (Gemini)...');
+      
+      const prompt = `Review the following code and suggest ONE holistic improvement (refactoring, bug fix, or optimization). Return JSON conforming to the schema.
+Schema:
+${JSON.stringify(INTERVENTION_RESPONSE_SCHEMA)}
 
-      this.sendStageUpdate('Summarizing Preferences (LLM 2) & Finalizing (LLM 3)...');
-      await this.sleep(1000);
-      if (signal.aborted) return;
+Code:
+${code}`;
 
-      const mockProposal = {
+      const response = await this._geminiClient.generate(prompt, apiKey, token) as any;
+      if (token.isCancellationRequested) return;
+
+      let proposedText = code;
+      let explanation = response.summary || 'No summary provided.';
+      
+      if (response.edits && Array.isArray(response.edits) && response.edits.length > 0) {
+          const edit = response.edits[0];
+          if (edit.newText && edit.oldText) {
+              proposedText = code.replace(edit.oldText, edit.newText);
+              explanation += `\n\nReason: ${edit.reason || 'N/A'}`;
+          }
+      }
+
+      const proposal = {
         id: Date.now().toString(),
         originalText: code,
-        proposedText: code + '\n\n// Backend AI Suggestion: Refactored base on Vector DB preferences',
-        explanation: 'Generated by the 3-LLM pipeline mock on the backend.',
+        proposedText: proposedText,
+        explanation: explanation,
         status: 'pending',
         documentUri: documentUri.toString()
       };
 
       if (PanelProvider.currentPanel) {
-        PanelProvider.currentPanel.sendToWebview('aiProposalsComplete', { proposals: [mockProposal] });
+        PanelProvider.currentPanel.sendToWebview('aiProposalsComplete', { proposals: [proposal] });
       }
 
-    } catch (e) {
-      if (!signal.aborted && PanelProvider.currentPanel) {
-        PanelProvider.currentPanel.sendToWebview('aiProposalsError', { error: String(e) });
+    } catch (e: unknown) {
+      if (e instanceof vscode.CancellationError || token.isCancellationRequested) {
+         return;
+      }
+      if (PanelProvider.currentPanel) {
+        const msg = e instanceof Error ? e.message : String(e);
+        PanelProvider.currentPanel.sendToWebview('aiProposalsError', { error: msg });
+      }
+    } finally {
+      if (this._tokenSource) {
+        this._tokenSource.dispose();
+        this._tokenSource = null;
       }
     }
   }
 
-  public async recordAccept(proposal: any, codeBefore: string) {
+  public async recordAccept(proposal: any) {
     vscode.window.setStatusBarMessage('$(database) Vector DB: Saved Accept history', 3000);
     
-    // Apply the proposal text directly to the native VS Code editor!
     if (proposal.documentUri) {
       const uri = vscode.Uri.parse(proposal.documentUri);
       const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === uri.toString());
       
       if (editor) {
-        const fullRange = new vscode.Range(
-          editor.document.positionAt(0),
-          editor.document.positionAt(editor.document.getText().length)
-        );
-        
-        await editor.edit(editBuilder => {
-          editBuilder.replace(fullRange, proposal.proposedText);
-        });
-        this._lastProcessedCode = proposal.proposedText;
+        // Safe replace strategy to prevent full overwrite of new user changes
+        // For this mock we just replace the whole file if it hasn't changed.
+        // In a true production app, use vscode.WorkspaceEdit with precise ranges.
+        const currentText = editor.document.getText();
+        if (currentText === proposal.originalText) {
+          const fullRange = new vscode.Range(
+            editor.document.positionAt(0),
+            editor.document.positionAt(currentText.length)
+          );
+          await editor.edit(editBuilder => {
+            editBuilder.replace(fullRange, proposal.proposedText);
+          });
+          this._lastProcessedCode = proposal.proposedText;
+        } else {
+          vscode.window.showWarningMessage('Code has changed since proposal. Manual merge needed.');
+        }
       }
     }
 
@@ -120,10 +158,6 @@ export class LlmBackgroundService implements vscode.Disposable {
     }
   }
 
-  private sleep(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
   dispose() {
     if (this._typingTimeout) {
       clearTimeout(this._typingTimeout);
@@ -132,3 +166,4 @@ export class LlmBackgroundService implements vscode.Disposable {
     this._disposables.forEach(d => d.dispose());
   }
 }
+

@@ -13,6 +13,8 @@
     "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
+    "@types/diff": "^7.0.2",
+    "diff": "^9.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

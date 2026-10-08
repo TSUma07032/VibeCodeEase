@@ -1,4 +1,4 @@
-﻿import * as vscode from 'vscode';
+import * as vscode from 'vscode';
 import { getNonce } from './getNonce';
 
 export class PanelProvider {
@@ -49,6 +49,12 @@ export class PanelProvider {
           case 'acceptProposal':
             vscode.commands.executeCommand('vibecodeease.recordAccept', message.proposal, message.codeBefore);
             break;
+          case 'updateSettings':
+            vscode.commands.executeCommand('vibecodeease.updateSettings', message.settings);
+            break;
+          case 'forceAnalyze':
+            vscode.commands.executeCommand('vibecodeease.forceAnalyze', message.code, message.documentUri);
+            break;
         }
       },
       null,
@@ -86,18 +92,18 @@ export class PanelProvider {
 
     const nonce = getNonce();
 
-    return \<!DOCTYPE html>
+    return `<!DOCTYPE html>
       <html lang="en">
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <link href="\" rel="stylesheet">
+        <link href="${styleUri}" rel="stylesheet">
         <title>VibeCodeEase 3-Pane</title>
       </head>
       <body>
         <div id="root"></div>
-        <script type="module" nonce="\" src="\"></script>
+        <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
       </body>
-      </html>\;
+      </html>`;
   }
 }
