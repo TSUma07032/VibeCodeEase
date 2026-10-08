@@ -30,6 +30,11 @@ interface Metrics {
 }
 
 interface Props {
+  llmConfig?: { provider: string, model: string };
+  hasGeminiApiKey?: boolean;
+  onUpdateLlmConfig?: (provider: string, model: string) => void;
+  onSaveApiKey?: (key: string) => void;
+  onDeleteApiKey?: () => void;
   vscode: any; // The acquired vscode api object
   profile: Profile | null;
   metrics: Metrics | null;
@@ -38,9 +43,11 @@ interface Props {
   error: string;
 }
 
-export function PersonalizationPanel({ vscode, profile, metrics, candidates, isBusy, error }: Props) {
+export function PersonalizationPanel({ vscode, profile, metrics, candidates, isBusy, error, llmConfig, hasGeminiApiKey, onUpdateLlmConfig, onSaveApiKey, onDeleteApiKey }: Props) {
   const [query, setQuery] = useState('');
   const [useSelection, setUseSelection] = useState(true);
+  const [isEditingKey, setIsEditingKey] = useState(false);
+  const [keyValue, setKeyValue] = useState('');
 
   // Initialize
   useEffect(() => {
@@ -80,6 +87,54 @@ export function PersonalizationPanel({ vscode, profile, metrics, candidates, isB
 
   return (
     <div className="personalization-panel">
+      {llmConfig && (
+        <div className="pz-llm-config" style={{ marginBottom: '20px', padding: '10px', background: 'var(--vscode-editorWidget-background)', borderRadius: '4px', border: '1px solid var(--vscode-widget-border)' }}>
+          <h3 style={{ marginTop: 0, fontSize: '14px' }}>🤖 LLM & API設定</h3>
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '10px', flexWrap: 'wrap' }}>
+            <div>
+              <label>プロバイダー: </label>
+              <select value={llmConfig.provider} onChange={e => onUpdateLlmConfig?.(e.target.value, e.target.value === 'gemini' ? 'gemini-3.6-flash' : 'auto')}>
+                <option value="gemini">Google Gemini</option>
+                <option value="vscode-lm">VS Code LM</option>
+              </select>
+            </div>
+            <div>
+              <label>モデル: </label>
+              <select value={llmConfig.model} onChange={e => onUpdateLlmConfig?.(llmConfig.provider, e.target.value)}>
+                {llmConfig.provider === 'gemini' ? (
+                  <>
+                    <option value="gemini-3.6-flash">gemini-3.6-flash</option>
+                    <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="auto">Auto</option>
+                    <option value="gpt-4o">gpt-4o</option>
+                  </>
+                )}
+              </select>
+            </div>
+          </div>
+          {llmConfig.provider === 'gemini' && (
+            <div>
+              <label>Gemini API キー: </label>
+              {hasGeminiApiKey && !isEditingKey ? (
+                <span>
+                  <span style={{ color: 'var(--vscode-testing-iconPassed)' }}>✔ 設定済み</span> 
+                  <button onClick={() => setIsEditingKey(true)} style={{ marginLeft: '10px' }}>変更</button>
+                  <button onClick={() => onDeleteApiKey?.()} style={{ marginLeft: '5px' }}>削除</button>
+                </span>
+              ) : (
+                <span>
+                  <input type="password" value={keyValue} onChange={e => setKeyValue(e.target.value)} placeholder="AI StudioのAPIキー" style={{ width: '150px' }} />
+                  <button onClick={() => { onSaveApiKey?.(keyValue); setIsEditingKey(false); setKeyValue(''); }} style={{ marginLeft: '5px' }}>保存</button>
+                  {hasGeminiApiKey && <button onClick={() => setIsEditingKey(false)} style={{ marginLeft: '5px' }}>キャンセル</button>}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       <h2 className="section-title">🧠 AIに相談 (Personalized)</h2>
       
       <div className="pz-controls" style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
@@ -224,4 +279,8 @@ export function PersonalizationPanel({ vscode, profile, metrics, candidates, isB
     </div>
   );
 }
+
+
+
+
 
