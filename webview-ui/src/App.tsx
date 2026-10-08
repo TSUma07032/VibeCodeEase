@@ -13,6 +13,7 @@ import type {
   EditorAppealLevel
 } from './types';
 import { CATEGORY_NAMES } from './types';
+import { PersonalizationPanel } from './components/PersonalizationPanel';
 
 // VS Code API を取得するための宣言
 declare const acquireVsCodeApi: any;
@@ -68,6 +69,12 @@ function App() {
   const [apiKeyValue, setApiKeyValue] = useState<string>('');
   const [isEditingApiKey, setIsEditingApiKey] = useState<boolean>(false);
 
+  // Personalization State
+  const [pzProfile, setPzProfile] = useState<any>(null);
+  const [pzMetrics, setPzMetrics] = useState<any>(null);
+  const [pzCandidates, setPzCandidates] = useState<any[]>([]);
+  const [pzBusy, setPzBusy] = useState<boolean>(false);
+  const [pzError, setPzError] = useState<string>('');
   useEffect(() => {
     // 起動時に拡張機能へ設定取得リクエストを送る
     vscode?.postMessage({ command: 'GET_SETTINGS' });
@@ -122,6 +129,20 @@ function App() {
           break;
         case 'LIVE_ISSUES_UPDATE':
           setLiveIssues(data.payload as LiveIssue[]);
+          break;
+        case 'PZ_STATE':
+          setPzProfile(data.payload.profile);
+          setPzMetrics(data.payload.metrics);
+          break;
+        case 'PZ_CANDIDATES':
+          setPzCandidates(data.payload);
+          break;
+        case 'PZ_BUSY':
+          setPzBusy(data.payload);
+          if (data.payload) setPzError('');
+          break;
+        case 'PZ_ERROR':
+          setPzError(data.payload);
           break;
       }
     };
@@ -197,6 +218,17 @@ function App() {
         <h1>✨ vibeCodeEase</h1>
         <p>AI-assisted Flow & Learning Support</p>
       </header>
+
+      <PersonalizationPanel 
+        vscode={vscode} 
+        profile={pzProfile} 
+        metrics={pzMetrics} 
+        candidates={pzCandidates} 
+        isBusy={pzBusy} 
+        error={pzError} 
+      />
+
+      <hr style={{ margin: '20px 0', borderColor: 'var(--vscode-widget-border)' }} />
 
       {/* AIモデル・API設定 */}
       <section className="preset-section llm-section">

@@ -14,9 +14,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   constructor(
     private readonly _extensionUri: vscode.Uri,
     secrets: vscode.SecretStorage,
-    private readonly llmBackgroundService?: import('../core/llmBackgroundService').LlmBackgroundService
+    private readonly llmBackgroundService?: import('../core/llmBackgroundService').LlmBackgroundService,
+    private readonly personalizationService?: any
   ) {
-    this.messageHandler = new WebviewMessageHandler(secrets);
+    this.messageHandler = new WebviewMessageHandler(secrets, undefined, personalizationService);
   }
 
   public getMessageHandler(): WebviewMessageHandler {

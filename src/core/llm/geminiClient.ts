@@ -14,16 +14,25 @@ interface GeminiModelsResponse {
 
 export class GeminiClient {
     private readonly preferredNames = [
+        'gemini-3.8-flash',
+        'gemini-3.7-flash',
         'gemini-3.6-flash',
+        'gemini-3.5-flash',
+        'gemini-3.5-flash-lite',
+        'gemini-3.1-pro',
+        'gemini-3.1-flash-lite',
+        'gemini-3.0-flash',
+        'gemini-2.5-pro',
         'gemini-2.5-flash',
+        'gemini-2.5-flash-lite',
         'gemini-2.0-flash',
-        'gemini-1.5-flash'
+        'gemini-2.0-flash-lite'
     ];
 
     /**
      * Gemini APIへリクエストを送信し、生成された未検証のJSONレスポンスオブジェクトを返す
      */
-    public async generate(prompt: string, apiKey: string, token: vscode.CancellationToken, modelName?: string): Promise<unknown> {
+    public async generate(prompt: string, apiKey: string, token: vscode.CancellationToken, modelName?: string, responseSchema: any = INTERVENTION_RESPONSE_SCHEMA): Promise<unknown> {
         const candidateModels = await this.discoverModels(apiKey, token, modelName);
 
         for (const model of candidateModels) {
@@ -38,7 +47,7 @@ export class GeminiClient {
                     contents: [{ parts: [{ text: prompt }] }],
                     generationConfig: {
                         responseMimeType: 'application/json',
-                        responseSchema: INTERVENTION_RESPONSE_SCHEMA
+                        responseSchema: responseSchema
                     }
                 })
             );
@@ -62,6 +71,43 @@ export class GeminiClient {
         }
 
         throw new Error('利用可能なGeminiモデルが見つかりません。APIキーが新規ユーザー向けモデルを利用できるか確認してください。');
+    }
+
+    /**
+     * Gemini REST APIを使用してテキストのバッチをEmbeddingに変換する
+     */
+    public async embedBatch(texts: string[], apiKey: string, token: vscode.CancellationToken, modelName: string = 'text-embedding-004'): Promise<number[][]> {
+        if (texts.length === 0) return [];
+        
+        const requests = texts.map(text => ({
+            model: `models/${modelName}`,
+            content: { parts: [{ text }] }
+        }));
+
+        const response = await this.request(
+            `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:batchEmbedContents?key=${encodeURIComponent(apiKey)}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            },
+            token,
+            JSON.stringify({ requests })
+        );
+
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+            const details = response.body.slice(0, 160);
+            throw new Error(`Gemini Embedding APIリクエストに失敗しました（HTTP ${response.statusCode}）。${details}`);
+        }
+
+        const data = JSON.parse(response.body) as {
+            embeddings?: Array<{ values: number[] }>;
+        };
+
+        if (!data.embeddings || data.embeddings.length !== texts.length) {
+            throw new Error('Geminiから期待される数のEmbeddingが返されませんでした。');
+        }
+
+        return data.embeddings.map(e => e.values);
     }
 
     private async discoverModels(apiKey: string, token: vscode.CancellationToken, targetModelName?: string): Promise<GeminiModel[]> {

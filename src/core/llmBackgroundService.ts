@@ -13,6 +13,7 @@ export class LlmBackgroundService implements vscode.Disposable {
     
     // ポーリング(continuous)モード用の状態
     private _continuousTimer?: ReturnType<typeof setTimeout>;
+    private _lastAnalysisTime = 0;
     private _lastAnalyzedContent = new Map<string, string>();
     private _lastAnalyzedVersion = new Map<string, number>();
 
@@ -26,7 +27,7 @@ export class LlmBackgroundService implements vscode.Disposable {
     public readonly onDidCompleteAnalysis = this._onDidCompleteAnalysis.event;
 
     constructor(private readonly secrets: vscode.SecretStorage) {
-        // onDidChangeTextDocument (ポーリング用: 6秒デバウンス)
+        // onDidChangeTextDocument (ポーリング用: スロットリング対応)
         this._disposables.push(
             vscode.workspace.onDidChangeTextDocument((event) => {
                 const triggerMode = GlobalState.getInstance().llmTriggerMode;
@@ -52,7 +53,7 @@ export class LlmBackgroundService implements vscode.Disposable {
             })
         );
 
-        // onDidChangeActiveTextEditor (エディタ切り替え時にポーリングなら6秒後に再確認)
+        // onDidChangeActiveTextEditor (エディタ切り替え時にポーリングなら再確認)
         this._disposables.push(
             vscode.window.onDidChangeActiveTextEditor((editor) => {
                 if (this._continuousTimer) {
@@ -67,13 +68,22 @@ export class LlmBackgroundService implements vscode.Disposable {
     }
 
     private _scheduleContinuousAnalysis(document: vscode.TextDocument) {
+        const now = Date.now();
+        const THROTTLE_MS = 2000; // 2秒間隔でスロットリング
+        
         if (this._continuousTimer) {
             clearTimeout(this._continuousTimer);
         }
-        // 6秒デバウンス
-        this._continuousTimer = setTimeout(() => {
+
+        if (now - this._lastAnalysisTime > THROTTLE_MS) {
+            this._lastAnalysisTime = now;
             this._runAnalysis(document);
-        }, 6000);
+        } else {
+            this._continuousTimer = setTimeout(() => {
+                this._lastAnalysisTime = Date.now();
+                this._runAnalysis(document);
+            }, THROTTLE_MS - (now - this._lastAnalysisTime));
+        }
     }
 
     private async _runAnalysis(document: vscode.TextDocument) {
@@ -116,7 +126,9 @@ export class LlmBackgroundService implements vscode.Disposable {
 
         try {
             this._onDidStartAnalysis.fire();
-            vscode.window.setStatusBarMessage('$(sync~spin) vibeCodeEase: AI 解析中...', 3000);
+            // タイムアウトなしでステータスバーに表示し続け、完了時に上書きする
+            const statusBarDisposable = vscode.window.setStatusBarMessage('$(sync~spin) vibeCodeEase: AI 解析中...');
+            this._disposables.push(statusBarDisposable); // 一時的な保持。完了時にdisposeする方が綺麗だが上書きされるのでOK
 
             // LLM呼び出し
             let plan;
@@ -125,6 +137,8 @@ export class LlmBackgroundService implements vscode.Disposable {
             } else {
                 plan = await this._llmService.createPlan(document, token, state.llmModel);
             }
+            
+            statusBarDisposable.dispose();
 
             if (token.isCancellationRequested) {return;}
 

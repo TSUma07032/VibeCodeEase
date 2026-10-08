@@ -196,6 +196,9 @@ export class SharedAnalysisCache {
   /** ユーザーが却下した問題のIDリスト */
   private ignoredIssues: Set<string>;
 
+  private _onDidChange = new vscode.EventEmitter<void>();
+  public readonly onDidChange = this._onDidChange.event;
+
   private constructor() {
     this.analyzer = new CodeAnalyzer();
     this.astAnalyzer = new AstAnalyzer();
@@ -256,6 +259,7 @@ export class SharedAnalysisCache {
    */
   public mergeExternalResults(uri: string, results: AnalysisResult[]): void {
     this.externalResults.set(uri, results.map(r => ({ ...r, source: 'llm' as const })));
+    this._onDidChange.fire();
   }
 
   /** 外部結果（LLM）のみをクリア */
@@ -266,6 +270,7 @@ export class SharedAnalysisCache {
   /** 特定の問題（LiveIssueのID相当）を無視リストに追加する */
   public ignoreIssue(id: string): void {
     this.ignoredIssues.add(id);
+    this._onDidChange.fire();
   }
 
   public clear() {

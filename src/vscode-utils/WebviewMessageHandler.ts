@@ -32,7 +32,8 @@ export class WebviewMessageHandler {
 
     constructor(
         private readonly secrets: vscode.SecretStorage,
-        private readonly llmService: LlmInterventionService = new LlmInterventionService()
+        private readonly llmService: LlmInterventionService = new LlmInterventionService(),
+        private readonly personalizationService?: any
     ) { }
 
     public setActionCallback(callback: ActionCallback): void {
@@ -188,6 +189,103 @@ export class WebviewMessageHandler {
             case 'UPDATE_PREFERENCE': {
                 // UIからの古いアクション(もし残っていれば)への対応、現状はUPDATE_PREFERENCE_VALUEを使用
                 this.handleUpdatePreference(message.payload);
+                break;
+            }
+            case 'PZ_GET_STATE': {
+                if (this.personalizationService) {
+                    webview.postMessage({
+                        type: 'PZ_STATE',
+                        payload: {
+                            profile: this.personalizationService.getProfile(),
+                            metrics: this.personalizationService.getMetrics()
+                        }
+                    });
+                }
+                break;
+            }
+            case 'PZ_SET_SITUATION': {
+                if (this.personalizationService && typeof message.payload === 'string') {
+                    await this.personalizationService.setSituation(message.payload);
+                    webview.postMessage({
+                        type: 'PZ_STATE',
+                        payload: { profile: this.personalizationService.getProfile(), metrics: this.personalizationService.getMetrics() }
+                    });
+                }
+                break;
+            }
+            case 'PZ_SET_PERSONA_MODE': {
+                if (this.personalizationService && typeof message.payload === 'string') {
+                    await this.personalizationService.setPersonaMode(message.payload);
+                    webview.postMessage({
+                        type: 'PZ_STATE',
+                        payload: { profile: this.personalizationService.getProfile(), metrics: this.personalizationService.getMetrics() }
+                    });
+                }
+                break;
+            }
+            case 'PZ_ASK': {
+                if (this.personalizationService) {
+                    const payload = message.payload as { query: string; useSelection?: boolean };
+                    let contextCode = undefined;
+                    if (payload.useSelection) {
+                        const editor = vscode.window.activeTextEditor;
+                        if (editor && !editor.selection.isEmpty) {
+                            contextCode = editor.document.getText(editor.selection);
+                        }
+                    }
+                    webview.postMessage({ type: 'PZ_BUSY', payload: true });
+                    try {
+                        const candidates = await this.personalizationService.ask(
+                            payload.query, 
+                            contextCode, 
+                            new vscode.CancellationTokenSource().token
+                        );
+                        webview.postMessage({ type: 'PZ_CANDIDATES', payload: candidates });
+                    } catch (e) {
+                        webview.postMessage({ type: 'PZ_ERROR', payload: e instanceof Error ? e.message : 'Error generating candidates' });
+                    } finally {
+                        webview.postMessage({ type: 'PZ_BUSY', payload: false });
+                    }
+                }
+                break;
+            }
+            case 'PZ_FEEDBACK': {
+                if (this.personalizationService) {
+                    const payload = message.payload as { candidateId: string; action: 'accept' | 'good' | 'bad' | 'regenerate' };
+                    await this.personalizationService.provideFeedback(payload.candidateId, payload.action);
+                    webview.postMessage({
+                        type: 'PZ_STATE',
+                        payload: { profile: this.personalizationService.getProfile(), metrics: this.personalizationService.getMetrics() }
+                    });
+                }
+                break;
+            }
+            case 'PZ_SUMMARIZE': {
+                if (this.personalizationService) {
+                    webview.postMessage({ type: 'PZ_BUSY', payload: true });
+                    try {
+                        await this.personalizationService.updateSummaries(new vscode.CancellationTokenSource().token);
+                        webview.postMessage({
+                            type: 'PZ_STATE',
+                            payload: { profile: this.personalizationService.getProfile(), metrics: this.personalizationService.getMetrics() }
+                        });
+                    } catch (e) {
+                        webview.postMessage({ type: 'PZ_ERROR', payload: e instanceof Error ? e.message : 'Error summarizing' });
+                    } finally {
+                        webview.postMessage({ type: 'PZ_BUSY', payload: false });
+                    }
+                }
+                break;
+            }
+            case 'PZ_RESET': {
+                if (this.personalizationService) {
+                    await this.personalizationService.reset();
+                    webview.postMessage({
+                        type: 'PZ_STATE',
+                        payload: { profile: this.personalizationService.getProfile(), metrics: this.personalizationService.getMetrics() }
+                    });
+                    webview.postMessage({ type: 'PZ_CANDIDATES', payload: [] });
+                }
                 break;
             }
             default: {

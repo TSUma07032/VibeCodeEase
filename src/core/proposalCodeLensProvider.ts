@@ -14,6 +14,9 @@ export class ProposalCodeLensProvider implements vscode.CodeLensProvider, vscode
             }),
             GlobalState.getInstance().onDidChangeState(() => {
                 this._onDidChangeCodeLenses.fire();
+            }),
+            SharedAnalysisCache.getInstance().onDidChange(() => {
+                this._onDidChangeCodeLenses.fire();
             })
         );
     }
@@ -49,12 +52,27 @@ export class ProposalCodeLensProvider implements vscode.CodeLensProvider, vscode
 
             if (result.interventions.length > 0 && result.interventions[0].replacementText !== undefined) {
                 const id = `${document.uri.toString()}::${result.source ?? 'static'}::${result.category}::${result.range.start.line}::${result.range.start.character}`;
-                const command: vscode.Command = {
-                    title: `💡 提案を確認 (${result.category})`,
+                
+                // クイック適用
+                codeLenses.push(new vscode.CodeLens(range, {
+                    title: `✨ クイック適用 (${result.category})`,
+                    command: 'vibecodeease.quickApply',
+                    arguments: [document.uri, result, id]
+                }));
+                
+                // 詳細確認
+                codeLenses.push(new vscode.CodeLens(range, {
+                    title: `💡 理由を確認`,
                     command: 'vibecodeease.reviewIntervention',
                     arguments: [document.uri, result, id]
-                };
-                codeLenses.push(new vscode.CodeLens(range, command));
+                }));
+
+                // 却下
+                codeLenses.push(new vscode.CodeLens(range, {
+                    title: `✕ 却下`,
+                    command: 'vibecodeease.rejectIntervention',
+                    arguments: [id]
+                }));
             }
         }
 

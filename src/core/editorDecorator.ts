@@ -52,6 +52,12 @@ export class EditorDecorator implements vscode.Disposable {
                 if (editor) {
                     this.updateDecorations(editor);
                 }
+            }),
+            SharedAnalysisCache.getInstance().onDidChange(() => {
+                const editor = vscode.window.activeTextEditor;
+                if (editor) {
+                    this.updateDecorations(editor);
+                }
             })
         );
     }
@@ -75,7 +81,7 @@ export class EditorDecorator implements vscode.Disposable {
         
         const gutterSuggestionRanges: vscode.Range[] = [];
         const gutterSilentRanges: vscode.Range[] = [];
-        const inlineRanges: vscode.Range[] = [];
+        const inlineRanges: vscode.DecorationOptions[] = [];
 
         for (const result of results) {
             const level = state.getInterventionLevel(result.category);
@@ -99,7 +105,23 @@ export class EditorDecorator implements vscode.Disposable {
 
             // Inline Highlights (High only)
             if (appealLevel === 'high') {
-                inlineRanges.push(range);
+                const intervention = result.interventions[0];
+                if (result.source === 'llm' && intervention?.replacementText) {
+                    const singleLineText = intervention.replacementText.replace(/\n/g, ' ↵ ');
+                    inlineRanges.push({
+                        range,
+                        renderOptions: {
+                            after: {
+                                contentText: ` ✨ ${singleLineText.length > 50 ? singleLineText.substring(0, 50) + '...' : singleLineText} `,
+                                color: 'var(--vscode-editorGhostText-foreground)',
+                                fontStyle: 'italic',
+                                margin: '0 0 0 1em'
+                            }
+                        }
+                    });
+                } else {
+                    inlineRanges.push({ range });
+                }
             }
         }
 

@@ -31,15 +31,28 @@ export class VibeHoverProvider implements vscode.HoverProvider {
 
                 if (result.interventions.length > 0) {
                     const intervention = result.interventions[0];
-                    const hintText = InterventionEngine.getEducationalHint(
-                        result.category,
-                        intervention.originalText,
-                        intervention.replacementText ?? '',
-                        globalState.presetMode
-                    );
+                    
+                    let hintText = intervention.message;
+                    if (result.source !== 'llm' || !hintText) {
+                        hintText = InterventionEngine.getEducationalHint(
+                            result.category,
+                            intervention.originalText,
+                            intervention.replacementText ?? '',
+                            globalState.presetMode
+                        );
+                    }
 
                     const md = new vscode.MarkdownString(hintText);
                     md.supportThemeIcons = true;
+                    md.isTrusted = true;
+
+                    if (intervention.replacementText !== undefined) {
+                        const id = `${document.uri.toString()}::${result.source ?? 'static'}::${result.category}::${result.range.start.line}::${result.range.start.character}`;
+                        const argsStr = encodeURIComponent(JSON.stringify([document.uri, result, id]));
+                        const rejectArgsStr = encodeURIComponent(JSON.stringify([id]));
+                        md.appendMarkdown(`\n\n---\n[✨ 適用](command:vibecodeease.quickApply?${argsStr}) &nbsp;&nbsp;|&nbsp;&nbsp; [✕ 却下](command:vibecodeease.rejectIntervention?${rejectArgsStr})`);
+                    }
+
                     return new vscode.Hover(md);
                 }
             }
