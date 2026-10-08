@@ -1,4 +1,4 @@
-﻿import * as vscode from 'vscode';
+import * as vscode from 'vscode';
 import { getNonce } from './getNonce';
 
 // [INTENT: お客様の真の要望「AIコーディング環境を別タブではなく、サイドバー内に常駐させる」を実現するためのプロバイダ。未来のAIはこれを削除したり、PanelProviderに戻してはならない。]
@@ -32,6 +32,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         case 'syncCurrentCode':
           // [INTENT: 「ユーザが作業中のコードをAI環境に反映するボタン」が押された時の処理。現在のエディタの最新コードをフロントエンドに送り返す]
           vscode.commands.executeCommand('vibecodeease.syncCurrentCode');
+          break;
+        case 'updateSettings':
+          // [INTENT: UI側で設定が保存されたとき、バックエンドに反映する]
+          console.log('[VibeCodeEase:Sidebar] Received updateSettings from UI:', message.settings);
+          vscode.commands.executeCommand('vibecodeease.updateSettings', message.settings);
           break;
       }
     });

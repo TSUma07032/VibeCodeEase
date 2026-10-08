@@ -1,14 +1,31 @@
-﻿import * as vscode from 'vscode';
+import * as vscode from 'vscode';
 import { SidebarProvider } from '../vscode-utils/SidebarProvider';
 import { GeminiClient } from './llm/geminiClient';
 import { INTERVENTION_RESPONSE_SCHEMA } from './llm/promptBuilder';
+
+export type InterventionMode = 'hinting' | 'silent_fixer' | 'architect';
 
 export interface LlmSettings {
   llmModel: string;
   llmApiKey: string;
   triggerMode: 'on-save' | 'interval-10s' | 'disabled';
+  interventionMode?: InterventionMode;
 }
 
+/**
+ * @AI_AGENT_NOTE LlmBackgroundService Class
+ * ROLE: The "Git Daemon" / Background Worker for the AI Workspace.
+ * 
+ * WHY: This service listens to file changes/saves and asynchronously triggers the AI analysis (`run3LLMPipeline`).
+ * It implements the non-blocking, background nature of the Git-like workflow. The AI works on a "remote branch",
+ * meaning it never directly edits the user's active VS Code editor unless the user explicitly pulls the change (`recordAccept`).
+ * 
+ * HINTS FOR FUTURE AGENTS:
+ * - `run3LLMPipeline`: Uses `getPromptByMode()` to adjust its LLM instructions based on `InterventionMode`.
+ * - `recordAccept`: This is the equivalent of a `git pull`. It maps the `proposal.proposedText` back to the user's local VS Code editor. 
+ *   Be careful with the edit logic here; it currently checks if the local code has diverged (`currentText === proposal.originalText`) 
+ *   to prevent merge conflicts, which is a crucial safety mechanism!
+ */
 export class LlmBackgroundService implements vscode.Disposable {
   private _tokenSource: vscode.CancellationTokenSource | null = null;
   private _disposables: vscode.Disposable[] = [];
@@ -35,10 +52,16 @@ export class LlmBackgroundService implements vscode.Disposable {
         }
       }),
       vscode.workspace.onDidSaveTextDocument((document) => {
-        if (this._settings.triggerMode === 'on-save' && document.uri.scheme === 'file') {
+        if (document.uri.scheme === 'file') {
           this.lastActiveEditorCode = document.getText();
           this.lastActiveEditorUri = document.uri;
-          this.run3LLMPipeline(this.lastActiveEditorCode, this.lastActiveEditorUri);
+          
+          // User Sync / Push (Silent sync to AI workspace)
+          vscode.commands.executeCommand('vibecodeease.syncCurrentCode');
+          
+          if (this._settings.triggerMode === 'on-save') {
+            this.run3LLMPipeline(this.lastActiveEditorCode, this.lastActiveEditorUri);
+          }
         }
       })
     );
@@ -52,6 +75,7 @@ export class LlmBackgroundService implements vscode.Disposable {
   }
 
   public updateSettings(settings: LlmSettings) {
+    console.log('[VibeCodeEase:Service] updateSettings received:', settings);
     this._settings = settings;
     this.updateTriggerLogic();
   }
@@ -78,6 +102,19 @@ export class LlmBackgroundService implements vscode.Disposable {
     }
   }
 
+  private getPromptByMode(): string {
+    const mode = this._settings.interventionMode || 'silent_fixer';
+    switch (mode) {
+      case 'hinting':
+        return 'Review the code and provide gentle hints or point out potential issues without rewriting large parts of the code. Focus on educational feedback.';
+      case 'architect':
+        return 'Review the code aggressively for architectural improvements, design patterns, and large-scale refactoring opportunities. Suggest bold structural changes.';
+      case 'silent_fixer':
+      default:
+        return 'Review the code and quietly fix typos, lint errors, or minor bugs without making unnecessary structural changes.';
+    }
+  }
+
   public async run3LLMPipeline(code: string, documentUri: vscode.Uri) {
     this.cancelAnalysis();
     this._tokenSource = new vscode.CancellationTokenSource();
@@ -91,44 +128,70 @@ export class LlmBackgroundService implements vscode.Disposable {
 
       this.sendStageUpdate('AI Analysis (Gemini)...');
       
-      const prompt = `Review the following code and suggest ONE holistic improvement (refactoring, bug fix, or optimization). Return JSON conforming to the schema.
-Schema:
-${JSON.stringify(INTERVENTION_RESPONSE_SCHEMA)}
-
-Code:
-${code}`;
-
+      const modePrompt = this.getPromptByMode();
+      const prompt = `${modePrompt} Suggest ONE holistic improvement. Return JSON conforming to the schema.\n\nIMPORTANT: The 'oldText' in your edits MUST EXACTLY match a substring of the original code, including all whitespaces and indentation. Do not omit any characters. If you want to replace a block, include the entire block exactly as it appears in the code.\n\nSchema:\n${JSON.stringify(INTERVENTION_RESPONSE_SCHEMA)}\n\nCode:\n${code}`;
+      
+      console.log('[VibeCodeEase:Service] Calling GeminiClient.generate with model:', this._settings.llmModel);
       const response = await this._geminiClient.generate(prompt, apiKey, token, this._settings.llmModel) as any;
-      if (token.isCancellationRequested) return;
+      console.log('[VibeCodeEase:Service] GeminiClient.generate returned:', response);
+      if (token.isCancellationRequested) {
+        console.log('[VibeCodeEase:Service] Token was cancelled after response.');
+        return;
+      }
 
       let proposedText = code;
       let explanation = response.summary || 'No summary provided.';
       
       if (response.edits && Array.isArray(response.edits) && response.edits.length > 0) {
           const edit = response.edits[0];
+          console.log('[VibeCodeEase:Service] Applying edit:', { oldText: edit.oldText, newText: edit.newText });
           if (edit.newText && edit.oldText) {
-              proposedText = code.replace(edit.oldText, edit.newText);
+              const normalizedCode = code.replace(/\r\n/g, '\n');
+              const normalizedOld = edit.oldText.replace(/\r\n/g, '\n');
+              
+              if (normalizedCode.includes(normalizedOld)) {
+                  proposedText = normalizedCode.replace(normalizedOld, edit.newText);
+                  console.log('[VibeCodeEase:Service] Replace successful.');
+              } else {
+                  console.warn('[VibeCodeEase:Service] Replace failed: oldText not found in the code.');
+              }
               explanation += `\n\nReason: ${edit.reason || 'N/A'}`;
           }
       }
 
+      console.log('[VibeCodeEase:Service] proposedText === code ?', proposedText === code, 'proposedText === normalizedCode ?', proposedText === code.replace(/\r\n/g, '\n'));
+      if (proposedText === code || proposedText === code.replace(/\r\n/g, '\n')) {
+        // No changes made by AI or failed to apply patch
+        if (SidebarProvider.currentView) {
+            console.log('[VibeCodeEase:Service] No changes applied. Notifying UI.');
+            SidebarProvider.currentView.sendToWebview('aiStageUpdate', { stage: '' });
+            SidebarProvider.currentView.sendToWebview('aiProposalsError', { error: 'AI made no changes, or failed to match the existing code for replacement.' });
+        }
+        return;
+      }
+
+      console.log('[VibeCodeEase:Service] Creating proposal...');
       const proposal = {
         id: Date.now().toString(),
         originalText: code,
         proposedText: proposedText,
-        explanation: explanation,
+        explanation: `[${this._settings.interventionMode || 'silent_fixer'}] ${explanation}`,
         status: 'pending',
-        documentUri: documentUri.toString()
+        documentUri: documentUri.toString(),
+        isAiPush: true
       };
 
       if (SidebarProvider.currentView) {
+        console.log('[VibeCodeEase:Service] Sending aiProposalsComplete', proposal);
         SidebarProvider.currentView.sendToWebview('aiProposalsComplete', { proposals: [proposal] });
       }
 
     } catch (e: unknown) {
       if (e instanceof vscode.CancellationError || token.isCancellationRequested) {
+         console.log('[VibeCodeEase:Service] Pipeline cancelled.', e);
          return;
       }
+      console.error('[VibeCodeEase:Service] Error in run3LLMPipeline:', e);
       if (SidebarProvider.currentView) {
         const msg = e instanceof Error ? e.message : String(e);
         SidebarProvider.currentView.sendToWebview('aiProposalsError', { error: msg });
@@ -142,10 +205,8 @@ ${code}`;
   }
 
   public async recordAccept(proposal: any) {
-    vscode.window.setStatusBarMessage('$(database) Vector DB: Saved Accept history', 3000);
+    vscode.window.setStatusBarMessage('$(git-pull-request) AI Workspace: Pulled changes', 3000);
     
-    // In a real architecture, we would just emit an event or return a WorkspaceEdit.
-    // For now, doing it here to keep it simple but adding a TODO based on architecture review.
     if (proposal.documentUri) {
       const uri = vscode.Uri.parse(proposal.documentUri);
       const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === uri.toString());
@@ -162,12 +223,12 @@ ${code}`;
           });
           this.lastActiveEditorCode = proposal.proposedText;
         } else {
-          vscode.window.showWarningMessage('Code has changed since proposal. Manual merge needed.');
+          vscode.window.showWarningMessage('Code has changed since AI pushed. Manual merge needed.');
         }
       }
     }
 
-    const newTrend = `Updated ${new Date().toLocaleTimeString()}: User prefers backend refactoring.`;
+    const newTrend = `Updated ${new Date().toLocaleTimeString()}: User pulled from AI Workspace.`;
     if (SidebarProvider.currentView) {
       SidebarProvider.currentView.sendToWebview('personalizationUpdated', { trend: newTrend });
     }
@@ -187,6 +248,3 @@ ${code}`;
     this._disposables.forEach(d => d.dispose());
   }
 }
-
-
-

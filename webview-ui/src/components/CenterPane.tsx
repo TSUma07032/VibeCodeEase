@@ -1,4 +1,4 @@
-﻿import type { Proposal } from '../types/index';
+import type { Proposal } from '../types/index';
 import { DiffView } from './DiffView';
 import { getVSCodeAPI } from '../vscode';
 import { useState } from 'react';
@@ -12,7 +12,21 @@ interface CenterPaneProps {
   onDismiss: (id: string) => void;
 }
 
-// [INTENT: お客様の真の要望「同期されたコードが表示され、そこに対する差分が履歴として蓄積されるGitHub風UI」を実現するためのコンポーネント]
+/**
+ * @AI_AGENT_NOTE CenterPane Component
+ * ROLE: This component serves as the "Commit History" or "Pull Request" view in the Git-like AI Workspace.
+ * 
+ * WHY: Instead of automatically overwriting the user's local code (which is intrusive), 
+ * the AI and the User "push" to a shared workspace timeline. This CenterPane visualizes these pushes 
+ * (both `User Sync` and `AI Push`) as a timeline. The user can then explicitly "Pull (Cherry-pick)" 
+ * changes back to their local editor.
+ * 
+ * HINTS FOR FUTURE AGENTS:
+ * - `proposals` array acts like a Git commit log.
+ * - `isAiPush` determines the icon (✨ for AI, 📝 for User) and label.
+ * - If you modify the DiffView or how proposals are accepted, remember that we are strictly adhering 
+ *   to a pull-based (opt-in) model to maintain user trust and control.
+ */
 export function CenterPane({ proposals, currentSyncCode, currentStage, isProcessing, onAccept, onDismiss }: CenterPaneProps) {
   const [expandedReasons, setExpandedReasons] = useState<Set<string>>(new Set());
 
@@ -26,7 +40,6 @@ export function CenterPane({ proposals, currentSyncCode, currentStage, isProcess
   };
 
   const handleForceAnalyze = () => {
-    // [INTENT: 「今すぐ介入」ボタン。同期されたコードまたは現在のエディタのコードを分析に回す]
     getVSCodeAPI().postMessage({ command: 'forceAnalyze', code: currentSyncCode });
   };
 
@@ -34,7 +47,7 @@ export function CenterPane({ proposals, currentSyncCode, currentStage, isProcess
     <div className="pane center-pane" style={{ padding: '10px' }}>
       <div className="status-bar" style={{ marginBottom: '10px' }}>
         <span className="status-indicator" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div className={`led ${isProcessing ? 'blinking' : 'on'}`} />
+          <div className={`led ${isProcessing ? 'active' : ''}`} />
           {isProcessing ? currentStage : 'AI Idle'}
         </span>
         <button className="secondary" onClick={handleForceAnalyze} disabled={isProcessing}>
@@ -58,31 +71,45 @@ export function CenterPane({ proposals, currentSyncCode, currentStage, isProcess
         </div>
       )}
 
-      <div className="proposals-list" style={{ display: 'flex', flexDirection: 'column-reverse', gap: '15px' }}>
+      <div className="timeline" style={{ display: 'flex', flexDirection: 'column-reverse', gap: '15px' }}>
         {proposals.map(p => (
-          <div key={p.id} className="proposal-card" style={{ border: '1px solid var(--vscode-editorGroup-border)', background: 'var(--vscode-editor-background)', borderRadius: '4px', overflow: 'hidden' }}>
-            <div 
-              className="proposal-header" 
-              onClick={() => toggleReason(p.id)}
-              style={{ padding: '8px 12px', background: 'var(--vscode-editorGroupHeader-tabsBackground)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}
-            >
-              <span>{expandedReasons.has(p.id) ? '▼' : '▶'} Reason / Memo</span>
-              <span style={{ fontSize: '0.8em', opacity: 0.6 }}>{new Date(parseInt(p.id)).toLocaleTimeString()}</span>
+          <div key={p.id} className="timeline-item" style={{ display: 'flex', gap: '10px' }}>
+            <div className="timeline-marker" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{ fontSize: '1.2em' }}>{p.isAiPush ? '✨' : '📝'}</div>
+              <div style={{ flex: 1, width: '2px', background: 'var(--vscode-editorGroup-border)', margin: '5px 0' }} />
             </div>
             
-            {expandedReasons.has(p.id) && (
-              <div className="proposal-reason" style={{ padding: '10px', borderBottom: '1px solid var(--vscode-editorGroup-border)', fontSize: '0.9em', color: 'var(--vscode-descriptionForeground)' }}>
-                {p.explanation}
+            <div className="proposal-card" style={{ flex: 1, border: '1px solid var(--vscode-editorGroup-border)', background: 'var(--vscode-editor-background)', borderRadius: '4px', overflow: 'hidden' }}>
+              <div 
+                className="proposal-header" 
+                onClick={() => toggleReason(p.id)}
+                style={{ padding: '8px 12px', background: 'var(--vscode-editorGroupHeader-tabsBackground)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+              >
+                <div>
+                  <strong>{p.isAiPush ? 'AI Push' : 'User Sync'}</strong> 
+                  <span style={{ marginLeft: '10px', fontSize: '0.9em' }}>{expandedReasons.has(p.id) ? '▼' : '▶'}</span>
+                </div>
+                <span style={{ fontSize: '0.8em', opacity: 0.6 }}>{new Date(parseInt(p.id)).toLocaleTimeString()}</span>
               </div>
-            )}
+              
+              {expandedReasons.has(p.id) && (
+                <div className="proposal-reason" style={{ padding: '10px', borderBottom: '1px solid var(--vscode-editorGroup-border)', fontSize: '0.9em', color: 'var(--vscode-descriptionForeground)' }}>
+                  {p.explanation}
+                </div>
+              )}
 
-            <div className="proposal-diff" style={{ padding: '10px', fontSize: '12px', overflowX: 'auto' }}>
-              <DiffView original={p.originalText} proposed={p.proposedText} />
-            </div>
-            
-            <div className="proposal-actions" style={{ padding: '10px', display: 'flex', gap: '10px', borderTop: '1px solid var(--vscode-editorGroup-border)' }}>
-              <button onClick={() => onAccept(p)} style={{ flex: 1 }}>✅ Accept & Merge</button>
-              <button className="secondary" onClick={() => onDismiss(p.id)} style={{ padding: '4px 12px' }}>Dismiss</button>
+              {expandedReasons.has(p.id) && p.originalText !== p.proposedText && (
+                <div className="proposal-diff" style={{ padding: '10px', fontSize: '12px', overflowX: 'auto' }}>
+                  <DiffView original={p.originalText} proposed={p.proposedText} />
+                </div>
+              )}
+              
+              {p.originalText !== p.proposedText && (
+                <div className="proposal-actions" style={{ padding: '10px', display: 'flex', gap: '10px', borderTop: '1px solid var(--vscode-editorGroup-border)' }}>
+                  <button onClick={() => onAccept(p)} style={{ flex: 1 }}>⬇️ Pull (Cherry-pick)</button>
+                  <button className="secondary" onClick={() => onDismiss(p.id)} style={{ padding: '4px 12px' }}>Dismiss</button>
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -90,4 +117,3 @@ export function CenterPane({ proposals, currentSyncCode, currentStage, isProcess
     </div>
   );
 }
-

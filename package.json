@@ -74,7 +74,7 @@
         },
         "vibecodeease.llmModel": {
           "type": "string",
-          "default": "gemini-2.5-flash",
+          "default": "gemini-3.6-flash",
           "description": "LLM Model to use (e.g. gemini-2.5-flash, gpt-4o)"
         }
       }

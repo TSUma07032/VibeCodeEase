@@ -1,4 +1,4 @@
-import * as vscode from 'vscode';
+﻿import * as vscode from 'vscode';
 import * as https from 'https';
 import { URL } from 'url';
 import { INTERVENTION_RESPONSE_SCHEMA } from './promptBuilder';
@@ -15,6 +15,7 @@ interface GeminiModelsResponse {
 export class GeminiClient {
     private readonly preferredNames = [
         'gemini-3.6-flash',
+        'gemini-3.5-flash',
         'gemini-2.5-flash',
         'gemini-2.0-flash',
         'gemini-1.5-flash'
@@ -24,14 +25,19 @@ export class GeminiClient {
      * Gemini APIへリクエストを送信し、生成された未検証のJSONレスポンスオブジェクトを返す
      */
     public async generate(prompt: string, apiKey: string, token: vscode.CancellationToken, modelName?: string): Promise<unknown> {
+        console.log('[VibeCodeEase:GeminiClient] generate called with modelName:', modelName);
         const candidateModels = await this.discoverModels(apiKey, token, modelName);
+        console.log('[VibeCodeEase:GeminiClient] candidateModels:', candidateModels.map(m => m.name));
 
         for (const model of candidateModels) {
+            console.log(`[VibeCodeEase:GeminiClient] Sending generateContent request to: ${model.name}`);
             const response = await this.request(
                 `https://generativelanguage.googleapis.com/v1beta/${model.name}:generateContent?key=${encodeURIComponent(apiKey)}`,
                 {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
                 },
                 token,
                 JSON.stringify({
@@ -43,7 +49,8 @@ export class GeminiClient {
                 })
             );
 
-            if (response.statusCode === 404) {
+            if (response.statusCode === 404 && (!modelName || modelName === "auto")) {
+                console.log(`[VibeCodeEase:GeminiClient] Model ${model.name} returned 404. Falling back to next model...`);
                 continue;
             }
             if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -76,17 +83,20 @@ export class GeminiClient {
 
         const models = (JSON.parse(modelsResponse.body) as GeminiModelsResponse).models ?? [];
         const availableModels = models.filter((model) => model.supportedGenerationMethods?.includes('generateContent'));
+        console.log('[VibeCodeEase:GeminiClient] API available models:', availableModels.map(m => m.name));
         
-        let prefs = [...this.preferredNames];
-        if (targetModelName && targetModelName !== 'auto') {
-            prefs.unshift(targetModelName);
+        if (targetModelName && targetModelName !== "auto") {
+            const exactModel = availableModels.find(m => m.name.endsWith("/" + targetModelName));
+            return exactModel ? [exactModel] : [{ name: `models/${targetModelName}` }];
         }
+        let prefs = [...this.preferredNames];
+        console.log('[VibeCodeEase:GeminiClient] Model search preferences:', prefs);
 
         const preferredModels = prefs
             .map((preferredName) => availableModels.find((model) => model.name.endsWith(`/${preferredName}`)))
             .filter((model): model is GeminiModel => model !== undefined);
 
-        // ⚡ Bolt: $O(n^2)$ の Array.includes を $O(n)$ の Set.has ルックアップに置き換え
+        // ⚡ Bolt: O(n^2) の Array.includes を O(n) の Set.has ルックアップに置き換え
         // Benchmark: モデル探索におけるフィルタリングの計算量を削減し、APIクライアントの初期化を高速化
         const preferredModelsSet = new Set(preferredModels);
         const candidateModels = [...preferredModels, ...availableModels.filter((model) => !preferredModelsSet.has(model))];

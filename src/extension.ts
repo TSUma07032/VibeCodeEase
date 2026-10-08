@@ -1,4 +1,4 @@
-﻿import * as vscode from 'vscode';
+import * as vscode from 'vscode';
 import { SidebarProvider } from './vscode-utils/SidebarProvider';
 import { LlmBackgroundService, LlmSettings } from './core/llmBackgroundService';
 
@@ -10,7 +10,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	let currentSettings: LlmSettings = { 
 		llmApiKey: savedApiKey || '',
 		llmModel: savedSettings.llmModel || 'auto', 
-		triggerMode: savedSettings.triggerMode || 'on-save' 
+		triggerMode: savedSettings.triggerMode || 'on-save',
+		interventionMode: savedSettings.interventionMode || 'silent_fixer'
 	};
 
 	const llmBackgroundService = new LlmBackgroundService(currentSettings);
@@ -47,8 +48,14 @@ export async function activate(context: vscode.ExtensionContext) {
 			}
 		}),
 		vscode.commands.registerCommand('vibecodeease.updateSettings', async (settings: LlmSettings) => {
+			console.log('[VibeCodeEase:Extension] Executing updateSettings command with:', settings);
 			currentSettings = { ...currentSettings, ...settings };
-			await context.globalState.update('vibecodeease.settings', { triggerMode: currentSettings.triggerMode, llmModel: currentSettings.llmModel });
+			console.log('[VibeCodeEase:Extension] Merged currentSettings:', currentSettings);
+			await context.globalState.update('vibecodeease.settings', { 
+				triggerMode: currentSettings.triggerMode, 
+				llmModel: currentSettings.llmModel,
+				interventionMode: currentSettings.interventionMode 
+			});
 			if (currentSettings.llmApiKey) {
 				await context.secrets.store('vibecodeease.llmApiKey', currentSettings.llmApiKey);
 			} else {
@@ -62,4 +69,3 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {}
-
