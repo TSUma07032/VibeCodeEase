@@ -8,7 +8,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	const savedApiKey = await context.secrets.get('vibecodeease.llmApiKey');
 	
 	let currentSettings: LlmSettings = { 
-		llmApiKey: savedApiKey || '', 
+		llmApiKey: savedApiKey || '',
+		llmModel: savedSettings.llmModel || 'auto', 
 		triggerMode: savedSettings.triggerMode || 'on-save' 
 	};
 
@@ -47,7 +48,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 		vscode.commands.registerCommand('vibecodeease.updateSettings', async (settings: LlmSettings) => {
 			currentSettings = { ...currentSettings, ...settings };
-			await context.globalState.update('vibecodeease.settings', { triggerMode: currentSettings.triggerMode });
+			await context.globalState.update('vibecodeease.settings', { triggerMode: currentSettings.triggerMode, llmModel: currentSettings.llmModel });
 			if (currentSettings.llmApiKey) {
 				await context.secrets.store('vibecodeease.llmApiKey', currentSettings.llmApiKey);
 			} else {
@@ -61,3 +62,4 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {}
+

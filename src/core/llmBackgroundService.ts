@@ -4,6 +4,7 @@ import { GeminiClient } from './llm/geminiClient';
 import { INTERVENTION_RESPONSE_SCHEMA } from './llm/promptBuilder';
 
 export interface LlmSettings {
+  llmModel: string;
   llmApiKey: string;
   triggerMode: 'on-save' | 'interval-10s' | 'disabled';
 }
@@ -97,7 +98,7 @@ ${JSON.stringify(INTERVENTION_RESPONSE_SCHEMA)}
 Code:
 ${code}`;
 
-      const response = await this._geminiClient.generate(prompt, apiKey, token) as any;
+      const response = await this._geminiClient.generate(prompt, apiKey, token, this._settings.llmModel) as any;
       if (token.isCancellationRequested) return;
 
       let proposedText = code;
@@ -186,5 +187,6 @@ ${code}`;
     this._disposables.forEach(d => d.dispose());
   }
 }
+
 
 

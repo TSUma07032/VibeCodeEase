@@ -19,6 +19,19 @@ export function RightPane({ isOpen, settings, onSettingsChange, onToggle }: Righ
     getVSCodeAPI().postMessage({ command: 'webviewReady' }); // triggers loadSettings
   };
 
+  const MODELS = [
+    { value: 'auto', label: 'Auto (Recommended)' },
+    { value: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
+    { value: 'gemini-3.6-pro', label: 'Gemini 3.6 Pro' },
+    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+    { value: 'gemini-2.0-pro', label: 'Gemini 2.0 Pro' },
+    { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
+    { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+    { value: 'gemini-1.0-pro', label: 'Gemini 1.0 Pro' }
+  ];
+
   return (
     <div className="pane right-pane">
       <div className="settings-header">
@@ -38,6 +51,20 @@ export function RightPane({ isOpen, settings, onSettingsChange, onToggle }: Righ
         <div style={{ fontSize: '0.75em', marginTop: '4px', opacity: 0.7 }}>
           Required for generating advanced proposals.
         </div>
+      </div>
+
+      <div className="settings-group">
+        <label>🤖 LLM Model</label>
+        <select
+          className="vscode-select"
+          value={settings.llmModel || 'auto'}
+          onChange={(e) => onSettingsChange({ ...settings, llmModel: e.target.value })}
+          style={{ width: '100%', padding: '4px', marginTop: '4px', backgroundColor: 'var(--vscode-input-background)', color: 'var(--vscode-input-foreground)', border: '1px solid var(--vscode-input-border)' }}
+        >
+          {MODELS.map(m => (
+            <option key={m.value} value={m.value}>{m.label}</option>
+          ))}
+        </select>
       </div>
 
       <div className="settings-group">
@@ -71,7 +98,7 @@ export function RightPane({ isOpen, settings, onSettingsChange, onToggle }: Righ
       
       <div style={{ flex: 1 }} />
       <div style={{ fontSize: '0.7em', opacity: 0.5, textAlign: 'center' }}>
-        VibeCodeEase Core v0.7
+        VibeCodeEase Core v0.8
       </div>
     </div>
   );

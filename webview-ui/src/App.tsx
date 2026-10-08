@@ -12,7 +12,8 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>({
     triggerMode: 'on-save',
     personalizationTrend: 'Standard mode. Adapting to user...',
-    llmApiKey: ''
+    llmApiKey: '',
+    llmModel: 'auto'
   });
   
   const [currentSyncCode, setCurrentSyncCode] = useState<string>('');
@@ -99,3 +100,4 @@ export default function App() {
     </div>
   );
 }
+
