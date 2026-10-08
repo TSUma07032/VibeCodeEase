@@ -16,6 +16,7 @@ export class LlmBackgroundService implements vscode.Disposable {
     private _lastAnalysisTime = 0;
     private _lastAnalyzedContent = new Map<string, string>();
     private _lastAnalyzedVersion = new Map<string, number>();
+    private _backoffUntil = 0;
 
     // 現在実行中の解析をキャンセルするためのトークンソース
     private _cancellationTokenSource?: vscode.CancellationTokenSource;
@@ -92,6 +93,10 @@ export class LlmBackgroundService implements vscode.Disposable {
     private async _runAnalysis(document: vscode.TextDocument) {
         const uri = document.uri.toString();
         
+        if (Date.now() < this._backoffUntil) {
+            return;
+        }
+
         // 🛡️ Sentinel: 機密ファイルはスキップ (.envなど)
         if (document.fileName.includes('.env') || document.languageId === 'secrets') {
             return;
@@ -186,8 +191,12 @@ export class LlmBackgroundService implements vscode.Disposable {
                 const errorMessage = error instanceof Error ? error.message : String(error);
                 this._onDidError.fire(errorMessage);
                 
-                if (errorMessage.includes('503') || errorMessage.includes('429')) {
+                if (errorMessage.toLowerCase().includes('quota')) {
+                    vscode.window.setStatusBarMessage(`$(error) AI API Quota 超過: プランまたは課金情報を確認してください`, 10000);
+                    this._backoffUntil = Date.now() + 1000 * 60 * 5; // 5分間バックオフ
+                } else if (errorMessage.includes('503') || errorMessage.includes('429')) {
                     vscode.window.setStatusBarMessage(`$(error) AI通信エラー: サーバーが混雑しています (${errorMessage.includes('503') ? '503' : '429'})`, 10000);
+                    this._backoffUntil = Date.now() + 1000 * 60; // 1分間バックオフ
                 } else {
                     vscode.window.setStatusBarMessage('$(error) AI通信エラー: 解析に失敗しました', 5000);
                 }

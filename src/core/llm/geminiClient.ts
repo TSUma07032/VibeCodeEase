@@ -155,6 +155,10 @@ export class GeminiClient {
             const response = await this.doRequest(urlString, options, token, body);
             
             if ((response.statusCode === 503 || response.statusCode === 429) && attempt < maxRetries && !token.isCancellationRequested) {
+                // Quota exceeded の場合はリトライしない
+                if (response.body.toLowerCase().includes('quota')) {
+                    return response;
+                }
                 attempt++;
                 const delayMs = attempt === 1 ? 2000 : 4000;
                 await new Promise(resolve => setTimeout(resolve, delayMs));
