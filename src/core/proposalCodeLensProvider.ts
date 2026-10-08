@@ -57,6 +57,13 @@ export class ProposalCodeLensProvider implements vscode.CodeLensProvider, vscode
             if (result.interventions.length > 0 && result.interventions[0].replacementText !== undefined) {
                 const id = `${document.uri.toString()}::${result.source ?? 'static'}::${result.category}::${result.range.start.line}::${result.range.start.character}`;
                 
+                // 差分を確認
+                codeLenses.push(new vscode.CodeLens(range, {
+                    title: "🔍 差分を確認",
+                    command: 'vibecodeease.showDiff',
+                    arguments: []
+                }));
+
                 // クイック適用
                 codeLenses.push(new vscode.CodeLens(range, {
                     title: `✨ クイック適用 (${result.category})`,
@@ -88,4 +95,5 @@ export class ProposalCodeLensProvider implements vscode.CodeLensProvider, vscode
         this.disposables.forEach(d => d.dispose());
     }
 }
+
 

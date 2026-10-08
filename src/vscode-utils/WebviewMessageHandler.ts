@@ -119,6 +119,10 @@ export class WebviewMessageHandler {
                 }
                 break;
             }
+            case 'SHOW_DIFF': {
+                await vscode.commands.executeCommand('vibecodeease.showDiff');
+                break;
+            }
             case 'ANALYZE_CURRENT_FILE': {
                 await this.handleAnalyzeCurrentFile(webview);
                 break;
@@ -444,4 +448,5 @@ export class WebviewMessageHandler {
         );
     }
 }
+
 

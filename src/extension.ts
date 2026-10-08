@@ -14,6 +14,7 @@ import { EditorDecorator } from './core/editorDecorator';
 import { ProposalCodeLensProvider } from './core/proposalCodeLensProvider';
 import { AnalysisResult } from './types';
 import { findOriginalTextRange } from './core/llm/planValidator';
+import { DiffProvider, DIFF_SCHEME } from './core/diffProvider';
 
 import { registerCommands } from './commands';
 
@@ -39,6 +40,19 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const silentFixService = new SilentFixService(personalizationService);
 	const codeLensProvider = new ProposalCodeLensProvider(personalizationService);
+
+	const diffProvider = new DiffProvider();
+	context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(DIFF_SCHEME, diffProvider));
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand('vibecodeease.showDiff', async () => {
+			const editor = vscode.window.activeTextEditor;
+			if (!editor) return;
+			const uri = editor.document.uri;
+			const modifiedUri = vscode.Uri.parse("${DIFF_SCHEME}://modified${uri.path}");
+			await vscode.commands.executeCommand('vscode.diff', uri, modifiedUri, "\$(uri.path.split('/').pop()) (Original ↔ AI Proposed)");
+		})
+	);
 
 	// 保存時自動修正（SILENT）のコールバック配線
 	silentFixService.setOnFixAppliedCallback((fixCount, docUri) => {
@@ -303,5 +317,6 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {}
+
 
 
