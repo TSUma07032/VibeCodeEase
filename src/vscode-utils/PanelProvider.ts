@@ -1,13 +1,14 @@
-import * as vscode from 'vscode';
+﻿import * as vscode from 'vscode';
 import { getNonce } from './getNonce';
 
 export class PanelProvider {
   public static currentPanel: PanelProvider | undefined;
   private readonly _panel: vscode.WebviewPanel;
+  private readonly _context: vscode.ExtensionContext;
   private readonly _extensionUri: vscode.Uri;
   private _disposables: vscode.Disposable[] = [];
 
-  public static createOrShow(extensionUri: vscode.Uri) {
+  public static createOrShow(context: vscode.ExtensionContext) {
     const column = vscode.window.activeTextEditor
       ? vscode.window.activeTextEditor.viewColumn
       : undefined;
@@ -24,16 +25,17 @@ export class PanelProvider {
       {
         enableScripts: true,
         retainContextWhenHidden: true,
-        localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'webview-ui', 'dist')],
+        localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'webview-ui', 'dist')],
       }
     );
 
-    PanelProvider.currentPanel = new PanelProvider(panel, extensionUri);
+    PanelProvider.currentPanel = new PanelProvider(panel, context);
   }
 
-  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
+  private constructor(panel: vscode.WebviewPanel, context: vscode.ExtensionContext) {
     this._panel = panel;
-    this._extensionUri = extensionUri;
+    this._context = context;
+    this._extensionUri = context.extensionUri;
 
     this._update();
 
@@ -50,10 +52,15 @@ export class PanelProvider {
             vscode.commands.executeCommand('vibecodeease.recordAccept', message.proposal, message.codeBefore);
             break;
           case 'updateSettings':
+            
             vscode.commands.executeCommand('vibecodeease.updateSettings', message.settings);
             break;
           case 'forceAnalyze':
             vscode.commands.executeCommand('vibecodeease.forceAnalyze', message.code, message.documentUri);
+            break;
+          case 'webviewReady':
+            vscode.commands.executeCommand('vibecodeease.webviewReady');
+            
             break;
         }
       },
@@ -107,3 +114,4 @@ export class PanelProvider {
       </html>`;
   }
 }
+

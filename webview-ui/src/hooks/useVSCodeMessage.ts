@@ -1,17 +1,19 @@
-﻿import { useEffect } from 'react';
+import { useEffect } from 'react';
 import type { Proposal } from '../types/index';
 
 type MessagePayload = 
   | { command: 'aiStageUpdate'; data: { stage: string } }
   | { command: 'aiProposalsComplete'; data: { proposals: Proposal[] } }
   | { command: 'personalizationUpdated'; data: { trend: string } }
-  | { command: 'aiProposalsError'; data: { error: string } };
+  | { command: 'aiProposalsError'; data: { error: string } }
+  | { command: 'loadSettings'; data: any };
 
 export function useVSCodeMessage(handlers: {
   onStageUpdate: (stage: string) => void;
   onProposalsComplete: (proposals: Proposal[]) => void;
   onPersonalizationUpdated: (trend: string) => void;
   onError: (error: string) => void;
+  onLoadSettings?: (settings: any) => void;
 }) {
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -28,6 +30,9 @@ export function useVSCodeMessage(handlers: {
           break;
         case 'aiProposalsError':
           handlers.onError(message.data.error);
+          break;
+        case 'loadSettings':
+          if (handlers.onLoadSettings) handlers.onLoadSettings(message.data);
           break;
       }
     };

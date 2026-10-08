@@ -1,4 +1,4 @@
-﻿import type { Settings } from '../types/index';
+import type { Settings } from '../types/index';
 
 interface RightPaneProps {
   isOpen: boolean;
@@ -32,18 +32,19 @@ export function RightPane({ isOpen, settings, onSettingsChange, onToggle }: Righ
       </div>
 
       <div className="settings-group">
-        <label>🎚️ AI Intervention Level ({settings.interventionLevel}%)</label>
-        <input 
-          type="range" 
-          min="0" 
-          max="100" 
-          className="vscode-slider"
-          value={settings.interventionLevel}
-          onChange={(e) => onSettingsChange({ ...settings, interventionLevel: Number(e.target.value) })}
-        />
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75em', opacity: 0.7, marginTop: '4px' }}>
-          <span>Silent</span>
-          <span>Aggressive</span>
+        <label>🎚️ AI Trigger Mode</label>
+        <select
+          className="vscode-select"
+          value={settings.triggerMode}
+          onChange={(e) => onSettingsChange({ ...settings, triggerMode: e.target.value as 'on-save' | 'interval-10s' | 'disabled' })}
+          style={{ width: '100%', padding: '4px', marginTop: '4px' }}
+        >
+          <option value="on-save">On Save</option>
+          <option value="interval-10s">Interval (10s)</option>
+          <option value="disabled">Disabled</option>
+        </select>
+        <div style={{ fontSize: '0.75em', opacity: 0.7, marginTop: '4px' }}>
+          Choose when AI should analyze your code.
         </div>
       </div>
 

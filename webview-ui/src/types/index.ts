@@ -1,4 +1,4 @@
-﻿export interface Proposal {
+export interface Proposal {
   id: string;
   originalText: string;
   proposedText: string;
@@ -8,7 +8,7 @@
 }
 
 export interface Settings {
-  interventionLevel: number; // 0 to 100
+  triggerMode: 'on-save' | 'interval-10s' | 'disabled';
   personalizationTrend: string;
   llmApiKey: string; // Task 2: LLM API key setting
 }

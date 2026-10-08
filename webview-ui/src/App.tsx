@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import './App.css';
 import { CenterPane } from './components/CenterPane';
 import { RightPane } from './components/RightPane';
@@ -9,7 +9,7 @@ import { useVSCodeMessage } from './hooks/useVSCodeMessage';
 export default function App() {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [settings, setSettings] = useState<Settings>({
-    interventionLevel: 50,
+    triggerMode: 'on-save',
     personalizationTrend: 'Standard mode. Adapting to user...',
     llmApiKey: ''
   });
@@ -20,7 +20,8 @@ export default function App() {
 
   // Send initial settings
   useEffect(() => {
-    getVSCodeAPI().postMessage({ command: 'updateSettings', settings });
+    // getVSCodeAPI().postMessage({ command: 'updateSettings', settings });
+    getVSCodeAPI().postMessage({ command: 'webviewReady' });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -42,6 +43,9 @@ export default function App() {
       setIsProcessing(false);
       setCurrentStage('');
       setErrorMsg(error);
+    }, []),
+    onLoadSettings: useCallback((loadedSettings: Partial<Settings>) => {
+      setSettings(prev => ({ ...prev, ...loadedSettings }));
     }, [])
   };
 

@@ -5,15 +5,69 @@ import { INTERVENTION_RESPONSE_SCHEMA } from './llm/promptBuilder';
 
 export interface LlmSettings {
   llmApiKey: string;
-  interventionLevel: number;
+  triggerMode: 'on-save' | 'interval-10s' | 'disabled';
 }
 
 export class LlmBackgroundService implements vscode.Disposable {
   private _tokenSource: vscode.CancellationTokenSource | null = null;
   private _disposables: vscode.Disposable[] = [];
-  private _typingTimeout: NodeJS.Timeout | null = null;
-  private _lastProcessedCode: string = '';
+  public lastActiveEditorCode: string = '';
+  public lastActiveEditorUri: vscode.Uri | undefined;
   private _geminiClient = new GeminiClient();
+  private _settings: LlmSettings;
+  private _intervalTimer: NodeJS.Timeout | undefined;
+
+  constructor(settings: LlmSettings) {
+    this._settings = settings;
+
+    // Track active editor
+    this._disposables.push(
+      vscode.window.onDidChangeActiveTextEditor(editor => {
+        if (editor && editor.document.uri.scheme === 'file') {
+          this.lastActiveEditorCode = editor.document.getText();
+          this.lastActiveEditorUri = editor.document.uri;
+        }
+      }),
+      vscode.workspace.onDidChangeTextDocument((e) => {
+        if (vscode.window.activeTextEditor && e.document === vscode.window.activeTextEditor.document) {
+          this.lastActiveEditorCode = e.document.getText();
+        }
+      }),
+      vscode.workspace.onDidSaveTextDocument((document) => {
+        if (this._settings.triggerMode === 'on-save' && document.uri.scheme === 'file') {
+          this.lastActiveEditorCode = document.getText();
+          this.lastActiveEditorUri = document.uri;
+          this.run3LLMPipeline(this.lastActiveEditorCode, this.lastActiveEditorUri);
+        }
+      })
+    );
+
+    if (vscode.window.activeTextEditor && vscode.window.activeTextEditor.document.uri.scheme === 'file') {
+      this.lastActiveEditorCode = vscode.window.activeTextEditor.document.getText();
+      this.lastActiveEditorUri = vscode.window.activeTextEditor.document.uri;
+    }
+
+    this.updateTriggerLogic();
+  }
+
+  public updateSettings(settings: LlmSettings) {
+    this._settings = settings;
+    this.updateTriggerLogic();
+  }
+
+  private updateTriggerLogic() {
+    if (this._intervalTimer) {
+      clearInterval(this._intervalTimer);
+      this._intervalTimer = undefined;
+    }
+    if (this._settings.triggerMode === 'interval-10s') {
+      this._intervalTimer = setInterval(() => {
+        if (this.lastActiveEditorCode && this.lastActiveEditorUri && this.lastActiveEditorUri.scheme === 'file') {
+          this.run3LLMPipeline(this.lastActiveEditorCode, this.lastActiveEditorUri);
+        }
+      }, 10000);
+    }
+  }
 
   public cancelAnalysis() {
     if (this._tokenSource) {
@@ -23,46 +77,13 @@ export class LlmBackgroundService implements vscode.Disposable {
     }
   }
 
-  public handleDocumentChange(e: vscode.TextDocumentChangeEvent, settings: LlmSettings) {
-    if (!PanelProvider.currentPanel || e.document.uri.scheme !== 'file') {
-      return;
-    }
-
-    const currentCode = e.document.getText();
-    if (currentCode === this._lastProcessedCode) {
-      return;
-    }
-
-    this.cancelAnalysis();
-
-    if (settings.interventionLevel < 10) {
-      return;
-    }
-    
-    let debounceTime = 1500;
-    if (settings.interventionLevel < 40) {
-      debounceTime = 3000;
-    } else if (settings.interventionLevel > 80) {
-      debounceTime = 800;
-    }
-
-    if (this._typingTimeout) {
-      clearTimeout(this._typingTimeout);
-    }
-
-    this._typingTimeout = setTimeout(() => {
-      this._lastProcessedCode = currentCode;
-      this.run3LLMPipeline(currentCode, e.document.uri, settings);
-    }, debounceTime);
-  }
-
-  public async run3LLMPipeline(code: string, documentUri: vscode.Uri, settings: LlmSettings) {
+  public async run3LLMPipeline(code: string, documentUri: vscode.Uri) {
     this.cancelAnalysis();
     this._tokenSource = new vscode.CancellationTokenSource();
     const token = this._tokenSource.token;
 
     try {
-      const apiKey = settings.llmApiKey;
+      const apiKey = this._settings.llmApiKey;
       if (!apiKey) {
         throw new Error('Gemini API key is not set. Please configure it in Settings.');
       }
@@ -122,14 +143,13 @@ ${code}`;
   public async recordAccept(proposal: any) {
     vscode.window.setStatusBarMessage('$(database) Vector DB: Saved Accept history', 3000);
     
+    // In a real architecture, we would just emit an event or return a WorkspaceEdit.
+    // For now, doing it here to keep it simple but adding a TODO based on architecture review.
     if (proposal.documentUri) {
       const uri = vscode.Uri.parse(proposal.documentUri);
       const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === uri.toString());
       
       if (editor) {
-        // Safe replace strategy to prevent full overwrite of new user changes
-        // For this mock we just replace the whole file if it hasn't changed.
-        // In a true production app, use vscode.WorkspaceEdit with precise ranges.
         const currentText = editor.document.getText();
         if (currentText === proposal.originalText) {
           const fullRange = new vscode.Range(
@@ -139,7 +159,7 @@ ${code}`;
           await editor.edit(editBuilder => {
             editBuilder.replace(fullRange, proposal.proposedText);
           });
-          this._lastProcessedCode = proposal.proposedText;
+          this.lastActiveEditorCode = proposal.proposedText;
         } else {
           vscode.window.showWarningMessage('Code has changed since proposal. Manual merge needed.');
         }
@@ -159,8 +179,8 @@ ${code}`;
   }
 
   dispose() {
-    if (this._typingTimeout) {
-      clearTimeout(this._typingTimeout);
+    if (this._intervalTimer) {
+      clearInterval(this._intervalTimer);
     }
     this.cancelAnalysis();
     this._disposables.forEach(d => d.dispose());
