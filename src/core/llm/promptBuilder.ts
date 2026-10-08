@@ -40,11 +40,7 @@ export function buildInterventionPrompt(document: vscode.TextDocument): string {
     const sanitizedCode = rawCode.replace(/```/g, '\\`\\`\\`');
 
     return [
-        'You are a code review assistant.',
-        'Analyze the file below and propose only concrete, minimal edits that improve correctness or remove obvious friction.',
-        'All line and character positions must be zero-based and must point inside the supplied file. Use the exact line text and never invent a position beyond the line length.',
-        'For every edit, oldText must be copied exactly from the target text. It may span multiple lines. The extension will locate oldText in the real file before applying it.',
-        'Return JSON only. Do not wrap it in markdown fences.',
+        'ここにプロンプトを書きます',
         `JSON schema: ${JSON.stringify(INTERVENTION_RESPONSE_SCHEMA)}`,
         `File: ${document.fileName}`,
         `Language: ${document.languageId}`,

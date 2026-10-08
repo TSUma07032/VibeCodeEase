@@ -1,4 +1,4 @@
-import * as vscode from 'vscode';
+﻿import * as vscode from 'vscode';
 import { SidebarProvider } from './vscode-utils/SidebarProvider';
 import { VibeHoverProvider } from './core/HoverProvider';
 import { VibeCodeActionProvider } from './core/CodeActionProvider';
@@ -12,23 +12,24 @@ import { SharedAnalysisCache } from './core/analyzer';
 import { LlmBackgroundService } from './core/llmBackgroundService';
 
 import { registerCommands } from './commands';
+import { PanelProvider } from './vscode-utils/PanelProvider';
 
 export function activate(context: vscode.ExtensionContext) {
 	GlobalState.getInstance().initialize(context);
 
-	// ワークスペースパスの解決
+	// 繝ｯ繝ｼ繧ｯ繧ｹ繝壹・繧ｹ繝代せ縺ｮ隗｣豎ｺ
 	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 
-	// Phase 2 & 3: サービスの初期化
+	// Phase 2 & 3: 繧ｵ繝ｼ繝薙せ縺ｮ蛻晄悄蛹・
 	const actionLogService = new ActionLogService(workspaceRoot);
 	const adaptiveEngine = new AdaptiveEngine(3);
 	const diagnosticsService = new DiagnosticsService();
 	const silentFixService = new SilentFixService();
-	const llmBackgroundService = new LlmBackgroundService(context.secrets);
+	const llmBackgroundService = new LlmBackgroundService();
 
-	// 保存時自動修正（SILENT）のコールバック配線
+	// 菫晏ｭ俶凾閾ｪ蜍穂ｿｮ豁｣・・ILENT・峨・繧ｳ繝ｼ繝ｫ繝舌ャ繧ｯ驟咲ｷ・
 	silentFixService.setOnFixAppliedCallback((fixCount, docUri) => {
-		vscode.window.setStatusBarMessage(`$(zap) 保存時に${fixCount}件の問題を自動修正しました`, 3000);
+		vscode.window.setStatusBarMessage(`$(zap) 菫晏ｭ俶凾縺ｫ${fixCount}莉ｶ縺ｮ蝠城｡後ｒ閾ｪ蜍穂ｿｮ豁｣縺励∪縺励◆`, 3000);
 		actionLogService.log({
 			category: 'SILENT_FIX',
 			action: 'APPLY_ON_SAVE',
@@ -38,10 +39,10 @@ export function activate(context: vscode.ExtensionContext) {
 		});
 	});
 
-	// サイドバーProviderの初期化とアクションコールバック配線
+	// 繧ｵ繧､繝峨ヰ繝ｼProvider縺ｮ蛻晄悄蛹悶→繧｢繧ｯ繧ｷ繝ｧ繝ｳ繧ｳ繝ｼ繝ｫ繝舌ャ繧ｯ驟咲ｷ・
 	const sidebarProvider = new SidebarProvider(context.extensionUri, context.secrets);
 	sidebarProvider.getMessageHandler().setActionCallback((action, plan, docUri) => {
-		// ログ記録
+		// 繝ｭ繧ｰ險倬鹸
 		actionLogService.log({
 			category: 'LLM_PLAN',
 			action,
@@ -50,13 +51,13 @@ export function activate(context: vscode.ExtensionContext) {
 			payload: plan.summary
 		});
 
-		// 適応エンジンへの通知（各編集のカテゴリごとに記録）
+		// 驕ｩ蠢懊お繝ｳ繧ｸ繝ｳ縺ｸ縺ｮ騾夂衍・亥推邱ｨ髮・・繧ｫ繝・ざ繝ｪ縺斐→縺ｫ險倬鹸・・
 		for (const edit of plan.edits) {
 			adaptiveEngine.recordAction(edit.category, action);
 		}
 	});
 
-	// プロバイダー・リスナーの登録
+	// 繝励Ο繝舌う繝繝ｼ繝ｻ繝ｪ繧ｹ繝翫・縺ｮ逋ｻ骭ｲ
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration('vibecodeease')) {
@@ -106,7 +107,7 @@ export function activate(context: vscode.ExtensionContext) {
 		edit.replace(uri, range, newText);
 		const applied = await vscode.workspace.applyEdit(edit);
 		if (applied) {
-			vscode.window.setStatusBarMessage('$(check) 修正を適用しました', 3000);
+			vscode.window.setStatusBarMessage('$(check) 菫ｮ豁｣繧帝←逕ｨ縺励∪縺励◆', 3000);
 			actionLogService.log({
 				category: 'SYSTEM',
 				action: 'APPLY',
@@ -151,7 +152,7 @@ export function activate(context: vscode.ExtensionContext) {
 					edit.replace(document.uri, resultRange, newText);
 					const applied = await vscode.workspace.applyEdit(edit);
 					if (applied) {
-						vscode.window.setStatusBarMessage('$(check) 修正をワンタッチ適用しました', 3000);
+						vscode.window.setStatusBarMessage('$(check) 菫ｮ豁｣繧偵Ρ繝ｳ繧ｿ繝・メ驕ｩ逕ｨ縺励∪縺励◆', 3000);
 						actionLogService.log({
 							category: 'SYSTEM',
 							action: 'APPLY_TAB',
@@ -172,7 +173,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const configureGeminiKey = vscode.commands.registerCommand('vibecodeease.configureGeminiKey', async () => {
 		const apiKey = await vscode.window.showInputBox({
 			title: 'vibeCodeEase: Configure Gemini API Key',
-			prompt: 'Gemini APIキーを入力してください。キーはVS CodeのSecretStorageに保存されます。',
+			prompt: 'Gemini API繧ｭ繝ｼ繧貞・蜉帙＠縺ｦ縺上□縺輔＞縲ゅく繝ｼ縺ｯVS Code縺ｮSecretStorage縺ｫ菫晏ｭ倥＆繧後∪縺吶・,
 			password: true,
 			ignoreFocusOut: true,
 			placeHolder: 'AIza...'
@@ -182,21 +183,26 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		if (!apiKey.trim()) {
 			await context.secrets.delete('vibecodeease.geminiApiKey');
-			vscode.window.setStatusBarMessage('$(check) Gemini APIキーを削除しました。', 3000);
+			vscode.window.setStatusBarMessage('$(check) Gemini API繧ｭ繝ｼ繧貞炎髯､縺励∪縺励◆縲・, 3000);
 			return;
 		}
 		await context.secrets.store('vibecodeease.geminiApiKey', apiKey.trim());
-		vscode.window.setStatusBarMessage('$(check) Gemini APIキーを安全に保存しました。', 3000);
+		vscode.window.setStatusBarMessage('$(check) Gemini API繧ｭ繝ｼ繧貞ｮ牙・縺ｫ菫晏ｭ倥＠縺ｾ縺励◆縲・, 3000);
 	});
 	context.subscriptions.push(configureGeminiKey);
 
 	const statusBar = new VibeStatusBar();
 	context.subscriptions.push(statusBar);
 
-	// コマンド登録
+	const open3PaneCommand = vscode.commands.registerCommand('vibecodeease.open3PaneUI', () => {
+		PanelProvider.createOrShow(context.extensionUri);
+	});
+	context.subscriptions.push(open3PaneCommand);
+
+	// 繧ｳ繝槭Φ繝臥匳骭ｲ
 	registerCommands(context, { actionLogService });
 
-	// セッション開始ログ
+	// 繧ｻ繝・す繝ｧ繝ｳ髢句ｧ九Ο繧ｰ
 	actionLogService.log({
 		category: 'SYSTEM',
 		action: 'SESSION_START',
@@ -205,4 +211,6 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {}
+
+
 

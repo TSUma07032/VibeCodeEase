@@ -1,671 +1,196 @@
-:root {
-  --container-paddding: 12px;
-  --card-bg: var(--vscode-editorWidget-background, #252526);
-  --card-border: var(--vscode-widget-border, #454545);
-  --accent: var(--vscode-button-background, #0e639c);
-  --accent-hover: var(--vscode-button-hoverBackground, #1177bb);
-  --text-main: var(--vscode-foreground, #cccccc);
-  --text-muted: var(--vscode-descriptionForeground, #888888);
+﻿:root {
+  --vscode-font-family: var(--vscode-editor-font-family, Consolas, 'Courier New', monospace);
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
   padding: 0;
-  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
-  color: var(--text-main);
-  background-color: var(--vscode-sideBar-background, #1e1e1e);
-  font-size: var(--vscode-font-size, 13px);
+  background-color: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+  font-family: var(--vscode-font-family);
 }
 
-.App {
-  padding: var(--container-paddding);
+.app-container {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.pane {
   display: flex;
   flex-direction: column;
-  gap: 16px;
 }
 
-.header {
-  border-bottom: 1px solid var(--card-border);
-  padding-bottom: 8px;
-}
-
-.header h1 {
-  font-size: 16px;
-  margin: 0 0 4px 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.header p {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-/* プリセット選択セクション */
-.preset-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.section-title {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  letter-spacing: 0.5px;
-  margin: 0;
-}
-
-.preset-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.preset-card {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 4px;
-  padding: 8px 10px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  text-align: left;
-}
-
-.preset-card:hover {
-  border-color: var(--accent);
-}
-
-.preset-card.active {
-  border-color: var(--accent);
-  background: rgba(14, 99, 156, 0.15);
-  box-shadow: 0 0 0 1px var(--accent);
-}
-
-.preset-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-weight: 600;
-  font-size: 12px;
-}
-
-.preset-card-desc {
-  font-size: 11px;
-  color: var(--text-muted);
-  line-height: 1.3;
-}
-
-/* スライダーセクション */
-.slider-section {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 4px;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.slider-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.slider-header {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-}
-
-.slider-header span.category-name {
-  font-weight: 500;
-}
-
-.slider-header span.level-badge {
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 10px;
-  font-weight: bold;
-}
-
-.badge-silent {
-  background: #388e3c;
-  color: white;
-}
-
-.badge-suggestion {
-  background: #fbc02d;
-  color: #212121;
-}
-
-.badge-ignore {
-  background: #757575;
-  color: white;
-}
-
-input[type="range"] {
-  width: 100%;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-
-.slider-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: 9px;
-  color: var(--text-muted);
-}
-
-/* ボタン */
-.action-button {
-  background: var(--accent);
-  color: var(--vscode-button-foreground, #ffffff);
-  border: none;
-  border-radius: 4px;
-  padding: 8px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  transition: background 0.2s;
-}
-
-.action-button:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-
-.action-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.secondary-button {
-  background: transparent;
-  color: var(--text-main);
-  border: 1px solid var(--card-border);
-  border-radius: 4px;
-  padding: 6px 10px;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.secondary-button:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-/* プラン表示・学習ヒント */
-.plan-section {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 4px;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.plan-section h2 {
-  font-size: 13px;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.plan-summary {
-  font-size: 12px;
-  line-height: 1.4;
-  margin: 0;
-}
-
-.learning-box {
-  background: rgba(234, 179, 8, 0.1);
-  border-left: 3px solid #eab308;
-  padding: 6px 8px;
-  border-radius: 0 4px 4px 0;
-  font-size: 11px;
-  color: #fef08a;
-  line-height: 1.3;
-}
-
-.edit-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.edit-item {
-  border: 1px solid var(--card-border);
-  border-radius: 3px;
-  padding: 6px;
-  background: rgba(0, 0, 0, 0.2);
-  font-size: 11px;
-}
-
-.edit-item pre {
-  background: rgba(0, 0, 0, 0.4);
-  padding: 4px 6px;
-  border-radius: 3px;
-  margin: 4px 0 0 0;
-  overflow-x: auto;
-  font-family: var(--vscode-editor-font-family, monospace);
-  font-size: 10px;
-}
-
-.button-group {
-  display: flex;
-  gap: 6px;
-}
-
-.status-message {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin: 0;
-  text-align: center;
-}
-
-/* LLM Settings UI */
-.llm-section {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 4px;
-  padding: 10px;
-}
-
-.llm-config-box {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.form-group label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-}
-
-.styled-select, .styled-input {
-  background: var(--vscode-input-background, #3c3c3c);
-  color: var(--vscode-input-foreground, #cccccc);
-  border: 1px solid var(--vscode-input-border, #3c3c3c);
-  padding: 6px 8px;
-  border-radius: 2px;
-  font-size: 12px;
-  font-family: inherit;
-  outline: none;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.styled-select:focus, .styled-input:focus {
-  border-color: var(--vscode-focusBorder, #007fd4);
-}
-
-.api-key-group {
-  margin-top: 4px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--card-border);
-}
-
-.api-key-status {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: rgba(56, 142, 60, 0.1);
-  padding: 6px 8px;
-  border-radius: 3px;
-  border: 1px solid rgba(56, 142, 60, 0.3);
-}
-
-.status-badge.success {
-  color: #81c995;
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.api-key-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.action-button.small, .secondary-button.small {
-  padding: 4px 8px;
-  font-size: 10px;
-}
-
-.secondary-button.danger {
-  color: #f48771;
-  border-color: rgba(244, 135, 113, 0.3);
-}
-.secondary-button.danger:hover {
-  background: rgba(244, 135, 113, 0.1);
-}
-
-.api-key-input-box {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.api-key-hint {
-  font-size: 10px;
-  text-align: right;
-}
-
-.api-key-hint a {
-  color: var(--vscode-textLink-foreground, #3794ff);
-  text-decoration: none;
-}
-.api-key-hint a:hover {
-  text-decoration: underline;
-}
-
-/* プリセットカード内のミニバッジプレビュー */
-.preset-card-badges {
-  display: flex;
-  gap: 4px;
-  margin-top: 6px;
-  flex-wrap: wrap;
-}
-
-.mini-badge {
-  font-size: 12px;
-  line-height: 1;
-  opacity: 0.8;
-}
-
-/* スライダーラベル 3分割表示 */
-.slider-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  color: var(--text-muted);
-  margin-top: 2px;
-}
-
-/* 学習ポイント リスト */
-.learning-points {
-  list-style: none;
-  padding: 0;
-  margin: 8px 0 0 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.learning-point-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 4px;
-  padding: 6px 8px;
-  border-left: 2px solid var(--accent, #0e639c);
-}
-
-.learning-category {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--vscode-textLink-foreground, #3794ff);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.learning-reason {
-  font-size: 11px;
-  color: var(--text-main);
-  line-height: 1.5;
-}
-
-.learning-tip {
-  margin: 8px 0 0 0;
-  font-size: 11px;
-  color: var(--text-muted);
-  font-style: italic;
-}
-
-/* ─── Grammarly パネル ─── */
-.grammarly-panel {
-  padding: 10px 12px;
-}
-
-.section-title {
-  font-size: 12px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.issue-count-badge {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 10px;
-  font-weight: 600;
-}
-.badge-ok { background: rgba(78, 201, 176, 0.2); color: #4ec9b0; }
-.badge-warn { background: rgba(229, 192, 87, 0.2); color: #e5c057; }
-
-.no-issues {
-  font-size: 12px;
-  color: #4ec9b0;
-  padding: 6px 0;
-}
-
-.issue-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 220px;
+.center-pane {
+  flex: 1;
+  background-color: var(--vscode-editor-background);
+  padding: 20px;
   overflow-y: auto;
 }
 
-.issue-item {
-  display: grid;
-  grid-template-columns: 36px 18px auto 1fr;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 11px;
-  background: rgba(255, 255, 255, 0.03);
-  border-left: 2px solid transparent;
-  transition: background 0.1s;
-}
-.issue-item:hover { background: rgba(255, 255, 255, 0.08); }
-.issue-static { border-left-color: var(--accent, #0e639c); }
-.issue-ast    { border-left-color: #4ec9b0; }
-.issue-llm    { border-left-color: #c586c0; }
-
-.issue-location {
-  font-size: 10px;
-  color: var(--text-muted);
-  font-family: var(--vscode-editor-font-family, monospace);
-}
-.issue-source-badge { font-size: 12px; }
-.issue-category {
-  font-size: 10px;
-  color: var(--vscode-textLink-foreground, #3794ff);
-  font-weight: 600;
-  white-space: nowrap;
-}
-.issue-message {
-  color: var(--text-main);
+/* Make proposals look like a VS Code diff view */
+.proposal-card {
+  background-color: var(--vscode-editorWidget-background, #252526);
+  border: 1px solid var(--vscode-widget-border, #454545);
+  border-radius: 6px;
+  margin-bottom: 20px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  grid-column: 4;
-  grid-row: 1;
-}
-.issue-fix {
-  grid-column: 2 / -1;
-  font-size: 10px;
-  color: #4ec9b0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.issue-fix code { background: rgba(78, 201, 176, 0.1); padding: 0 3px; border-radius: 2px; }
-
-/* ─── AI グラビティーモード ─── */
-.ai-mode-section { padding: 10px 12px; }
-.ai-mode-desc {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-bottom: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
 
-.radio-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.radio-option {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  border: 1px solid transparent;
-  transition: background 0.1s, border-color 0.1s;
-  font-size: 12px;
-}
-.radio-option:hover { background: rgba(255,255,255,0.05); }
-.radio-selected {
-  background: rgba(14, 99, 156, 0.15);
-  border-color: rgba(14, 99, 156, 0.4);
-}
-
-.radio-option input[type="radio"] { margin-top: 2px; flex-shrink: 0; accent-color: var(--accent, #0e639c); }
-
-.radio-label-text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.radio-label-text strong { font-weight: 600; }
-.radio-label-text small { font-size: 10px; color: var(--text-muted); }
-
-/* ─── ルールカタログ ─── */
-.catalog-section { padding: 0; overflow: hidden; }
-
-.catalog-toggle {
+.proposal-header {
+  background-color: var(--vscode-editorGroupHeader-tabsBackground, #2d2d2d);
+  padding: 10px 15px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  width: 100%;
-  background: transparent;
-  border: none;
-  padding: 10px 12px;
-  color: var(--text-main);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  text-align: left;
-}
-.catalog-toggle:hover { background: rgba(255,255,255,0.04); }
-.catalog-chevron { font-size: 10px; color: var(--text-muted); }
-
-.catalog-body { padding: 0 12px 10px; }
-
-.catalog-search {
-  width: 100%;
-  box-sizing: border-box;
-  background: var(--vscode-input-background, #3c3c3c);
-  border: 1px solid var(--card-border);
-  color: var(--text-main);
-  border-radius: 4px;
-  padding: 5px 8px;
-  font-size: 11px;
-  margin-bottom: 8px;
-  outline: none;
-}
-.catalog-search:focus { border-color: var(--accent, #0e639c); }
-
-.catalog-group { margin-bottom: 10px; }
-.catalog-group-title {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 4px;
+  border-bottom: 1px solid var(--vscode-widget-border, #454545);
 }
 
-.catalog-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+.proposal-header span {
+  font-size: 0.9em;
+  font-weight: bold;
+  color: var(--vscode-tab-activeForeground);
+}
+
+.proposal-content {
   display: flex;
   flex-direction: column;
-  gap: 2px;
 }
 
-.catalog-rule {
+.code-diff {
+  background-color: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+  padding: 15px;
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: var(--vscode-font-family);
+  font-size: 13px;
+  line-height: 1.5;
+  border-bottom: 1px solid var(--vscode-widget-border, #454545);
+}
+
+.proposal-actions {
+  padding: 10px 15px;
   display: flex;
+  justify-content: flex-end;
+  background-color: var(--vscode-editorWidget-background);
+}
+
+/* Settings Pane enhancements */
+.right-pane {
+  width: 340px;
+  background-color: var(--vscode-sideBar-background, #252526);
+  border-left: 1px solid var(--vscode-sideBar-border, #333);
+  transition: width 0.3s ease;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.right-pane.collapsed {
+  width: 0;
+  padding: 0;
+  border-left: none;
+  overflow: hidden;
+}
+
+.settings-header {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  padding: 3px 4px;
-  border-radius: 3px;
-  background: rgba(255,255,255,0.02);
-}
-.catalog-rule:hover { background: rgba(255,255,255,0.06); }
-
-.rule-pattern {
-  color: #f48771;
-  background: rgba(244, 135, 113, 0.1);
-  padding: 1px 4px;
-  border-radius: 2px;
-  font-family: var(--vscode-editor-font-family, monospace);
-}
-.rule-arrow { color: var(--text-muted); font-size: 10px; }
-.rule-replacement {
-  color: #4ec9b0;
-  background: rgba(78, 201, 176, 0.1);
-  padding: 1px 4px;
-  border-radius: 2px;
-  font-family: var(--vscode-editor-font-family, monospace);
-}
-.rule-lang {
-  font-size: 9px;
-  color: var(--text-muted);
-  border: 1px solid var(--card-border);
-  border-radius: 3px;
-  padding: 0 4px;
-  margin-left: auto;
+  margin-bottom: 20px;
+  font-size: 1.1em;
+  font-weight: 600;
+  color: var(--vscode-sideBarTitle-foreground);
 }
 
-.catalog-empty {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-style: italic;
-  padding: 4px 0;
+.settings-group {
+  margin-bottom: 24px;
+}
+
+.settings-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.85em;
+  color: var(--vscode-foreground);
+  font-weight: bold;
+}
+
+.vscode-input {
+  width: 100%;
+  background-color: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, transparent);
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 13px;
+  border-radius: 2px;
+  outline: none;
+}
+
+.vscode-input:focus {
+  border-color: var(--vscode-focusBorder);
+}
+
+.vscode-slider {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.trend-box {
+  background-color: var(--vscode-textBlockQuote-background, rgba(128, 128, 128, 0.1));
+  border-left: 3px solid var(--vscode-textBlockQuote-border, #007acc);
+  padding: 10px;
+  font-size: 0.85em;
+  line-height: 1.4;
+  border-radius: 0 4px 4px 0;
+}
+
+button {
+  background-color: var(--vscode-button-background, #0e639c);
+  color: var(--vscode-button-foreground, white);
+  border: none;
+  padding: 6px 14px;
+  cursor: pointer;
+  border-radius: 2px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+button:hover {
+  background-color: var(--vscode-button-hoverBackground, #1177bb);
+}
+
+button.secondary {
+  background-color: var(--vscode-button-secondaryBackground, #3a3d41);
+  color: var(--vscode-button-secondaryForeground, #ffffff);
+}
+
+button.secondary:hover {
+  background-color: var(--vscode-button-secondaryHoverBackground, #45494e);
+}
+
+.settings-toggle-btn {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  z-index: 100;
+  opacity: 0.8;
+}
+
+.status-badge {
+  background-color: var(--vscode-statusBarItem-prominentBackground, #007acc);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.8em;
+  margin-bottom: 15px;
+  display: inline-block;
 }
