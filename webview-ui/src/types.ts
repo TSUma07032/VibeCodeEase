@@ -79,3 +79,29 @@ export const CATEGORY_NAMES: Record<PainCategory, string> = {
 };
 
 export type EditorAppealLevel = 'high' | 'medium' | 'low';
+
+
+export interface AiWorkspaceFile {
+  uri: string;
+  label: string;
+}
+
+export interface AiDiff {
+  id: string; // The LiveIssue id
+  originalStartLine: number;
+  originalEndLine: number;
+  aiStartLine: number;
+  aiEndLine: number;
+  message: string;
+  replacementText: string;
+  originalText?: string;
+  category: string;
+}
+
+export interface AiWorkspaceState {
+  files: AiWorkspaceFile[];
+  activeFileUri?: string;
+  aiCode?: string;
+  diffs?: AiDiff[];
+  languageId?: string;
+}

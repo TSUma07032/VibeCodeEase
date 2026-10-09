@@ -1,11 +1,13 @@
 import './App.css';
 import { useEffect, useState } from 'react';
+import { AIReviewScreen } from './components/AIReviewScreen';
 import type {
   PresetMode,
   SettingsPayload,
   LlmConfig,
   LlmProvider,
-  LlmTriggerMode
+  LlmTriggerMode,
+  AiWorkspaceState
 } from './types';
 import { PersonalizationPanel } from './components/PersonalizationPanel';
 
@@ -13,10 +15,8 @@ import { PersonalizationPanel } from './components/PersonalizationPanel';
 declare const acquireVsCodeApi: any;
 const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
 
-/** プリセット選択時の嗜好値プレビュー用 */
-
-
 function App() {
+  const [currentView, setCurrentView] = useState<'REVIEW' | 'SETTINGS'>('REVIEW');
   const [presetMode, setPresetMode] = useState<PresetMode>('HINT');
   
   // LLMトリガーモード
@@ -37,6 +37,8 @@ function App() {
   const [pzError, setPzError] = useState<string>('');
   const [llmError, setLlmError] = useState<string>('');
 
+  const [workspaceState, setWorkspaceState] = useState<AiWorkspaceState | null>(null);
+
   useEffect(() => {
     // 起動時に拡張機能へ設定取得リクエストを送る
     vscode?.postMessage({ command: 'GET_SETTINGS' });
@@ -52,6 +54,10 @@ function App() {
           if (payload.llmConfig) setLlmConfig(payload.llmConfig);
           if (payload.hasGeminiApiKey !== undefined) setHasGeminiApiKey(payload.hasGeminiApiKey);
           if (payload.llmTriggerMode) setLlmTriggerMode(payload.llmTriggerMode);
+          break;
+        }
+        case 'WORKSPACE_STATE_UPDATE': {
+          setWorkspaceState(data.payload as AiWorkspaceState);
           break;
         }
         case 'PZ_STATE':
@@ -112,13 +118,31 @@ function App() {
     setApiKeyValue('');
   };
   return (
-    <div className="App">
+    <div className="App" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', background: 'var(--vscode-sideBarTitle-background)', borderBottom: '1px solid var(--vscode-sideBarSectionHeader-border)' }}>
+        <h2 style={{ margin: 0, fontSize: '14px' }}>✨ vibeCodeEase</h2>
+        <button 
+          onClick={() => setCurrentView(v => v === 'REVIEW' ? 'SETTINGS' : 'REVIEW')}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: 'var(--vscode-foreground)' }}
+          title={currentView === 'REVIEW' ? '設定を開く' : 'レビュー画面に戻る'}
+        >
+          {currentView === 'REVIEW' ? '⚙️' : '⬅️'}
+        </button>
+      </div>
+
       {llmError && (
-        <div style={{ padding: '10px', backgroundColor: '#5a1d1d', color: '#ffb3b3', borderRadius: '4px', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div><strong>❌ AI Communication Error:</strong> {llmError}</div>
+        <div style={{ padding: '10px', backgroundColor: '#5a1d1d', color: '#ffb3b3', borderRadius: '4px', margin: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div><strong>❌ AI Error:</strong> {llmError}</div>
           <button style={{ marginLeft: '10px', padding: '2px 8px', cursor: 'pointer' }} onClick={() => setLlmError('')}>Dismiss</button>
         </div>
       )}
+
+      {currentView === 'REVIEW' ? (
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <AIReviewScreen workspaceState={workspaceState} vscode={vscode} />
+        </div>
+      ) : (
+        <div style={{ flex: 1, overflowY: 'auto', padding: '10px' }}>
       {/* Section 1: UIUX 設定 */}
       <section className="card uiux-section">
         <h2 className="section-title">🖥️ Section 1: UIUX Settings (AIとの接し方)</h2>
@@ -322,6 +346,8 @@ function App() {
           )}
         </div>
       </section>
+        </div>
+      )}
     </div>
   );
 }

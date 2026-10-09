@@ -9,7 +9,35 @@ export interface WebviewMessage {
 }
 
 export interface SettingsPayload {
+  presetMode: import('./preset').PresetMode;
+  llmConfig: import('./llmConfig').LlmConfig;
+  hasGeminiApiKey: boolean;
   activeRules?: import('./liveIssue').RuleSummary[];
   llmTriggerMode?: import('./llmConfig').LlmTriggerMode;
   editorAppealLevel?: import('./common').EditorAppealLevel;
+}
+
+export interface AiWorkspaceFile {
+  uri: string;
+  label: string;
+}
+
+export interface AiDiff {
+  id: string; // The LiveIssue id
+  originalStartLine: number;
+  originalEndLine: number;
+  aiStartLine: number;
+  aiEndLine: number;
+  message: string;
+  replacementText: string;
+  originalText?: string;
+  category: string;
+}
+
+export interface AiWorkspaceState {
+  files: AiWorkspaceFile[];
+  activeFileUri?: string;
+  aiCode?: string;
+  diffs?: AiDiff[];
+  languageId?: string;
 }
