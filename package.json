@@ -68,7 +68,10 @@
         },
         "vibecodeease.llmProvider": {
           "type": "string",
-          "enum": ["gemini", "vscode-lm"],
+          "enum": [
+            "gemini",
+            "vscode-lm"
+          ],
           "default": "gemini",
           "description": "LLM Provider to use (gemini or vscode-lm)"
         },
@@ -83,6 +86,8 @@
   "scripts": {
     "vscode:prepublish": "npm run package",
     "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "build:ui": "npm run build --prefix webview-ui",
+    "build:all": "npm run compile && npm run build:ui",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
