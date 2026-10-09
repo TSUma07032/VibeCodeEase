@@ -32,7 +32,7 @@ suite('WebviewMessageHandler Test Suite', () => {
 
         messageHandler = new WebviewMessageHandler(mockSecrets as any);
 
-        // モチE��されたcontextでGlobalStateを�E期化する
+        // 繝｢繝・け縺輔ｌ縺歡ontext縺ｧGlobalState繧貞・譛溷喧縺吶ｋ
         const mockContext: any = {
             globalState: {
                 get: (key: string) => undefined,
@@ -40,12 +40,23 @@ suite('WebviewMessageHandler Test Suite', () => {
             }
         };
         GlobalState.getInstance().initialize(mockContext);
+
+        const originalGetConfiguration = vscode.workspace.getConfiguration;
+        (vscode.workspace as any).getConfiguration = () => ({
+            get: () => undefined,
+            update: () => Promise.resolve()
+        });
+        (this as any).originalGetConfiguration = originalGetConfiguration;
     });
 
     teardown(() => {
         // Reset GlobalState instance for other tests if needed
         const state = GlobalState.getInstance() as any;
         state._preferences = { preferences: {} };
+
+        if ((this as any).originalGetConfiguration) {
+            (vscode.workspace as any).getConfiguration = (this as any).originalGetConfiguration;
+        }
     });
 
     test('should ignore non-object payloads', async () => {
@@ -74,22 +85,22 @@ suite('WebviewMessageHandler Test Suite', () => {
 
         await messageHandler.handleMessage(data, mockWebview);
 
-        // 成功すると sendCurrentSettings が呼ばれて設定データが�EストされるはぁE
+        // 謌仙粥縺吶ｋ縺ｨ sendCurrentSettings 縺悟他縺ｰ繧後※險ｭ螳壹ョ繝ｼ繧ｿ縺後・繧ｹ繝医＆繧後ｋ縺ｯ縺・
         assert.strictEqual(postedMessages.length, 1);
         assert.strictEqual(postedMessages[0].type, 'SETTINGS_DATA');
-        // モチE��上で実際に更新されてぁE��か確誁E
+        // 繝｢繝・け荳翫〒螳滄圀縺ｫ譖ｴ譁ｰ縺輔ｌ縺ｦ縺・ｋ縺狗｢ｺ隱・
         assert.strictEqual(postedMessages[0].payload.preferences['SYNTAX_TYPO'], 0.5);
     });
 
     test('should ignore update preference if value is out of bounds or invalid', async () => {
-        // valueがなぁE
+        // value縺後↑縺・
         await messageHandler.handleMessage({
             command: 'UPDATE_PREFERENCE_VALUE',
             payload: { category: 'SYNTAX_TYPO' }
         }, mockWebview);
         assert.strictEqual(postedMessages.length, 0);
 
-        // categoryが文字�EじゃなぁE
+        // category縺梧枚蟄怜・縺倥ｃ縺ｪ縺・
         await messageHandler.handleMessage({
             command: 'UPDATE_PREFERENCE_VALUE',
             payload: { category: 123, value: 0.5 }
@@ -167,7 +178,7 @@ suite('WebviewMessageHandler Test Suite', () => {
             callbackAction = action;
         });
 
-        // pendingPlan を手動セチE��
+        // pendingPlan 繧呈焔蜍輔そ繝・ヨ
         (messageHandler as any).pendingPlan = {
             documentUri: 'file:///dummy.ts',
             documentVersion: 1,

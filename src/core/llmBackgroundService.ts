@@ -8,6 +8,11 @@ import { AnalysisResult, LlmTriggerMode } from '../types';
  * バックグラウンドでLLMによる解析を実行し、SharedAnalysisCache に結果をマージするサービス。
  */
 export class LlmBackgroundService implements vscode.Disposable {
+    // TODO(Next-Gen Agent): 自律的改善のライフサイクルとバッジ通知
+    // 現在はエディタのテキスト変更(連続入力時)や保存時に都度全体解析を行っているが、
+    // 長期的には独立した「AIワークスペース状態モデル」に対する差分同期アーキテクチャに移行し、
+    // 完了時にサイドバーアイコンに未読バッジ等を付ける非侵入型のUI/UXを実装すること。
+    
     private readonly _disposables: vscode.Disposable[] = [];
     private readonly _llmService = new LlmInterventionService();
     

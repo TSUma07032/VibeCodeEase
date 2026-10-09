@@ -14,7 +14,7 @@ import { EditorDecorator } from './core/editorDecorator';
 import { ProposalCodeLensProvider } from './core/proposalCodeLensProvider';
 import { AnalysisResult } from './types';
 import { findOriginalTextRange } from './core/llm/planValidator';
-import { DiffProvider, DIFF_SCHEME } from './core/diffProvider';
+
 
 import { registerCommands } from './commands';
 
@@ -41,66 +41,9 @@ export function activate(context: vscode.ExtensionContext) {
 	const silentFixService = new SilentFixService(personalizationService);
 	const codeLensProvider = new ProposalCodeLensProvider(personalizationService);
 
-	const diffProvider = new DiffProvider();
-	context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(DIFF_SCHEME, diffProvider));
-
-	context.subscriptions.push(
-		llmBackgroundService.onDidCompleteAnalysis((uri) => {
-			const modifiedUri = vscode.Uri.parse(`${DIFF_SCHEME}://modified${uri.path}`);
-			diffProvider.update(modifiedUri);
-		})
-	);
-
-	context.subscriptions.push(
-		vscode.workspace.onDidChangeTextDocument((event) => {
-			if (event.document.uri.scheme === 'file') {
-				const modifiedUri = vscode.Uri.parse(`${DIFF_SCHEME}://modified${event.document.uri.path}`);
-				diffProvider.update(modifiedUri);
-			}
-		})
-	);
-
 	// TODO: [Next-Gen Architecture] Refactor how AI Workspace is displayed.
-	// As per uiux_redesign_specification.md, opening the native diff view automatically 
-	// can be intrusive. The target UX is to sync to an invisible AI Workspace and only 
-	// show results in a side panel (Monaco Webview) when the user actively checks it.
-	const ensureDiffViewIsOpen = async (editor: vscode.TextEditor | undefined) => {
-		if (!editor) return;
-		if (editor.document.uri.scheme !== 'file') return;
-
-		const triggerMode = GlobalState.getInstance().llmTriggerMode;
-		if (triggerMode === 'disabled') return;
-
-		const tabs = vscode.window.tabGroups.activeTabGroup?.tabs || [];
-		const isDiffOpen = tabs.some(tab => {
-			if (tab.input instanceof vscode.TabInputTextDiff) {
-				return tab.input.original.toString() === editor.document.uri.toString() &&
-					   tab.input.modified.scheme === DIFF_SCHEME;
-			}
-			return false;
-		});
-
-		if (!isDiffOpen) {
-			const uri = editor.document.uri;
-			const modifiedUri = vscode.Uri.parse(`${DIFF_SCHEME}://modified${uri.path}`);
-			await vscode.commands.executeCommand('vscode.diff', uri, modifiedUri, `AI Workspace: ${uri.path.split('/').pop()}`, { preserveFocus: true, preview: true });
-		}
-	};
-
-	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(ensureDiffViewIsOpen));
-	if (vscode.window.activeTextEditor) {
-		ensureDiffViewIsOpen(vscode.window.activeTextEditor);
-	}
-
-	context.subscriptions.push(
-		vscode.commands.registerCommand('vibecodeease.showDiff', async () => {
-			const editor = vscode.window.activeTextEditor;
-			if (!editor) return;
-			const uri = editor.document.uri;
-			const modifiedUri = vscode.Uri.parse(`${DIFF_SCHEME}://modified${uri.path}`);
-			await vscode.commands.executeCommand('vscode.diff', uri, modifiedUri, `AI Workspace: ${uri.path.split('/').pop()}`);
-		})
-	);
+	// As per uiux_redesign_specification.md, the native diff view has been replaced
+	// with a pure sidebar panel approach (Monaco Webview) for a non-intrusive experience.
 
 	// 保存時自動修正（SILENT）のコールバック配線
 	silentFixService.setOnFixAppliedCallback((fixCount, docUri) => {
