@@ -1,98 +1,67 @@
-import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import App from './App';
-import { mockPostMessage } from './test/setup';
+import { MirrorEditor } from './components/MirrorEditor';
+import { ProposalPopup } from './components/ProposalPopup';
+import type { WebviewIntervention } from './types';
 
-// Mock Monaco Editor
-vi.mock('@monaco-editor/react', () => ({
-  __esModule: true,
-  default: () => <div data-testid="monaco-editor-mock">Monaco Editor Mock</div>,
-  useMonaco: () => ({
-    Range: class Range {
-      startLineNumber: number;
-      startColumn: number;
-      endLineNumber: number;
-      endColumn: number;
-      constructor(startLineNumber: number, startColumn: number, endLineNumber: number, endColumn: number) {
-        this.startLineNumber = startLineNumber;
-        this.startColumn = startColumn;
-        this.endLineNumber = endLineNumber;
-        this.endColumn = endColumn;
-      }
-    },
-    editor: {
-      ContentWidgetPositionPreference: { BELOW: 1, ABOVE: 2 }
-    }
-  })
-}));
 
-describe('App Component (Webview UI)', () => {
-  it('initial render sends GET_SETTINGS and shows AI Review Screen', () => {
+// Setup Mock for vscode API
+const postMessageMock = vi.fn();
+(window as any).vscode = { postMessage: postMessageMock };
+
+describe('App Component', () => {
+  it('shows waiting message initially', () => {
     render(<App />);
+    expect(screen.getByText('Waiting for document sync...')).toBeDefined();
+  });
+});
 
-    expect(mockPostMessage).toHaveBeenCalledWith({ command: 'GET_SETTINGS' });
-    expect(screen.getByText('✨ vibeCodeEase')).toBeInTheDocument();
-    expect(screen.getByTitle('設定を開く')).toBeInTheDocument();
-    
-    // AI Review screen is default
-    expect(screen.getByText('AIの提案はありません。')).toBeInTheDocument();
+describe('MirrorEditor Component', () => {
+  const dummyIntervention: WebviewIntervention = {
+    id: '123',
+    range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } },
+    originalText: 'const',
+    replacementText: 'let',
+    message: 'Use let'
+  };
+
+  it('renders text with line numbers', () => {
+    render(<MirrorEditor text={"line 1\nline 2"} interventions={[]} onApply={vi.fn()} onDiscard={vi.fn()} />);
+    expect(screen.getByText('line 1')).toBeDefined();
+    expect(screen.getByText('line 2')).toBeDefined();
+    expect(screen.getByText('1')).toBeDefined();
+    expect(screen.getByText('2')).toBeDefined();
   });
 
-  it('toggles settings view when clicking settings icon', () => {
-    render(<App />);
-    const toggleBtn = screen.getByTitle('設定を開く');
-    fireEvent.click(toggleBtn);
-
-    // Settings screen
-    expect(screen.getByText(/Section 1: UIUX Settings/)).toBeInTheDocument();
-    
-    const backBtn = screen.getByTitle('レビュー画面に戻る');
-    fireEvent.click(backBtn);
-    expect(screen.getByText('AIの提案はありません。')).toBeInTheDocument();
+  it('shows bulb icon when there is an intervention', () => {
+    render(<MirrorEditor text="const x = 1;" interventions={[dummyIntervention]} onApply={vi.fn()} onDiscard={vi.fn()} />);
+    expect(screen.getByTitle('View AI Proposal')).toBeDefined();
   });
+});
 
-  it('renders workspace state and sends APPLY_ALL_WORKSPACE_DIFFS when clicked', async () => {
-    render(<App />);
+describe('ProposalPopup Component', () => {
+  const dummyIntervention: WebviewIntervention = {
+    id: '123',
+    range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } },
+    originalText: 'const',
+    replacementText: 'let',
+    message: 'Use let'
+  };
 
-    act(() => {
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: {
-            type: 'WORKSPACE_STATE_UPDATE',
-            payload: {
-              files: [{ uri: 'file:///test.ts', label: 'test.ts' }],
-              activeFileUri: 'file:///test.ts',
-              aiCode: 'console.log("test");',
-              diffs: [
-                {
-                  id: 'diff-1',
-                  originalStartLine: 0,
-                  originalEndLine: 0,
-                  aiStartLine: 0,
-                  aiEndLine: 0,
-                  message: 'AI suggestion',
-                  replacementText: 'console.log("test");',
-                  category: 'SYNTAX_TYPO'
-                }
-              ],
-              languageId: 'typescript'
-            }
-          }
-        })
-      );
-    });
-
-    expect(await screen.findByDisplayValue('test.ts')).toBeInTheDocument();
+  it('renders diff texts and buttons', () => {
+    const onApply = vi.fn();
+    const onDiscard = vi.fn();
+    render(<ProposalPopup intervention={dummyIntervention} onApply={onApply} onDiscard={onDiscard} />);
     
-    const applyAllBtn = screen.getByRole('button', { name: /Apply All/ });
-    fireEvent.click(applyAllBtn);
+    expect(screen.getByText('Use let')).toBeDefined();
+    expect(screen.getByText('const')).toBeDefined();
+    expect(screen.getByText('let')).toBeDefined();
+    
+    fireEvent.click(screen.getByText('[反映 (Accept)]'));
+    expect(onApply).toHaveBeenCalledWith(dummyIntervention);
 
-    expect(mockPostMessage).toHaveBeenCalledWith({
-      command: 'APPLY_ALL_WORKSPACE_DIFFS',
-      payload: {
-        uri: 'file:///test.ts',
-        diffs: expect.any(Array)
-      }
-    });
+    fireEvent.click(screen.getByText('[破棄 (Discard)]'));
+    expect(onDiscard).toHaveBeenCalledWith('123');
   });
 });

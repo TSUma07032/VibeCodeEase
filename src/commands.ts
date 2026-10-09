@@ -14,56 +14,6 @@ export interface CommandDependencies {
 export function registerCommands(context: vscode.ExtensionContext, deps: CommandDependencies): void {
     const { actionLogService } = deps;
 
-    // 1. Hello World コマンド
-    const helloWorldDisposable = vscode.commands.registerCommand('vibecodeease.helloWorld', () => {
-        vscode.window.showInformationMessage('Hello World from vibeCodeEase!');
-    });
-    context.subscriptions.push(helloWorldDisposable);
-
-    // 2. 介入適用コマンド
-    const applyInterventionCommand = vscode.commands.registerCommand(
-        'vibecodeease.applyIntervention',
-        async (uri: vscode.Uri, range: vscode.Range, newText: string) => {
-            if (!uri || !range || typeof newText !== 'string') {
-                return;
-            }
-            const edit = new vscode.WorkspaceEdit();
-            edit.replace(uri, range, newText);
-            const applied = await vscode.workspace.applyEdit(edit);
-            if (applied) {
-                vscode.window.setStatusBarMessage('$(check) 修正を適用しました', 3000);
-                actionLogService.log({
-                    category: 'SYSTEM',
-                    action: 'APPLY',
-                    targetId: uri.toString(),
-                    payload: 'Applied intervention via command'
-                });
-            }
-        }
-    );
-    context.subscriptions.push(applyInterventionCommand);
-
-    // 3. Gemini API キー設定コマンド
-    const configureGeminiKey = vscode.commands.registerCommand('vibecodeease.configureGeminiKey', async () => {
-        const apiKey = await vscode.window.showInputBox({
-            prompt: 'Gemini APIキーを入力してください。キーはVS CodeのSecretStorageに保存されます。',
-            password: true,
-            ignoreFocusOut: true,
-            placeHolder: 'AIza...'
-        });
-        if (apiKey === undefined) {
-            return;
-        }
-        if (!apiKey.trim()) {
-            await context.secrets.delete('vibecodeease.geminiApiKey');
-            vscode.window.setStatusBarMessage('$(check) Gemini APIキーを削除しました。', 3000);
-            return;
-        }
-        await context.secrets.store('vibecodeease.geminiApiKey', apiKey.trim());
-        vscode.window.setStatusBarMessage('$(check) Gemini APIキーを安全に保存しました。', 3000);
-    });
-    context.subscriptions.push(configureGeminiKey);
-
     // 4. モード切り替えコマンド (プリセット選択式)
     const switchModeCommand = vscode.commands.registerCommand('vibecodeease.switchMode', async () => {
         const items: PresetQuickPickItem[] = [

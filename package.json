@@ -31,31 +31,10 @@
       {
         "command": "vibecodeease.applyIntervention",
         "title": "vibeCodeEase: Apply Intervention"
-      }
-    ],
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "vibecodeease-sidebar",
-          "title": "vibeCodeEase",
-          "icon": "media/icon.svg"
-        }
-      ]
-    },
-    "views": {
-      "vibecodeease-sidebar": [
-        {
-          "id": "vibecodeease.sidebarView",
-          "name": "vibeCodeEase Settings",
-          "type": "webview"
-        }
-      ]
-    },
-    "keybindings": [
+      },
       {
-        "command": "vibecodeease.tabToApply",
-        "key": "tab",
-        "when": "editorTextFocus && !editorHasSelection && !inSnippetMode && !suggestWidgetVisible"
+        "command": "vibecodeease.openSideEditor",
+        "title": "vibeCodeEase: Open AI Side Editor"
       }
     ],
     "configuration": {
@@ -68,7 +47,10 @@
         },
         "vibecodeease.llmProvider": {
           "type": "string",
-          "enum": ["gemini", "vscode-lm"],
+          "enum": [
+            "gemini",
+            "vscode-lm"
+          ],
           "default": "gemini",
           "description": "LLM Provider to use (gemini or vscode-lm)"
         },
@@ -76,6 +58,11 @@
           "type": "string",
           "default": "gemini-3.6-flash",
           "description": "LLM Model to use (e.g. gemini-3.6-flash, gpt-4o)"
+        },
+        "vibecodeease.analyzeOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "ファイル保存時に自動でAIによるコード推敲を実行します"
         }
       }
     }
