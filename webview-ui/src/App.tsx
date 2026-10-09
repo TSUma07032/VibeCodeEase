@@ -9,6 +9,8 @@ import type {
 } from './types';
 import { PersonalizationPanel } from './components/PersonalizationPanel';
 
+import { VersionControlTab } from './VersionControlTab';
+
 // VS Code API を取得するための宣言
 declare const acquireVsCodeApi: any;
 const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
@@ -17,8 +19,8 @@ const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : nul
 
 
 function App() {
+  const [activeTab, setActiveTab] = useState<'main' | 'version-control'>('main');
   const [presetMode, setPresetMode] = useState<PresetMode>('HINT');
-  
   // LLMトリガーモード
   const [llmTriggerMode, setLlmTriggerMode] = useState<LlmTriggerMode>('on-save');
   
@@ -113,6 +115,43 @@ function App() {
   };
   return (
     <div className="App">
+      <div className="tab-navigation" style={{ display: 'flex', borderBottom: '1px solid var(--vscode-widget-border)', marginBottom: '16px', padding: '10px 10px 0' }}>
+        <button 
+          onClick={() => setActiveTab('main')}
+          style={{
+            padding: '8px 16px',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'main' ? '2px solid var(--vscode-button-background)' : '2px solid transparent',
+            color: activeTab === 'main' ? 'var(--vscode-foreground)' : 'var(--vscode-descriptionForeground)',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: activeTab === 'main' ? 'bold' : 'normal'
+          }}
+        >
+          メイン (設定)
+        </button>
+        <button 
+          onClick={() => setActiveTab('version-control')}
+          style={{
+            padding: '8px 16px',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'version-control' ? '2px solid var(--vscode-button-background)' : '2px solid transparent',
+            color: activeTab === 'version-control' ? 'var(--vscode-foreground)' : 'var(--vscode-descriptionForeground)',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: activeTab === 'version-control' ? 'bold' : 'normal'
+          }}
+        >
+          修正案レビュー
+        </button>
+      </div>
+
+      {activeTab === 'version-control' ? (
+        <VersionControlTab />
+      ) : (
+        <div className="main-content" style={{ padding: '0 10px' }}>
       {llmError && (
         <div style={{ padding: '10px', backgroundColor: '#5a1d1d', color: '#ffb3b3', borderRadius: '4px', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div><strong>❌ AI Communication Error:</strong> {llmError}</div>
@@ -322,6 +361,8 @@ function App() {
           )}
         </div>
       </section>
+        </div>
+      )}
     </div>
   );
 }
