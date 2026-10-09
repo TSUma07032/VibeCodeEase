@@ -120,10 +120,7 @@ export class WebviewMessageHandler {
                 }
                 break;
             }
-            case 'SHOW_DIFF': {
-                await vscode.commands.executeCommand('vibecodeease.showDiff');
-                break;
-            }
+
             case 'SELECT_WORKSPACE_FILE': {
                 const payload = message.payload as { uri: string } | undefined;
                 if (payload && typeof payload.uri === 'string') {
@@ -139,6 +136,10 @@ export class WebviewMessageHandler {
                 break;
             }
             case 'APPLY_WORKSPACE_DIFF': {
+                // TODO(Next-Gen Agent): AIとの対話的な修正案検討機能
+                // 現在はAIが一方的に修正案を提示し、ユーザーが「適用」するだけだが、
+                // ポップオーバー内で「なぜここを修正したのか？」とAIに質問したり、
+                // 指摘に対して追加の指示を出して新たな修正案を生成する双方向のチャット機能を実装すること。
                 const diff = message.payload as import('../types/webviewMessage').AiDiff | undefined;
                 if (diff) {
                     const uri = vscode.Uri.parse(diff.id.split('::')[0]);
