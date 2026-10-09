@@ -145,6 +145,10 @@
 - [ ] Tabキーによるワンタッチ適用の機能を、より広い範囲（インライン補完や複数候補時の選択UI）に拡張する。
 
 ## 🚀 6. UI/UX Redesign & Future Architecture (Next-Generation Agents)
+> **⚠️ ATTENTION NEXT-GENERATION AGENTS:**
+> 以下の項目は現在のスプリントのスコープ外ですが、長期的なビジョンのために不可欠な要素です。
+> 将来のフェーズ（または次世代のAIエージェント）に実装を委譲します。適宜ロードマップとして参照してください。
+
 - [ ] **AIワークスペースの可視化と分離 (非侵入型UIの実現)**
   - 説明: ユーザーの作業を邪魔せず、裏側でAI版のコードを維持・改善する仕組みへの移行。
   - [ ] 既存のVS CodeネイティブDiffView自動展開を廃止し、バックグラウンド同期のみに留める（`extension.ts` の `ensureDiffViewIsOpen` のリファクタリング）。

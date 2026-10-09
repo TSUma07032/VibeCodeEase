@@ -10,6 +10,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private readonly messageHandler: WebviewMessageHandler;
   private _debounceTimer?: ReturnType<typeof setTimeout>;
   private readonly _disposables: vscode.Disposable[] = [];
+  private selectedWorkspaceUri?: string;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
@@ -18,6 +19,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     private readonly personalizationService?: any
   ) {
     this.messageHandler = new WebviewMessageHandler(secrets, undefined, personalizationService);
+    this.messageHandler.onSelectWorkspaceFile = (uri) => {
+      this._pushWorkspaceState(uri);
+    };
   }
 
   public getMessageHandler(): WebviewMessageHandler {
@@ -62,12 +66,22 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         const activeEditor = vscode.window.activeTextEditor;
         if (!activeEditor || event.document !== activeEditor.document) { return; }
         if (this._debounceTimer) { clearTimeout(this._debounceTimer); }
-        this._debounceTimer = setTimeout(() => this._pushLiveIssues(), 500);
+        this._debounceTimer = setTimeout(() => {
+          this._pushLiveIssues();
+          this._pushWorkspaceState();
+        }, 500);
       })
     );
 
     // 初期表示時にも一度プッシュ
     this._pushLiveIssues();
+
+    this._disposables.push(
+      SharedAnalysisCache.getInstance().onDidChange(() => {
+        this._pushLiveIssues();
+        this._pushWorkspaceState();
+      })
+    );
 
     // 背景のLLM解析ステータスを転送
     if (this.llmBackgroundService) {
@@ -94,6 +108,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
    */
   public pushLiveIssues(): void {
     this._pushLiveIssues();
+    this._pushWorkspaceState();
   }
 
   private _pushLiveIssues(): void {
@@ -127,6 +142,107 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       });
 
     this._view.webview.postMessage({ type: 'LIVE_ISSUES_UPDATE', payload: issues });
+    this._pushWorkspaceState(editor.document.uri.toString());
+  }
+
+  private async _pushWorkspaceState(activeUri?: string): Promise<void> {
+    if (!this._view) { return; }
+    
+    // TODO(Next-Gen Agent): 同期と自律的改善のライフサイクル構築
+    // 現在は都度エディタのテキストをパースして擬似的にAI版コードを構築しているが、
+    // 長期的には独立した「AIワークスペース状態モデル」を保持し、
+    // ユーザーの手元の「ファイルセーブ」をトリガーに差分のみを同期するアーキテクチャへの移行を検討すること。
+    
+    const cache = SharedAnalysisCache.getInstance();
+    const uris = cache.getAllExternalUris();
+    const files = uris.map(uri => {
+      const parsed = vscode.Uri.parse(uri);
+      return { uri, label: vscode.workspace.asRelativePath(parsed) };
+    });
+
+    if (uris.length === 0) {
+      this.selectedWorkspaceUri = undefined;
+      this._view.webview.postMessage({ type: 'WORKSPACE_STATE_UPDATE', payload: { files: [] } });
+      return;
+    }
+
+    // Determine the active file to display.
+    if (activeUri) {
+      this.selectedWorkspaceUri = activeUri;
+    }
+    let selectedUri = this.selectedWorkspaceUri && uris.includes(this.selectedWorkspaceUri) ? this.selectedWorkspaceUri : uris[0];
+    this.selectedWorkspaceUri = selectedUri;
+
+    const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(selectedUri));
+    const results = cache.getResults(document).filter(r => r.source === 'llm');
+    const globalState = GlobalState.getInstance();
+    
+    const edits: { range: vscode.Range, text: string, message: string, id: string, category: string, originalText?: string }[] = [];
+    for (const result of results) {
+        const level = globalState.getInterventionLevel(result.category);
+        if (level === 'IGNORE') continue;
+        for (const intervention of result.interventions) {
+            if (intervention.replacementText !== undefined) {
+                const id = `${selectedUri}::${result.source}::${result.category}::${result.range.start.line}::${result.range.start.character}`;
+                edits.push({
+                    range: new vscode.Range(result.range.start.line, result.range.start.character, result.range.end.line, result.range.end.character),
+                    text: intervention.replacementText,
+                    message: intervention.message || 'AI提案があります。',
+                    id,
+                    category: result.category,
+                    originalText: intervention.originalText
+                });
+            }
+        }
+    }
+
+    edits.sort((a, b) => a.range.start.compareTo(b.range.start));
+
+    const lines = document.getText().split('\n');
+    let lineShift = 0;
+    const diffs: import('../types/webviewMessage').AiDiff[] = [];
+
+    for (const edit of edits) {
+        const startLine = edit.range.start.line;
+        const endLine = edit.range.end.line;
+        const originalLinesReplaced = endLine - startLine + 1;
+        const replacementLines = edit.text.split('\n');
+        const newLinesCount = replacementLines.length;
+        
+        const modifiedStartLine = startLine + lineShift;
+        let before = lines[modifiedStartLine].substring(0, edit.range.start.character);
+        let after = lines[modifiedStartLine + originalLinesReplaced - 1].substring(edit.range.end.character);
+        
+        replacementLines[0] = before + replacementLines[0];
+        replacementLines[replacementLines.length - 1] += after;
+        
+        lines.splice(modifiedStartLine, originalLinesReplaced, ...replacementLines);
+        
+        diffs.push({
+          id: edit.id,
+          originalStartLine: startLine,
+          originalEndLine: endLine,
+          aiStartLine: modifiedStartLine,
+          aiEndLine: modifiedStartLine + newLinesCount - 1,
+          message: edit.message,
+          replacementText: edit.text,
+          originalText: edit.originalText,
+          category: edit.category
+        });
+
+        lineShift += (newLinesCount - originalLinesReplaced);
+    }
+
+    const aiCode = lines.join('\n');
+    const state: import('../types/webviewMessage').AiWorkspaceState = {
+      files,
+      activeFileUri: selectedUri,
+      aiCode,
+      diffs,
+      languageId: document.languageId
+    };
+
+    this._view.webview.postMessage({ type: 'WORKSPACE_STATE_UPDATE', payload: state });
   }
 
   public dispose(): void {

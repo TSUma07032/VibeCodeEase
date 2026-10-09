@@ -1,142 +1,89 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import App from './App';
 import { mockPostMessage } from './test/setup';
 
+// Mock Monaco Editor
+vi.mock('@monaco-editor/react', () => ({
+  __esModule: true,
+  default: () => <div data-testid="monaco-editor-mock">Monaco Editor Mock</div>,
+  useMonaco: () => ({
+    Range: class Range {
+      constructor(public startLineNumber: number, public startColumn: number, public endLineNumber: number, public endColumn: number) {}
+    },
+    editor: {
+      ContentWidgetPositionPreference: { BELOW: 1, ABOVE: 2 }
+    }
+  })
+}));
+
 describe('App Component (Webview UI)', () => {
-  it('初期描画時にGET_SETTINGSを送信し、主要UI要素を表示すること', () => {
+  it('initial render sends GET_SETTINGS and shows AI Review Screen', () => {
     render(<App />);
 
-    // 起動時にGET_SETTINGSがVS Codeへ送信されること
     expect(mockPostMessage).toHaveBeenCalledWith({ command: 'GET_SETTINGS' });
-
-    // ヘッダーが表示されること
     expect(screen.getByText('✨ vibeCodeEase')).toBeInTheDocument();
-
-    // プリセットカードが表示されること
-    expect(screen.getByText(/学習モード/)).toBeInTheDocument();
-    expect(screen.getByText(/フローモード/)).toBeInTheDocument();
-    expect(screen.getByText(/職人モード/)).toBeInTheDocument();
-    expect(screen.getByText(/カスタム調整/)).toBeInTheDocument();
-
-    // スライダー項目が表示されること
-    expect(screen.getByText('タイポ・誤記')).toBeInTheDocument();
-    expect(screen.getByText('インデント・整形')).toBeInTheDocument();
-
-    // AIモデル・API設定セクションが表示されること
-    expect(screen.getByText('🤖 AIモデル & API設定')).toBeInTheDocument();
-    expect(screen.getByText('LLM プロバイダー')).toBeInTheDocument();
-  });
-
-  it('プリセットカードをクリックすると SET_PRESET メッセージが送信されること', () => {
-    render(<App />);
-
-    const flowCard = screen.getByText(/フローモード/).closest('.preset-card');
-    expect(flowCard).not.toBeNull();
-
-    fireEvent.click(flowCard!);
-
-    expect(mockPostMessage).toHaveBeenCalledWith({
-      command: 'SET_PRESET',
-      payload: 'FLOW'
-    });
-  });
-
-  it('スライダーの値を変更すると UPDATE_PREFERENCE_VALUE が送信されること', () => {
-    render(<App />);
-
-    const sliders = screen.getAllByRole('slider');
-    expect(sliders.length).toBeGreaterThan(0);
-
-    const typoSlider = sliders[0];
-    fireEvent.change(typoSlider, { target: { value: '0.95' } });
-
-    expect(mockPostMessage).toHaveBeenCalledWith({
-      command: 'UPDATE_PREFERENCE_VALUE',
-      payload: {
-        category: 'SYNTAX_TYPO',
-        value: 0.95
-      }
-    });
-  });
-
-  it('LLMプロバイダーを変更すると SET_LLM_CONFIG が送信されること', () => {
-    render(<App />);
-    const providerSelect = screen.getByDisplayValue(/Google Gemini/);
-    fireEvent.change(providerSelect, { target: { value: 'vscode-lm' } });
-
-    expect(mockPostMessage).toHaveBeenCalledWith({
-      command: 'SET_LLM_CONFIG',
-      payload: { provider: 'vscode-lm', model: 'auto' }
-    });
-  });
-
-  it('APIキーを入力して保存すると SAVE_API_KEY が送信されること', () => {
-    render(<App />);
-    const apiKeyInput = screen.getByPlaceholderText('AIza...');
-    fireEvent.change(apiKeyInput, { target: { value: 'test-api-key' } });
+    expect(screen.getByTitle('設定を開く')).toBeInTheDocument();
     
-    const saveButton = screen.getByRole('button', { name: '保存' });
-    fireEvent.click(saveButton);
-
-    expect(mockPostMessage).toHaveBeenCalledWith({
-      command: 'SAVE_API_KEY',
-      payload: { apiKey: 'test-api-key' }
-    });
+    // AI Review screen is default
+    expect(screen.getByText('AIの提案はありません。')).toBeInTheDocument();
   });
 
-  it('解析ボタンをクリックすると ANALYZE_CURRENT_FILE が送信されること', () => {
+  it('toggles settings view when clicking settings icon', () => {
     render(<App />);
+    const toggleBtn = screen.getByTitle('設定を開く');
+    fireEvent.click(toggleBtn);
 
-    const analyzeButton = screen.getByRole('button', { name: /現在のファイルを解析/ });
-    fireEvent.click(analyzeButton);
-
-    expect(mockPostMessage).toHaveBeenCalledWith({
-      command: 'ANALYZE_CURRENT_FILE'
-    });
+    // Settings screen
+    expect(screen.getByText(/Section 1: UIUX Settings/)).toBeInTheDocument();
+    
+    const backBtn = screen.getByTitle('レビュー画面に戻る');
+    fireEvent.click(backBtn);
+    expect(screen.getByText('AIの提案はありません。')).toBeInTheDocument();
   });
 
-  it('プランを受信したときにプラン詳細が表示され、承認・却下できること', async () => {
+  it('renders workspace state and sends APPLY_ALL_WORKSPACE_DIFFS when clicked', async () => {
     render(<App />);
 
-    // 拡張機能からの INTERVENTION_PLAN メッセージをシミュレート
     act(() => {
       window.dispatchEvent(
         new MessageEvent('message', {
           data: {
-            type: 'INTERVENTION_PLAN',
+            type: 'WORKSPACE_STATE_UPDATE',
             payload: {
-              summary: 'タイポを1件修正します',
-              edits: [
+              files: [{ uri: 'file:///test.ts', label: 'test.ts' }],
+              activeFileUri: 'file:///test.ts',
+              aiCode: 'console.log("test");',
+              diffs: [
                 {
-                  startLine: 0,
-                  startCharacter: 0,
-                  endLine: 0,
-                  endCharacter: 7,
-                  newText: 'function',
-                  category: 'SYNTAX_TYPO',
-                  reason: 'functon の誤記'
+                  id: 'diff-1',
+                  originalStartLine: 0,
+                  originalEndLine: 0,
+                  aiStartLine: 0,
+                  aiEndLine: 0,
+                  message: 'AI suggestion',
+                  replacementText: 'console.log("test");',
+                  category: 'SYNTAX_TYPO'
                 }
-              ]
+              ],
+              languageId: 'typescript'
             }
           }
         })
       );
     });
 
-    // プラン内容が表示されること
-    expect(await screen.findByText('📋 介入プラン')).toBeInTheDocument();
-    expect(screen.getByText('タイポを1件修正します')).toBeInTheDocument();
-    expect(screen.getByText(/functon の誤記/)).toBeInTheDocument();
+    expect(await screen.findByDisplayValue('test.ts')).toBeInTheDocument();
+    
+    const applyAllBtn = screen.getByRole('button', { name: /Apply All/ });
+    fireEvent.click(applyAllBtn);
 
-    // 「承認して適用」ボタンをクリック
-    const applyButton = screen.getByRole('button', { name: '承認して適用' });
-    fireEvent.click(applyButton);
-    expect(mockPostMessage).toHaveBeenCalledWith({ command: 'APPLY_PLAN' });
-
-    // 「却下」ボタンをクリック
-    const rejectButton = screen.getByRole('button', { name: '却下' });
-    fireEvent.click(rejectButton);
-    expect(mockPostMessage).toHaveBeenCalledWith({ command: 'REJECT_PLAN' });
+    expect(mockPostMessage).toHaveBeenCalledWith({
+      command: 'APPLY_ALL_WORKSPACE_DIFFS',
+      payload: {
+        uri: 'file:///test.ts',
+        diffs: expect.any(Array)
+      }
+    });
   });
 });

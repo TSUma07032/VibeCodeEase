@@ -262,9 +262,14 @@ export class SharedAnalysisCache {
     this._onDidChange.fire();
   }
 
+  public getAllExternalUris(): string[] {
+    return Array.from(this.externalResults.keys());
+  }
+
   /** 外部結果（LLM）のみをクリア */
   public clearExternalResults(uri: string): void {
     this.externalResults.delete(uri);
+    this._onDidChange.fire();
   }
 
   /** 特定の問題（LiveIssueのID相当）を無視リストに追加する */

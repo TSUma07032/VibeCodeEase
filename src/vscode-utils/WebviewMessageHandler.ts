@@ -29,6 +29,7 @@ export type ActionCallback = (action: 'APPLY' | 'REJECT', plan: LlmInterventionP
 export class WebviewMessageHandler {
     private pendingPlan?: PendingPlan;
     private actionCallback?: ActionCallback;
+    public onSelectWorkspaceFile?: (uri: string) => void;
 
     constructor(
         private readonly secrets: vscode.SecretStorage,
@@ -121,6 +122,66 @@ export class WebviewMessageHandler {
             }
             case 'SHOW_DIFF': {
                 await vscode.commands.executeCommand('vibecodeease.showDiff');
+                break;
+            }
+            case 'SELECT_WORKSPACE_FILE': {
+                const payload = message.payload as { uri: string } | undefined;
+                if (payload && typeof payload.uri === 'string') {
+                    // Update workspace state with the new active uri
+                    // Since _pushWorkspaceState is in SidebarProvider, we can either trigger an event or pass a callback.
+                    // Instead, we can just open the document. But wait, opening the document might change the active editor in VS Code, which triggers onDidChangeActiveTextEditor.
+                    // But we don't want to change the active editor! We just want to change the sidebar view.
+                    // We can use a custom event or callback.
+                    if (this.onSelectWorkspaceFile) {
+                        this.onSelectWorkspaceFile(payload.uri);
+                    }
+                }
+                break;
+            }
+            case 'APPLY_WORKSPACE_DIFF': {
+                const diff = message.payload as import('../types/webviewMessage').AiDiff | undefined;
+                if (diff) {
+                    const uri = vscode.Uri.parse(diff.id.split('::')[0]);
+                    const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === uri.toString());
+                    const doc = editor ? editor.document : await vscode.workspace.openTextDocument(uri);
+                    
+                    const edit = new vscode.WorkspaceEdit();
+                    let range = new vscode.Range(diff.originalStartLine, 0, diff.originalEndLine, Number.MAX_VALUE);
+                    
+                    if (diff.originalText) {
+                        const dynamicRange = findOriginalTextRange(doc, diff.originalText, diff.originalStartLine, 0);
+                        if (dynamicRange) range = dynamicRange;
+                    }
+                    edit.replace(uri, range, diff.replacementText);
+                    const applied = await vscode.workspace.applyEdit(edit);
+                    if (applied) {
+                        SharedAnalysisCache.getInstance().ignoreIssue(diff.id);
+                    }
+                }
+                break;
+            }
+            case 'APPLY_ALL_WORKSPACE_DIFFS': {
+                const payload = message.payload as { uri: string, diffs: import('../types/webviewMessage').AiDiff[] } | undefined;
+                if (payload && payload.diffs) {
+                    const uri = vscode.Uri.parse(payload.uri);
+                    const doc = await vscode.workspace.openTextDocument(uri);
+                    const edit = new vscode.WorkspaceEdit();
+                    
+                    for (const diff of payload.diffs) {
+                        let range = new vscode.Range(diff.originalStartLine, 0, diff.originalEndLine, Number.MAX_VALUE);
+                        if (diff.originalText) {
+                            const dynamicRange = findOriginalTextRange(doc, diff.originalText, diff.originalStartLine, 0);
+                            if (dynamicRange) range = dynamicRange;
+                        }
+                        edit.replace(uri, range, diff.replacementText);
+                    }
+                    const applied = await vscode.workspace.applyEdit(edit);
+                    if (applied) {
+                        for (const diff of payload.diffs) {
+                            SharedAnalysisCache.getInstance().ignoreIssue(diff.id);
+                        }
+                    }
+                }
                 break;
             }
             case 'ANALYZE_CURRENT_FILE': {
