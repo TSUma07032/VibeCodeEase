@@ -20,7 +20,7 @@ export const PRESET_DEFINITIONS: Record<Exclude<PresetMode, 'CUSTOM'>, PresetDef
     description: 'AI avoids writing exact solution code, suggests comments/hint texts for fixing/improving.',
     icon: '$(lightbulb)',
     preferences: {
-      SYNTAX_TYPO: 0.3,
+      SYNTAX_TYPO: 0.8,
       INDENTATION_FORMATTING: 0.3,
       VAR_FUNC_MANAGEMENT: 0.3,
       SYNTAX_ERROR_HANDLING: 0.4

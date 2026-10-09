@@ -51,6 +51,19 @@ export function activate(context: vscode.ExtensionContext) {
 		})
 	);
 
+	context.subscriptions.push(
+		vscode.workspace.onDidChangeTextDocument((event) => {
+			if (event.document.uri.scheme === 'file') {
+				const modifiedUri = vscode.Uri.parse(`${DIFF_SCHEME}://modified${event.document.uri.path}`);
+				diffProvider.update(modifiedUri);
+			}
+		})
+	);
+
+	// TODO: [Next-Gen Architecture] Refactor how AI Workspace is displayed.
+	// As per uiux_redesign_specification.md, opening the native diff view automatically 
+	// can be intrusive. The target UX is to sync to an invisible AI Workspace and only 
+	// show results in a side panel (Monaco Webview) when the user actively checks it.
 	const ensureDiffViewIsOpen = async (editor: vscode.TextEditor | undefined) => {
 		if (!editor) return;
 		if (editor.document.uri.scheme !== 'file') return;
@@ -70,7 +83,7 @@ export function activate(context: vscode.ExtensionContext) {
 		if (!isDiffOpen) {
 			const uri = editor.document.uri;
 			const modifiedUri = vscode.Uri.parse(`${DIFF_SCHEME}://modified${uri.path}`);
-			await vscode.commands.executeCommand('vscode.diff', uri, modifiedUri, `${uri.path.split('/').pop()} (Original ↔ AI Proposed)`, { preserveFocus: true, preview: true });
+			await vscode.commands.executeCommand('vscode.diff', uri, modifiedUri, `AI Workspace: ${uri.path.split('/').pop()}`, { preserveFocus: true, preview: true });
 		}
 	};
 
@@ -85,7 +98,7 @@ export function activate(context: vscode.ExtensionContext) {
 			if (!editor) return;
 			const uri = editor.document.uri;
 			const modifiedUri = vscode.Uri.parse(`${DIFF_SCHEME}://modified${uri.path}`);
-			await vscode.commands.executeCommand('vscode.diff', uri, modifiedUri, `${uri.path.split('/').pop()} (Original ↔ AI Proposed)`);
+			await vscode.commands.executeCommand('vscode.diff', uri, modifiedUri, `AI Workspace: ${uri.path.split('/').pop()}`);
 		})
 	);
 
@@ -165,12 +178,18 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 	context.subscriptions.push(disposable);
 
-	const applyInterventionCommand = vscode.commands.registerCommand('vibecodeease.applyIntervention', async (uri: vscode.Uri, range: vscode.Range, newText: string) => {
+	const applyInterventionCommand = vscode.commands.registerCommand('vibecodeease.applyIntervention', async (uri: any, range: any, newText: string) => {
 		if (!uri || !range || typeof newText !== 'string') {
 			return;
 		}
+		
+		const targetUri = uri instanceof vscode.Uri ? uri : vscode.Uri.parse(uri.path || uri.fsPath || uri);
+		const targetRange = range instanceof vscode.Range 
+			? range 
+			: new vscode.Range(range[0]?.line ?? range.start?.line, range[0]?.character ?? range.start?.character, range[1]?.line ?? range.end?.line, range[1]?.character ?? range.end?.character);
+		
 		const edit = new vscode.WorkspaceEdit();
-		edit.replace(uri, range, newText);
+		edit.replace(targetUri, targetRange, newText);
 		const applied = await vscode.workspace.applyEdit(edit);
 		if (applied) {
 			vscode.window.setStatusBarMessage('$(check) 修正を適用しました', 3000);

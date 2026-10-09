@@ -4,7 +4,7 @@ import { PRESET_DEFINITIONS, UserPreferenceProfile } from '../types';
 
 suite('InterventionEngine Test Suite', () => {
     suite('determineLevel', () => {
-        test('0.75以上�E SILENT を返すこと', () => {
+        test('0.75以上�E SILENT を返すこと', () => {
             assert.strictEqual(InterventionEngine.determineLevel(0.75), 'SILENT');
             assert.strictEqual(InterventionEngine.determineLevel(0.9), 'SILENT');
             assert.strictEqual(InterventionEngine.determineLevel(1.0), 'SILENT');
@@ -26,7 +26,7 @@ suite('InterventionEngine Test Suite', () => {
             assert.strictEqual(InterventionEngine.determineLevel(-1.0), 'IGNORE');
         });
 
-        test('1.0を趁E��る値はクランプさめESILENT を返すこと', () => {
+        test('1.0を趁E��る値はクランプさめESILENT を返すこと', () => {
             assert.strictEqual(InterventionEngine.determineLevel(2.5), 'SILENT');
         });
     });
@@ -41,14 +41,14 @@ suite('InterventionEngine Test Suite', () => {
             }
         };
 
-        test('吁E��チE��リの嗜好値に応じた介�Eレベルを判定できること', () => {
+        test('吁E��チE��リの嗜好値に応じた介�Eレベルを判定できること', () => {
             assert.strictEqual(InterventionEngine.getLevelForCategory('SYNTAX_TYPO', profile), 'SILENT');
             assert.strictEqual(InterventionEngine.getLevelForCategory('INDENTATION_FORMATTING', profile), 'SUGGESTION');
             assert.strictEqual(InterventionEngine.getLevelForCategory('VAR_FUNC_MANAGEMENT', profile), 'IGNORE');
             assert.strictEqual(InterventionEngine.getLevelForCategory('SYNTAX_ERROR_HANDLING', profile), 'SUGGESTION');
         });
 
-        test('HINTプリセチE��のタイポ�ESILENT、設計�E構文は自劁E提案になること', () => {
+        test('HINTプリセチE��のタイポ�ESILENT、設計�E構文は自劁E提案になること', () => {
             const HINTProfile: UserPreferenceProfile = {
                 preferences: { ...PRESET_DEFINITIONS.HINT.preferences }
             };
@@ -56,7 +56,7 @@ suite('InterventionEngine Test Suite', () => {
             assert.strictEqual(InterventionEngine.getLevelForCategory('VAR_FUNC_MANAGEMENT', HINTProfile), 'IGNORE');
         });
 
-        test('未定義カチE��リめE��プロファイルはチE��ォルト値(0.5 -> SUGGESTION)を返すこと', () => {
+        test('未定義カチE��リめE��プロファイルはチE��ォルト値(0.5 -> SUGGESTION)を返すこと', () => {
             const emptyProfile = { preferences: {} } as any;
             assert.strictEqual(InterventionEngine.getLevelForCategory('SYNTAX_TYPO', emptyProfile), 'SUGGESTION');
             assert.strictEqual(InterventionEngine.getLevelForCategory('SYNTAX_TYPO', undefined), 'SUGGESTION');
@@ -73,7 +73,7 @@ suite('InterventionEngine Test Suite', () => {
             }
         };
 
-        test('しきぁE��未満は IGNORE を返すこと', () => {
+        test('しきぁE��未満は IGNORE を返すこと', () => {
             const profile: UserPreferenceProfile = {
                 preferences: {
                     ...defaultProfile.preferences,
@@ -84,7 +84,7 @@ suite('InterventionEngine Test Suite', () => {
             assert.strictEqual(level, 'IGNORE');
         });
 
-        test('しきぁE��墁E��値 (IGNORE_MAX) では SUGGESTION を返すこと', () => {
+        test('しきぁE��墁E��値 (IGNORE_MAX) では SUGGESTION を返すこと', () => {
             const profile: UserPreferenceProfile = {
                 preferences: {
                     ...defaultProfile.preferences,
@@ -95,7 +95,7 @@ suite('InterventionEngine Test Suite', () => {
             assert.strictEqual(level, 'SUGGESTION');
         });
 
-        test('しきぁE��墁E��値 (SUGGESTION_MAX) では SILENT を返すこと', () => {
+        test('しきぁE��墁E��値 (SUGGESTION_MAX) では SILENT を返すこと', () => {
             const profile: UserPreferenceProfile = {
                 preferences: {
                     ...defaultProfile.preferences,
@@ -108,11 +108,11 @@ suite('InterventionEngine Test Suite', () => {
     });
 
     suite('getEducationalHint', () => {
-        test('HINTモード時に教育皁E�EレフィチE��スと解説が含まれること', () => {
+        test('HINTモード時に教育皁E�EレフィチE��スと解説が含まれること', () => {
             const hint = InterventionEngine.getEducationalHint('SYNTAX_TYPO', 'functon', 'function', 'HINT');
-            assert.ok(hint.includes('🎓 **学習ヒンチE(タイチE:**'));
-            assert.ok(hint.includes('functon'));
-            assert.ok(hint.includes('function'));
+            assert.ok(hint.includes('🎓 **学習ヒント (タイポ):**'));
+            assert.ok(hint.includes('🎓 **学習ヒント (タイポ):**'));
+            assert.ok(hint.includes('🎓 **学習ヒント (タイポ):**'));
         });
 
         test('HINTモード以外ではシンプルなサジェスト文を返すこと', () => {
