@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import Editor, { useMonaco } from '@monaco-editor/react';
-import type { AiWorkspaceState, AiWorkspaceFile, AiDiff } from '../types';
+import type { AiWorkspaceState } from '../types';
 
 interface AIReviewScreenProps {
   workspaceState: AiWorkspaceState | null;
@@ -125,7 +125,7 @@ export const AIReviewScreen: React.FC<AIReviewScreenProps> = ({ workspaceState, 
             scrollBeyondLastLine: false,
             lineNumbersMinChars: 3
           }}
-          onMount={(editor) => { editorRef.current = editor; }}
+          onMount={(editor: any) => { editorRef.current = editor; }}
         />
       </div>
     </div>

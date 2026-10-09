@@ -9,7 +9,16 @@ vi.mock('@monaco-editor/react', () => ({
   default: () => <div data-testid="monaco-editor-mock">Monaco Editor Mock</div>,
   useMonaco: () => ({
     Range: class Range {
-      constructor(public startLineNumber: number, public startColumn: number, public endLineNumber: number, public endColumn: number) {}
+      startLineNumber: number;
+      startColumn: number;
+      endLineNumber: number;
+      endColumn: number;
+      constructor(startLineNumber: number, startColumn: number, endLineNumber: number, endColumn: number) {
+        this.startLineNumber = startLineNumber;
+        this.startColumn = startColumn;
+        this.endLineNumber = endLineNumber;
+        this.endColumn = endColumn;
+      }
     },
     editor: {
       ContentWidgetPositionPreference: { BELOW: 1, ABOVE: 2 }
