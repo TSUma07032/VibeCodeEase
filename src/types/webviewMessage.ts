@@ -1,15 +1,28 @@
 /**
- * VS Code本体とReactサイドバーUI間（Webview）でやり取りする汎用的なメッセージフォーマット型
+ * [Why/Intent] ExtensionとWebview間で型安全なメッセージ通信（IPC）を保証し、契約（Contract）として定義する。
  */
-export interface WebviewMessage {
-  /** メッセージのタイプ・アクション名（例: 'UPDATE_PREFERENCE', 'GET_PREFERENCE' 等） */
-  type: string;
-  /** ペイロード。任意のデータを持たせることができる */
-  payload?: unknown;
-}
 
-export interface SettingsPayload {
-  activeRules?: import('./liveIssue').RuleSummary[];
-  llmTriggerMode?: import('./llmConfig').LlmTriggerMode;
-  editorAppealLevel?: import('./common').EditorAppealLevel;
+/**
+ * [Why/Intent] WebviewからExtensionへ送るメッセージ。
+ * - apply_intervention: ユーザーが提案を反映した際のコード適用要求
+ * - discard_intervention: ユーザーが提案を破棄した際の除外要求
+ * - ready: WebviewのReactマウント完了を知らせるハンドシェイク
+ */
+// Webview -> Extension
+export type WebviewToExtensionMessage = 
+  | { command: 'apply_intervention', id: string, newText: string, range: { start: { line: number, character: number }, end: { line: number, character: number } } }
+  | { command: 'discard_intervention', id: string }
+  | { command: 'ready' };
+
+// Extension -> Webview
+export type ExtensionToWebviewMessage = 
+  | { type: 'SYNC_DOCUMENT', fileName: string, text: string }
+  | { type: 'UPDATE_INTERVENTIONS', interventions: WebviewIntervention[] };
+
+export interface WebviewIntervention {
+  id: string;
+  range: { start: { line: number, character: number }, end: { line: number, character: number } };
+  originalText: string;
+  replacementText: string;
+  message: string;
 }

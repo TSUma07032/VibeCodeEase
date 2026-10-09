@@ -1,329 +1,95 @@
-import './App.css';
+/**
+ * [Why/Intent] Side-by-SideエディタのReact側ルートコンポーネントであり、
+ * Extensionからのイベントを購読して状態（ドキュメント内容・提案一覧）を管理・分配する責務を持つ。
+ */
 import { useEffect, useState } from 'react';
-import type {
-  PresetMode,
-  SettingsPayload,
-  LlmConfig,
-  LlmProvider,
-  LlmTriggerMode
-} from './types';
-import { PersonalizationPanel } from './components/PersonalizationPanel';
+import type { ExtensionToWebviewMessage, WebviewIntervention } from './types';
+import { MirrorEditor } from './components/MirrorEditor';
 
-// VS Code API を取得するための宣言
-declare const acquireVsCodeApi: any;
-const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
-
-/** プリセット選択時の嗜好値プレビュー用 */
-
+/**
+ * [Why/Intent] ブラウザ単体での開発・デバッグ時に acquireVsCodeApi が存在しなくてもクラッシュさせないためのフォールバックモック。
+ */
+const vscode = (window as any).acquireVsCodeApi ? (window as any).acquireVsCodeApi() : {
+    postMessage: (msg: any) => console.log('postMessage:', msg)
+};
 
 function App() {
-  const [presetMode, setPresetMode] = useState<PresetMode>('HINT');
-  
-  // LLMトリガーモード
-  const [llmTriggerMode, setLlmTriggerMode] = useState<LlmTriggerMode>('on-save');
-  
-  // LLM / API Key State
-  const [llmConfig, setLlmConfig] = useState<LlmConfig>({ provider: 'gemini', model: 'gemini-3.6-flash' });
-  const [hasGeminiApiKey, setHasGeminiApiKey] = useState<boolean>(false);
-  const [apiKeyValue, setApiKeyValue] = useState<string>('');
-  const [isEditingApiKey, setIsEditingApiKey] = useState<boolean>(false);
-  const [isPersonalizedMode, setIsPersonalizedMode] = useState<boolean>(true);
+    /**
+     * [Why/Intent] Extensionから受信したドキュメント名・テキスト内容・提案一覧を保持・描画するため。
+     */
+    const [fileName, setFileName] = useState<string>('');
+    const [text, setText] = useState<string>('');
+    const [interventions, setInterventions] = useState<WebviewIntervention[]>([]);
 
-  // Personalization State
-  const [pzProfile, setPzProfile] = useState<any>(null);
-  const [pzMetrics, setPzMetrics] = useState<any>(null);
-  const [pzCandidates, setPzCandidates] = useState<any[]>([]);
-  const [pzBusy, setPzBusy] = useState<boolean>(false);
-  const [pzError, setPzError] = useState<string>('');
-  const [llmError, setLlmError] = useState<string>('');
+    /**
+     * [Why/Intent] コンポーネントマウント時にメッセージリスナーを登録し、
+     * アンマウント時に解除することでメモリリークを防ぎ、Extensionとの通信を維持する。
+     */
+    useEffect(() => {
+        const handleMessage = (event: MessageEvent<ExtensionToWebviewMessage>) => {
+            const message = event.data;
+            switch (message.type) {
+                case 'SYNC_DOCUMENT':
+                    setFileName(message.fileName);
+                    setText(message.text);
+                    break;
+                case 'UPDATE_INTERVENTIONS':
+                    setInterventions(message.interventions);
+                    break;
+            }
+        };
 
-  useEffect(() => {
-    // 起動時に拡張機能へ設定取得リクエストを送る
-    vscode?.postMessage({ command: 'GET_SETTINGS' });
+        window.addEventListener('message', handleMessage);
+        vscode.postMessage({ command: 'ready' });
+        return () => window.removeEventListener('message', handleMessage);
+    }, []);
 
-    const handleMessage = (event: MessageEvent) => {
-      const data = event.data;
-      if (!data || typeof data !== 'object') return;
-
-      switch (data.type) {
-        case 'SETTINGS_DATA': {
-          const payload = data.payload as SettingsPayload;
-          setPresetMode(payload.presetMode);
-          if (payload.llmConfig) setLlmConfig(payload.llmConfig);
-          if (payload.hasGeminiApiKey !== undefined) setHasGeminiApiKey(payload.hasGeminiApiKey);
-          if (payload.llmTriggerMode) setLlmTriggerMode(payload.llmTriggerMode);
-          break;
-        }
-        case 'PZ_STATE':
-          setPzProfile(data.payload.profile);
-          setPzMetrics(data.payload.metrics);
-          break;
-        case 'PZ_CANDIDATES':
-          setPzCandidates(data.payload);
-          break;
-        case 'PZ_BUSY':
-          setPzBusy(data.payload);
-          if (data.payload) setPzError('');
-          break;
-        case 'PZ_ERROR':
-          setPzError(data.payload);
-          break;
-        case 'BACKGROUND_ANALYSIS_STARTED':
-          setLlmError('');
-          break;
-        case 'LLM_ERROR':
-          setLlmError(data.payload as string);
-          break;
-      }
+    const handleApply = (intervention: WebviewIntervention) => {
+        vscode.postMessage({
+            command: 'apply_intervention',
+            id: intervention.id,
+            newText: intervention.replacementText,
+            range: intervention.range
+        });
     };
 
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, []);
+    const handleDiscard = (id: string) => {
+        vscode.postMessage({
+            command: 'discard_intervention',
+            id
+        });
+    };
 
-  const handleSelectPreset = (preset: PresetMode) => {
-    setPresetMode(preset);
-    vscode?.postMessage({ command: 'SET_PRESET', payload: preset });
-  };
+    if (!fileName) {
+        return (
+            <div style={{ padding: '20px', color: 'var(--vscode-editor-foreground)', fontFamily: 'sans-serif' }}>
+                Waiting for document sync...
+            </div>
+        );
+    }
 
-  const handleLlmProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const provider = e.target.value as LlmProvider;
-    // providerが切り替わったらデフォルトモデルも切り替える
-    const model = provider === 'gemini' ? 'gemini-3.6-flash' : 'auto';
-    setLlmConfig({ provider, model });
-    vscode?.postMessage({ command: 'SET_LLM_CONFIG', payload: { provider, model } });
-  };
-
-  const handleLlmModelChange = (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>) => {
-    const model = e.target.value;
-    setLlmConfig(prev => ({ ...prev, model }));
-    vscode?.postMessage({ command: 'SET_LLM_CONFIG', payload: { provider: llmConfig.provider, model } });
-  };
-
-  const handleSaveApiKey = () => {
-    vscode?.postMessage({ command: 'SAVE_API_KEY', payload: { apiKey: apiKeyValue } });
-    setIsEditingApiKey(false);
-    setApiKeyValue('');
-  };
-
-  const handleDeleteApiKey = () => {
-    vscode?.postMessage({ command: 'DELETE_API_KEY' });
-    setIsEditingApiKey(false);
-    setApiKeyValue('');
-  };
-  return (
-    <div className="App">
-      {llmError && (
-        <div style={{ padding: '10px', backgroundColor: '#5a1d1d', color: '#ffb3b3', borderRadius: '4px', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div><strong>❌ AI Communication Error:</strong> {llmError}</div>
-          <button style={{ marginLeft: '10px', padding: '2px 8px', cursor: 'pointer' }} onClick={() => setLlmError('')}>Dismiss</button>
-        </div>
-      )}
-      {/* Section 1: UIUX 設定 */}
-      <section className="card uiux-section">
-        <h2 className="section-title">🖥️ Section 1: UIUX Settings (AIとの接し方)</h2>
-        <div className="form-group">
-          <label>Trigger Mode (AI介入の発生タイミング)</label>
-          <div className="radio-group">
-            {[
-              { value: 'continuous', label: '10秒ごと(連続)', desc: '作業中に自動で継続的に解析・生成' },
-              { value: 'on-save', label: '保存時のみ', desc: '推奨・APIコスト節約' },
-              { value: 'disabled', label: '無効（生成しない）', desc: 'LLM解析を完全に停止' },
-            ].map(opt => (
-              <label key={opt.value} className={`radio-option ${llmTriggerMode === opt.value ? 'radio-selected' : ''}`}>
-                <input
-                  type="radio"
-                  name="llm-trigger"
-                  value={opt.value}
-                  checked={llmTriggerMode === opt.value}
-                  onChange={() => {
-                    vscode?.postMessage({ command: 'SET_LLM_TRIGGER_MODE', payload: opt.value });
-                  }}
+    return (
+        <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ 
+                padding: '8px 16px', 
+                backgroundColor: 'var(--vscode-editorGroupHeader-tabsBackground)',
+                borderBottom: '1px solid var(--vscode-editorGroupHeader-tabsBorder)',
+                color: 'var(--vscode-tab-activeForeground)',
+                fontFamily: 'sans-serif',
+                fontSize: '13px'
+            }}>
+                {fileName.split(/\\|\//).pop()}
+            </div>
+            <div style={{ flexGrow: 1, overflowY: 'auto' }}>
+                <MirrorEditor 
+                    text={text} 
+                    interventions={interventions} 
+                    onApply={handleApply}
+                    onDiscard={handleDiscard}
                 />
-                <span className="radio-label-text">
-                  <strong>{opt.label}</strong>
-                  <small>{opt.desc}</small>
-                </span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="pz-controls uiux-controls" style={{ display: 'flex', gap: '10px', marginBottom: '10px', flexWrap: 'wrap' }}>
-          <div>
-            <label>Visibility Level (通知・提示の強さ): </label>
-            <select
-              value={pzProfile?.visibilityLevel || 'subtle'}
-              onChange={e => vscode?.postMessage({ command: 'PZ_SET_UIUX', payload: { visibility: e.target.value } })}
-              className="styled-select"
-            >
-              <option value="stealth">Stealth (最小限)</option>
-              <option value="subtle">Subtle (控えめ)</option>
-              <option value="active">Active (積極的)</option>
-            </select>
-          </div>
-          <div>
-            <label>Explanation Verbosity (理由説明の表示量): </label>
-            <select
-              value={pzProfile?.explanationVerbosity || 'summary'}
-              onChange={e => vscode?.postMessage({ command: 'PZ_SET_UIUX', payload: { verbosity: e.target.value } })}
-              className="styled-select"
-            >
-              <option value="minimal">Minimal (1行要約)</option>
-              <option value="summary">Summary (箇条書き)</option>
-              <option value="detailed">Detailed (詳細)</option>
-            </select>
-          </div>
-          <div>
-            <label>Application Automation (差分適用の自動化): </label>
-            <select
-              value={pzProfile?.applicationAutomation || 'manual'}
-              onChange={e => vscode?.postMessage({ command: 'PZ_SET_UIUX', payload: { automation: e.target.value } })}
-              className="styled-select"
-            >
-              <option value="manual">Manual (手動確認)</option>
-              <option value="bulk">Bulk (ファイル一括)</option>
-              <option value="auto">Auto (保存時自動適用)</option>
-            </select>
-          </div>
-        </div>
-      </section>
-
-      {/* Section 2: 生成物の設定 */}
-      <section className="card generation-section">
-        <h2 className="section-title">🧠 Section 2: AI Content Settings (生成物の方向性)</h2>
-        <div style={{ display: 'flex', gap: '20px', marginBottom: '15px' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-            <input type="radio" checked={!isPersonalizedMode} onChange={() => setIsPersonalizedMode(false)} />
-            <span>🔧 既存人格 (固定プリセット)</span>
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-            <input type="radio" checked={isPersonalizedMode} onChange={() => setIsPersonalizedMode(true)} />
-            <span>🧠 パーソナライズ (動的学習)</span>
-          </label>
-        </div>
-
-        {!isPersonalizedMode ? (
-          <div className="preset-grid" style={{ display: 'flex', gap: '10px' }}>
-            <div
-              className={`preset-card ${presetMode === 'HINT' ? 'active' : ''}`}
-              onClick={() => handleSelectPreset('HINT')}
-              style={{ flex: 1, padding: '10px', textAlign: 'center', cursor: 'pointer', border: presetMode === 'HINT' ? '2px solid var(--vscode-button-background)' : '1px solid var(--vscode-widget-border)', borderRadius: '4px' }}
-            >
-              <div>💡 ヒント中心</div>
             </div>
-            <div
-              className={`preset-card ${presetMode === 'ARCHITECTURE' ? 'active' : ''}`}
-              onClick={() => handleSelectPreset('ARCHITECTURE')}
-              style={{ flex: 1, padding: '10px', textAlign: 'center', cursor: 'pointer', border: presetMode === 'ARCHITECTURE' ? '2px solid var(--vscode-button-background)' : '1px solid var(--vscode-widget-border)', borderRadius: '4px' }}
-            >
-              <div>📐 設計思想中心</div>
-            </div>
-            <div
-              className={`preset-card ${presetMode === 'BUG_TYPO' ? 'active' : ''}`}
-              onClick={() => handleSelectPreset('BUG_TYPO')}
-              style={{ flex: 1, padding: '10px', textAlign: 'center', cursor: 'pointer', border: presetMode === 'BUG_TYPO' ? '2px solid var(--vscode-button-background)' : '1px solid var(--vscode-widget-border)', borderRadius: '4px' }}
-            >
-              <div>🐛 タイポやバグの温床を中心</div>
-            </div>
-          </div>
-        ) : (
-          <PersonalizationPanel 
-            vscode={vscode} 
-            profile={pzProfile} 
-            metrics={pzMetrics} 
-            candidates={pzCandidates} 
-            isBusy={pzBusy} 
-            error={pzError} 
-          />
-        )}
-
-        <div style={{ marginTop: '15px', padding: '10px', background: 'var(--vscode-input-background)', borderRadius: '4px' }}>
-          <div style={{ fontSize: '12px', color: 'var(--vscode-descriptionForeground)', marginBottom: '5px' }}>📝 現在の生成プロンプト（簡易表示）:</div>
-          <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: '12px', color: 'var(--vscode-editor-foreground)' }}>
-            {isPersonalizedMode ? 
-              (pzProfile?.preferenceSummary || '学習データがありません。') : 
-              (presetMode === 'HINT' ? 'タイポを手軽に直しつつ、構文・ロジックは解説ヒントを提示。コード理解を最優先。' : 
-               presetMode === 'ARCHITECTURE' ? 'AI介入を最小限に抑え、自力でコードを紡ぐクラフト重視。アーキテクチャの提案を主に行う。' : 
-               '面倒なタイポや整形・構文修正を自動化。バグの温床となる箇所を積極的に修正。')}
-          </pre>
         </div>
-      </section>
-
-      {/* Section 3: LLM & API 設定 */}
-      <section className="card llm-section">
-        <h2 className="section-title">⚙️ Section 3: LLM & API Settings</h2>
-        <div className="llm-config-box">
-          <div className="form-group">
-            <label>Provider</label>
-            <select value={llmConfig.provider} onChange={handleLlmProviderChange} className="styled-select">
-              <option value="gemini">Google Gemini</option>
-              <option value="vscode-lm">VS Code LM</option>
-            </select>
-          </div>
-          
-          <div className="form-group">
-            <label>Model</label>
-            <input 
-              list="model-list" 
-              value={llmConfig.model} 
-              onChange={handleLlmModelChange} 
-              className="styled-input" 
-              placeholder="モデル名を入力または選択"
-            />
-            <datalist id="model-list">
-              {llmConfig.provider === 'gemini' ? (
-                <>
-                  <option value="gemini-3.6-flash" />
-                  <option value="gemini-2.5-flash" />
-                  <option value="gemini-2.0-flash" />
-                  <option value="gemini-1.5-flash" />
-                  <option value="gemini-1.5-pro" />
-                  <option value="auto" />
-                </>
-              ) : (
-                <>
-                  <option value="auto" />
-                  <option value="gpt-4o" />
-                  <option value="gpt-4o-mini" />
-                  <option value="claude-3.5-sonnet" />
-                </>
-              )}
-            </datalist>
-          </div>
-
-          {llmConfig.provider === 'gemini' && (
-            <div className="form-group api-key-group">
-              <label>API Key</label>
-              {hasGeminiApiKey && !isEditingApiKey ? (
-                <div className="api-key-status">
-                  <span className="status-badge success">✅ 設定済み</span>
-                  <div className="api-key-actions">
-                    <button className="action-button small" onClick={() => setIsEditingApiKey(true)}>変更</button>
-                    <button className="secondary-button small danger" onClick={handleDeleteApiKey}>削除</button>
-                  </div>
-                </div>
-              ) : (
-                <div className="api-key-input-box">
-                  <input
-                    type="password"
-                    value={apiKeyValue}
-                    onChange={e => setApiKeyValue(e.target.value)}
-                    placeholder="APIキーを入力"
-                    className="styled-input"
-                  />
-                  <div className="api-key-actions">
-                    <button className="action-button small" onClick={handleSaveApiKey} disabled={!apiKeyValue}>保存</button>
-                    {hasGeminiApiKey && <button className="secondary-button small" onClick={() => setIsEditingApiKey(false)}>キャンセル</button>}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </section>
-    </div>
-  );
+    );
 }
 
 export default App;
