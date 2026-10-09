@@ -59,6 +59,16 @@
           "default": "gemini-3.6-flash",
           "description": "LLM Model to use (e.g. gemini-3.6-flash, gpt-4o)"
         },
+        "vibecodeease.aiInterventionLevel": {
+          "type": "string",
+          "enum": [
+            "Level 1 (Typo/Bug Fix)",
+            "Level 2 (Refactoring)",
+            "Level 3 (Architecture Optimization)"
+          ],
+          "default": "Level 2 (Refactoring)",
+          "description": "AIによる推敲（介入）の積極性レベルを指定します"
+        },
         "vibecodeease.analyzeOnSave": {
           "type": "boolean",
           "default": true,

@@ -6,14 +6,45 @@ import { ProposalPopup } from './components/ProposalPopup';
 import type { WebviewIntervention } from './types';
 
 
-// Setup Mock for vscode API
-const postMessageMock = vi.fn();
-(window as any).vscode = { postMessage: postMessageMock };
+import { mockPostMessage } from './test/setup';
 
 describe('App Component', () => {
-  it('shows waiting message initially', () => {
+  it('shows waiting message initially in code tab', () => {
     render(<App />);
     expect(screen.getByText('Waiting for document sync...')).toBeDefined();
+  });
+
+  it('renders SettingsPanel when Settings tab is clicked', () => {
+    render(<App />);
+    const settingsTab = screen.getByText('[⚙️ Settings]');
+    fireEvent.click(settingsTab);
+    expect(screen.getByText('API Key')).toBeDefined();
+    expect(screen.getByText('🚀 今すぐコードを推敲する (Analyze Now)')).toBeDefined();
+  });
+
+  it('sends update_api_key message on API key input blur', () => {
+    render(<App />);
+    fireEvent.click(screen.getByText('[⚙️ Settings]'));
+    const input = screen.getByPlaceholderText('Enter API Key');
+    fireEvent.change(input, { target: { value: 'new-api-key' } });
+    fireEvent.blur(input);
+    expect(mockPostMessage).toHaveBeenCalledWith({ command: 'update_api_key', apiKey: 'new-api-key' });
+  });
+
+  it('sends update_intervention_level message on level select change', () => {
+    render(<App />);
+    fireEvent.click(screen.getByText('[⚙️ Settings]'));
+    const selects = screen.getAllByRole('combobox');
+    fireEvent.change(selects[0], { target: { value: 'Level 2 (Refactoring)' } });
+    expect(mockPostMessage).toHaveBeenCalledWith({ command: 'update_intervention_level', level: 'Level 2 (Refactoring)' });
+  });
+
+  it('sends force_analyze message on button click', () => {
+    render(<App />);
+    fireEvent.click(screen.getByText('[⚙️ Settings]'));
+    const button = screen.getByText('🚀 今すぐコードを推敲する (Analyze Now)');
+    fireEvent.click(button);
+    expect(mockPostMessage).toHaveBeenCalledWith({ command: 'force_analyze' });
   });
 });
 

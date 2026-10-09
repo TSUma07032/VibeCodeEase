@@ -4,9 +4,10 @@
  */
 import * as vscode from 'vscode';
 import { SharedAnalysisCache } from '../core/analyzer';
-import { ExtensionToWebviewMessage, WebviewToExtensionMessage } from '../types/webviewMessage';
+import { ExtensionToWebviewMessage, WebviewToExtensionMessage, AiInterventionLevel } from '../types/webviewMessage';
 import { AnalysisResult } from '../types';
 import { InterventionManager } from '../core/interventionManager';
+import { LlmBackgroundService } from '../core/llmBackgroundService';
 
 export class SideEditorProvider implements vscode.Disposable {
     private static instance: SideEditorProvider;
@@ -25,11 +26,16 @@ export class SideEditorProvider implements vscode.Disposable {
      */
     private _currentDocumentUri?: vscode.Uri;
 
-    private constructor(private readonly extensionUri: vscode.Uri) {}
+    /**
+     * [Why/Intent]
+     * - context: SecretStorage（APIキー）へのアクセスやExtension設定へのアクセスのため。
+     * - llmService: ユーザーからの手動推敲（Analyze Now）要求を受けて再解析をトリガーするため。
+     */
+    private constructor(private readonly context: vscode.ExtensionContext, private readonly llmService: LlmBackgroundService) {}
 
-    public static getInstance(extensionUri?: vscode.Uri): SideEditorProvider {
-        if (!SideEditorProvider.instance && extensionUri) {
-            SideEditorProvider.instance = new SideEditorProvider(extensionUri);
+    public static getInstance(context?: vscode.ExtensionContext, llmService?: LlmBackgroundService): SideEditorProvider {
+        if (!SideEditorProvider.instance && context && llmService) {
+            SideEditorProvider.instance = new SideEditorProvider(context, llmService);
         }
         return SideEditorProvider.instance;
     }
@@ -38,7 +44,7 @@ export class SideEditorProvider implements vscode.Disposable {
      * [Why/Intent] 既存パネルがあればそれを前面に出し（reveal）、無ければ ViewColumn.Beside (右側) で新規生成する。
      * ユーザーのコーディング作業領域（左側）を妨げないようにするため。
      */
-    public openSideEditor() {
+    public async openSideEditor() {
         if (this.panel) {
             this.panel.reveal(vscode.ViewColumn.Beside);
         } else {
@@ -48,7 +54,7 @@ export class SideEditorProvider implements vscode.Disposable {
                 vscode.ViewColumn.Beside,
                 {
                     enableScripts: true,
-                    localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'webview-ui', 'dist')]
+                    localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'webview-ui', 'dist')]
                 }
             );
 
@@ -63,6 +69,14 @@ export class SideEditorProvider implements vscode.Disposable {
             }, undefined, this.disposables);
             
             this.registerListeners();
+
+            /**
+             * [Why/Intent] パネル生成時に設定情報（APIキー有無、推敲レベル）を即時同期することで、
+             * Settingsタブを開いた際に最新の状態が反映されているようにするため。
+             */
+            const apiKey = await this.context.secrets.get('vibecodeease.geminiApiKey');
+            const level = vscode.workspace.getConfiguration('vibecodeease').get<string>('aiInterventionLevel', 'Level 2 (Refactoring)');
+            this.panel.webview.postMessage({ type: 'SYNC_SETTINGS', hasApiKey: !!apiKey, interventionLevel: level });
         }
 
         this.syncWithActiveEditor();
@@ -91,10 +105,17 @@ export class SideEditorProvider implements vscode.Disposable {
     }
 
     /**
+     * [Why/Intent] ユーザーの設定状態（APIキー有無、推敲レベル）をWebview側に同期させるヘルパー。
+     * コードの重複（DRY原則違反）を防ぐため1箇所に集約する。
+     */
+    private async sendSettingsSync() {
+        const apiKey = await this.context.secrets.get('vibecodeease.geminiApiKey');
+        const level = vscode.workspace.getConfiguration('vibecodeease').get<string>('aiInterventionLevel', 'Level 2 (Refactoring)') as AiInterventionLevel;
+        this.panel?.webview.postMessage({ type: 'SYNC_SETTINGS', hasApiKey: !!apiKey, interventionLevel: level });
+    }
+
+    /**
      * [Why/Intent] Webviewからのメッセージを受信し、対応する処理を実行する。
-     * apply_intervention: WorkspaceEdit を組み立てて反映し、UIとキャッシュを同期させる。
-     * discard_intervention: 提案をキャッシュから除外し、画面から消去する。
-     * ready: Webviewマウント完了時に初回データを再送し、送信漏れ（非同期マウントによるデータ消失）を防止する。
      */
     private async handleMessage(message: WebviewToExtensionMessage) {
         if (message.command === 'ready') {
@@ -105,6 +126,8 @@ export class SideEditorProvider implements vscode.Disposable {
                     this.sendUpdateInterventions(doc);
                 }
             }
+            
+            await this.sendSettingsSync();
             return;
         }
 
@@ -134,6 +157,29 @@ export class SideEditorProvider implements vscode.Disposable {
                 if (doc) {
                     this.sendUpdateInterventions(doc);
                 }
+            }
+        } else if (message.command === 'update_api_key') {
+            /**
+             * [Why/Intent] APIキーは平文でsettings.jsonに保存せず、セキュアなSecretStorageに保存するため。
+             */
+            if (message.apiKey) {
+                await this.context.secrets.store('vibecodeease.geminiApiKey', message.apiKey);
+            } else {
+                await this.context.secrets.delete('vibecodeease.geminiApiKey');
+            }
+            await this.sendSettingsSync();
+        } else if (message.command === 'update_intervention_level') {
+            /**
+             * [Why/Intent] 推敲レベルはWorkspace全体またはGlobalで適用される動作設定であるため、ConfigurationAPI経由で反映する。
+             */
+            await vscode.workspace.getConfiguration('vibecodeease').update('aiInterventionLevel', message.level, vscode.ConfigurationTarget.Global);
+        } else if (message.command === 'force_analyze') {
+            /**
+             * [Why/Intent] ユーザーが手動で解析を実行（🚀 今すぐコードを推敲する）できるようにするため。
+             */
+            const doc = vscode.workspace.textDocuments.find(d => d.uri.toString() === this._currentDocumentUri?.toString());
+            if (doc) {
+                this.llmService.runAnalysis(doc);
             }
         }
     }
@@ -184,8 +230,8 @@ export class SideEditorProvider implements vscode.Disposable {
     }
 
     private getHtmlForWebview(webview: vscode.Webview): string {
-        const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'webview-ui', 'dist', 'assets', 'index.js'));
-        const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'webview-ui', 'dist', 'assets', 'index.css'));
+        const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'webview-ui', 'dist', 'assets', 'index.js'));
+        const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'webview-ui', 'dist', 'assets', 'index.css'));
 
         return `<!DOCTYPE html>
             <html lang="en">

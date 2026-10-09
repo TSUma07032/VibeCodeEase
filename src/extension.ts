@@ -33,7 +33,7 @@ export function activate(context: vscode.ExtensionContext) {
 	personalizationService.initialize();
 
 	const silentFixService = new SilentFixService(personalizationService);
-    const sideEditorProvider = SideEditorProvider.getInstance(context.extensionUri);
+    const sideEditorProvider = SideEditorProvider.getInstance(context, llmBackgroundService);
 
     // [Why/Intent] コアのバックグラウンド解析サービス完了時に、ObserverパターンでUI更新をトリガーし、密結合を防ぐ
     context.subscriptions.push(

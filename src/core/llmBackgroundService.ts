@@ -38,13 +38,17 @@ export class LlmBackgroundService implements vscode.Disposable {
 
                 const editor = vscode.window.activeTextEditor;
                 if (editor && document === editor.document) {
-                    this._runAnalysis(document);
+                    this.runAnalysis(document);
                 }
             })
         );
     }
 
-    private async _runAnalysis(document: vscode.TextDocument) {
+    /**
+     * [Why/Intent] 元々はファイルの保存時に自動実行される想定（private）だったが、
+     * WebviewのSettingsパネルからユーザーが手動で推敲（🚀 今すぐコードを推敲する）をトリガーできるようにするため public に変更。
+     */
+    public async runAnalysis(document: vscode.TextDocument): Promise<void> {
         const uri = document.uri.toString();
         
         // 🛡️ Sentinel: 機密ファイルはスキップ (.envなど)

@@ -3,15 +3,12 @@
  * Extensionからのイベントを購読して状態（ドキュメント内容・提案一覧）を管理・分配する責務を持つ。
  */
 import { useEffect, useState } from 'react';
-import type { ExtensionToWebviewMessage, WebviewIntervention } from './types';
+import type { ExtensionToWebviewMessage, WebviewIntervention, AiInterventionLevel } from './types';
+import { TabBar } from './components/TabBar';
 import { MirrorEditor } from './components/MirrorEditor';
+import { SettingsPanel } from './components/SettingsPanel';
 
-/**
- * [Why/Intent] ブラウザ単体での開発・デバッグ時に acquireVsCodeApi が存在しなくてもクラッシュさせないためのフォールバックモック。
- */
-const vscode = (window as any).acquireVsCodeApi ? (window as any).acquireVsCodeApi() : {
-    postMessage: (msg: any) => console.log('postMessage:', msg)
-};
+import { vscode } from './utils/vscode';
 
 function App() {
     /**
@@ -20,6 +17,19 @@ function App() {
     const [fileName, setFileName] = useState<string>('');
     const [text, setText] = useState<string>('');
     const [interventions, setInterventions] = useState<WebviewIntervention[]>([]);
+    
+    /**
+     * [Why/Intent] ユーザーが閲覧している現在のタブ状態。
+     */
+    const [activeTab, setActiveTab] = useState<'code' | 'settings'>('code');
+    /**
+     * [Why/Intent] APIキーはセキュリティ上Webviewには送信せず、設定の有無（boolean）のみを保持してUIを切り替えるため。
+     */
+    const [hasApiKey, setHasApiKey] = useState<boolean>(false);
+    /**
+     * [Why/Intent] ユーザーが選択中のAI推敲レベル。
+     */
+    const [aiInterventionLevel, setAiInterventionLevel] = useState<AiInterventionLevel>('Level 2 (Refactoring)');
 
     /**
      * [Why/Intent] コンポーネントマウント時にメッセージリスナーを登録し、
@@ -36,6 +46,10 @@ function App() {
                 case 'UPDATE_INTERVENTIONS':
                     setInterventions(message.interventions);
                     break;
+                case 'SYNC_SETTINGS':
+                    setHasApiKey(message.hasApiKey);
+                    setAiInterventionLevel(message.interventionLevel);
+                    break;
             }
         };
 
@@ -44,6 +58,9 @@ function App() {
         return () => window.removeEventListener('message', handleMessage);
     }, []);
 
+    /**
+     * [Why/Intent] 提案された推敲をユーザーが反映（適用）する際のハンドラ。
+     */
     const handleApply = (intervention: WebviewIntervention) => {
         vscode.postMessage({
             command: 'apply_intervention',
@@ -53,6 +70,9 @@ function App() {
         });
     };
 
+    /**
+     * [Why/Intent] 提案された推敲をユーザーが破棄する際のハンドラ。
+     */
     const handleDiscard = (id: string) => {
         vscode.postMessage({
             command: 'discard_intervention',
@@ -60,33 +80,77 @@ function App() {
         });
     };
 
-    if (!fileName) {
-        return (
-            <div style={{ padding: '20px', color: 'var(--vscode-editor-foreground)', fontFamily: 'sans-serif' }}>
-                Waiting for document sync...
-            </div>
-        );
-    }
+    /**
+     * [Why/Intent] APIキーが更新された際に、Extension側（SecretStorage）に保存させるためのハンドラ。
+     */
+    const handleUpdateApiKey = (key: string) => {
+        vscode.postMessage({
+            command: 'update_api_key',
+            apiKey: key
+        });
+    };
+
+    /**
+     * [Why/Intent] 推敲レベルが変更された際にExtension側の設定を更新するハンドラ。
+     * Extension側からの再同期を待つとUIの反応が遅れるため、楽観的UI更新（Optimistic update）を行う。
+     */
+    const handleUpdateLevel = (level: AiInterventionLevel) => {
+        vscode.postMessage({
+            command: 'update_intervention_level',
+            level
+        });
+        setAiInterventionLevel(level); // Optimistic update
+    };
+
+    /**
+     * [Why/Intent] ユーザーの任意のタイミングで推敲を強制再実行させるためのハンドラ。
+     */
+    const handleForceAnalyze = () => {
+        vscode.postMessage({ command: 'force_analyze' });
+    };
 
     return (
         <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ 
-                padding: '8px 16px', 
-                backgroundColor: 'var(--vscode-editorGroupHeader-tabsBackground)',
-                borderBottom: '1px solid var(--vscode-editorGroupHeader-tabsBorder)',
-                color: 'var(--vscode-tab-activeForeground)',
-                fontFamily: 'sans-serif',
-                fontSize: '13px'
-            }}>
-                {fileName.split(/\\|\//).pop()}
-            </div>
+            <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
+            
             <div style={{ flexGrow: 1, overflowY: 'auto' }}>
-                <MirrorEditor 
-                    text={text} 
-                    interventions={interventions} 
-                    onApply={handleApply}
-                    onDiscard={handleDiscard}
-                />
+                {activeTab === 'code' && (
+                    !fileName ? (
+                        <div style={{ padding: '20px', color: 'var(--vscode-editor-foreground)', fontFamily: 'sans-serif' }}>
+                            Waiting for document sync...
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                            <div style={{ 
+                                padding: '8px 16px', 
+                                backgroundColor: 'var(--vscode-editorGroupHeader-tabsBackground)',
+                                borderBottom: '1px solid var(--vscode-editorGroupHeader-tabsBorder)',
+                                color: 'var(--vscode-tab-activeForeground)',
+                                fontFamily: 'sans-serif',
+                                fontSize: '13px'
+                            }}>
+                                {fileName.split(/\\|\//).pop()}
+                            </div>
+                            <div style={{ flexGrow: 1, overflowY: 'auto' }}>
+                                <MirrorEditor 
+                                    text={text} 
+                                    interventions={interventions} 
+                                    onApply={handleApply}
+                                    onDiscard={handleDiscard}
+                                />
+                            </div>
+                        </div>
+                    )
+                )}
+                {activeTab === 'settings' && (
+                    <SettingsPanel
+                        hasApiKey={hasApiKey}
+                        aiInterventionLevel={aiInterventionLevel}
+                        onUpdateApiKey={handleUpdateApiKey}
+                        onUpdateLevel={handleUpdateLevel}
+                        onForceAnalyze={handleForceAnalyze}
+                    />
+                )}
             </div>
         </div>
     );
