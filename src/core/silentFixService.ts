@@ -1,6 +1,7 @@
-﻿import * as vscode from 'vscode';
+import * as vscode from 'vscode';
 import { GlobalState } from '../state/globalState';
 import { SharedAnalysisCache } from './analyzer';
+import type { PersonalizationService } from './personalization/personalizationService';
 
 /**
  * ファイル保存時（onWillSaveTextDocument）に、
@@ -10,7 +11,7 @@ export class SilentFixService {
     private disposables: vscode.Disposable[] = [];
     private onFixAppliedCallback?: (fixCount: number, documentUri: string) => void;
 
-    constructor(private readonly personalizationService?: any) {
+    constructor(private readonly personalizationService?: PersonalizationService) {
         this.disposables.push(
             vscode.workspace.onWillSaveTextDocument((event) => {
                 this.handleWillSave(event);
@@ -64,7 +65,9 @@ export class SilentFixService {
         }
     }
 
-    public dispose() {
-        this.disposables.forEach((d) => d.dispose());
+    public dispose(): void {
+        this.disposables.forEach((d) => {
+            d.dispose();
+        });
     }
 }

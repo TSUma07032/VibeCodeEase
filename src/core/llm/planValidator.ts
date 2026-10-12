@@ -99,7 +99,9 @@ export function findOriginalTextRange(
     hintLine: number,
     hintCharacter: number,
 ): vscode.Range | undefined {
-    if (!oldText) {return undefined;}
+    if (!oldText) {
+        return undefined;
+    }
 
     const documentText = document.getText();
     const normalizedDocumentText = documentText.replace(/\r\n/g, '\n');

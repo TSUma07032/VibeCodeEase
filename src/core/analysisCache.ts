@@ -1,4 +1,4 @@
-﻿import type * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 import type { AnalysisResult } from '../types';
 import type { CodeAnalyzer } from './analyzer';
 
@@ -21,7 +21,7 @@ export class AnalysisCache {
         const uri = document.uri.toString();
         const cached = this.cache.get(uri);
 
-        if (cached && cached.version === document.version) {
+        if (cached?.version === document.version) {
             return cached.results;
         }
 

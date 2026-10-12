@@ -10,12 +10,12 @@ export class LocalHashEmbeddingProvider implements EmbeddingProvider {
     private readonly dim = 512;
     private readonly nGramSizes = [2, 3]; // bi-grams and tri-grams
 
-    public async embedBatch(texts: string[]): Promise<number[][]> {
-        return texts.map((text) => this.embedSingle(text));
+    public embedBatch(texts: string[]): Promise<number[][]> {
+        return Promise.resolve(texts.map((text) => this.embedSingle(text)));
     }
 
     private embedSingle(text: string): number[] {
-        const vec = new Array(this.dim).fill(0);
+        const vec: number[] = new Array<number>(this.dim).fill(0);
         const normalized = text.toLowerCase().replace(/\s+/g, '');
 
         if (normalized.length === 0) {

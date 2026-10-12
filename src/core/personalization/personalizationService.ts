@@ -135,7 +135,7 @@ export class PersonalizationService {
 
         // 3. Embed candidates
         const texts = candidates.map((c) => c.text);
-        const embeddings = await (this.store as any).embeddingProvider.embedBatch(texts);
+        const embeddings = await this.store.embeddingProvider.embedBatch(texts);
         for (let i = 0; i < candidates.length; i++) {
             candidates[i].embedding = embeddings[i];
         }
@@ -203,7 +203,7 @@ export class PersonalizationService {
             persona: candidate.persona,
             situation: this.currentSituation,
             createdAt: Date.now(),
-            providerId: (this.store as any).embeddingProvider.providerId,
+            providerId: this.store.embeddingProvider.providerId,
         };
 
         if (feedback === 'liked') {

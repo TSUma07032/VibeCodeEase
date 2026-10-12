@@ -54,20 +54,14 @@ export function rerankCandidates(
         const emb = candidate.embedding!;
 
         const posScore =
-            positiveProfile && positiveProfile.length === emb.length
-                ? cosineSimilarity(emb, positiveProfile)
-                : 0;
+            positiveProfile?.length === emb.length ? cosineSimilarity(emb, positiveProfile) : 0;
         const negScore =
-            negativeProfile && negativeProfile.length === emb.length
-                ? cosineSimilarity(emb, negativeProfile)
-                : 0;
+            negativeProfile?.length === emb.length ? cosineSimilarity(emb, negativeProfile) : 0;
         const recScore =
-            recentProfile && recentProfile.length === emb.length
-                ? cosineSimilarity(emb, recentProfile)
-                : 0;
+            recentProfile?.length === emb.length ? cosineSimilarity(emb, recentProfile) : 0;
 
         // Match candidate's persona with current dynamic persona weights
-        const personaScore = personaWeights[candidate.persona] || 0;
+        const personaScore = personaWeights[candidate.persona] ?? 0;
 
         const score =
             config.alpha * posScore -

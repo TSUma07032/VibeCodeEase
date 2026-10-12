@@ -3,7 +3,9 @@
  * Returns a value between -1.0 and 1.0.
  */
 export function cosineSimilarity(a: number[], b: number[]): number {
-    if (a.length !== b.length || a.length === 0) {return 0;}
+    if (a.length !== b.length || a.length === 0) {
+        return 0;
+    }
 
     let dotProduct = 0;
     let normA = 0;
@@ -15,7 +17,9 @@ export function cosineSimilarity(a: number[], b: number[]): number {
         normB += b[i] * b[i];
     }
 
-    if (normA === 0 || normB === 0) {return 0;}
+    if (normA === 0 || normB === 0) {
+        return 0;
+    }
 
     return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
@@ -24,10 +28,12 @@ export function cosineSimilarity(a: number[], b: number[]): number {
  * Computes the mean vector of a list of vectors.
  */
 export function meanVector(vectors: number[][]): number[] {
-    if (vectors.length === 0) {return [];}
+    if (vectors.length === 0) {
+        return [];
+    }
 
     const dim = vectors[0].length;
-    const result = new Array(dim).fill(0);
+    const result: number[] = new Array<number>(dim).fill(0);
 
     for (const vec of vectors) {
         if (vec.length !== dim) {

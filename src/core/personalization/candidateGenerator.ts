@@ -53,7 +53,9 @@ export class CandidateGenerator {
 
         if (config.provider === 'gemini') {
             const apiKey = await this.getApiKey();
-            if (!apiKey) {throw new Error('Gemini API key is required.');}
+            if (!apiKey) {
+                throw new Error('Gemini API key is required.');
+            }
             rawResponse = await this.geminiClient.generate(
                 prompt,
                 apiKey,
@@ -141,7 +143,9 @@ ${contextCode ? `Selected Context Code:\n\`\`\`\n${contextCode}\n\`\`\`` : ''}
         const candidates: Candidate[] = [];
 
         for (const item of raw) {
-            if (typeof item !== 'object' || item === null) {continue;}
+            if (typeof item !== 'object' || item === null) {
+                continue;
+            }
             const obj = item as Record<string, unknown>;
 
             if (

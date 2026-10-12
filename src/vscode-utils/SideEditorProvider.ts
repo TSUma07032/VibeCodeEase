@@ -67,7 +67,7 @@ export class SideEditorProvider implements vscode.Disposable {
 
             this.panel.webview.onDidReceiveMessage(
                 (message: WebviewToExtensionMessage) => {
-                    this.handleMessage(message);
+                    void this.handleMessage(message);
                 },
                 undefined,
                 this.disposables,
@@ -100,10 +100,7 @@ export class SideEditorProvider implements vscode.Disposable {
                 }
 
                 const document = event.document;
-                if (
-                    this._currentDocumentUri &&
-                    document.uri.toString() === this._currentDocumentUri.toString()
-                ) {
+                if (document.uri.toString() === this._currentDocumentUri?.toString()) {
                     InterventionManager.handleDocumentChange(event);
                     this.sendUpdateInterventions(document);
                     this.sendSyncDocument(document.fileName, document.getText());
@@ -124,12 +121,10 @@ export class SideEditorProvider implements vscode.Disposable {
         ) as AiInterventionLevel;
 
         let frequency = config.get<string>('llm.syncFrequency');
-        if (!frequency) {
-            frequency = config.get<boolean>('analyzeOnSave') ? 'onSave' : 'manual';
-        }
+        frequency ??= config.get<boolean>('analyzeOnSave') ? 'onSave' : 'manual';
 
-        const intervalSeconds = config.get<number>('llm.syncIntervalSeconds') || 10;
-        const model = config.get<string>('llmModel') || 'gemini-3.5-flash-lite';
+        const intervalSeconds = config.get<number>('llm.syncIntervalSeconds') ?? 10;
+        const model = config.get<string>('llmModel') ?? 'gemini-3.5-flash-lite';
 
         this.panel?.webview.postMessage({
             type: 'SYNC_SETTINGS',
@@ -167,11 +162,15 @@ export class SideEditorProvider implements vscode.Disposable {
         if (message.command === 'apply_intervention') {
             this._isApplyingIntervention = true;
             try {
-                if (!this._currentDocumentUri) {return;}
+                if (!this._currentDocumentUri) {
+                    return;
+                }
                 const doc = vscode.workspace.textDocuments.find(
                     (d) => d.uri.toString() === this._currentDocumentUri!.toString(),
                 );
-                if (!doc) {return;}
+                if (!doc) {
+                    return;
+                }
 
                 const range = new vscode.Range(
                     new vscode.Position(message.range.start.line, message.range.start.character),
@@ -213,8 +212,12 @@ export class SideEditorProvider implements vscode.Disposable {
                 .update('aiInterventionLevel', message.level, vscode.ConfigurationTarget.Global);
         } else if (message.command === 'update_llm_config') {
             let interval = Number(message.intervalSeconds);
-            if (isNaN(interval) || interval < 5) {interval = 5;}
-            if (interval > 3600) {interval = 3600;}
+            if (isNaN(interval) || interval < 5) {
+                interval = 5;
+            }
+            if (interval > 3600) {
+                interval = 3600;
+            }
 
             const config = vscode.workspace.getConfiguration('vibecodeease');
             await config.update(
@@ -237,15 +240,12 @@ export class SideEditorProvider implements vscode.Disposable {
             let targetDoc = vscode.workspace.textDocuments.find(
                 (d) => d.uri.toString() === this._currentDocumentUri?.toString(),
             );
-            if (!targetDoc) {
-                targetDoc = vscode.window.visibleTextEditors.find(
-                    (e) =>
-                        e.document.uri.scheme === 'file' &&
-                        e.viewColumn !== vscode.ViewColumn.Beside,
-                )?.document;
-            }
+            targetDoc ??= vscode.window.visibleTextEditors.find(
+                (e) =>
+                    e.document.uri.scheme === 'file' && e.viewColumn !== vscode.ViewColumn.Beside,
+            )?.document;
             if (targetDoc) {
-                this.llmService.runAnalysis(targetDoc, false);
+                void this.llmService.runAnalysis(targetDoc, false);
             }
         }
     }
@@ -283,7 +283,7 @@ export class SideEditorProvider implements vscode.Disposable {
                     },
                     originalText: r.interventions[0]?.originalText || '',
                     replacementText: r.interventions[0]?.replacementText || '',
-                    message: r.interventions[0]?.message || '',
+                    message: r.interventions[0]?.message ?? '',
                 };
             });
 
@@ -320,12 +320,12 @@ export class SideEditorProvider implements vscode.Disposable {
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <link href="${styleUri}" rel="stylesheet">
+                <link href="${styleUri.toString()}" rel="stylesheet">
                 <title>vibeCodeEase Side Editor</title>
             </head>
             <body>
                 <div id="root"></div>
-                <script type="module" src="${scriptUri}"></script>
+                <script type="module" src="${scriptUri.toString()}"></script>
             </body>
             </html>`;
     }

@@ -29,7 +29,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     const getApiKey = async () => {
         let key = await context.secrets.get('vibecodeease.geminiApiKey');
-        if (!key) {key = vscode.workspace.getConfiguration('vibecodeease').get('geminiApiKey');}
+        key ??= vscode.workspace.getConfiguration('vibecodeease').get<string>('geminiApiKey');
         return key as string;
     };
     const personalizationService = new PersonalizationService(
@@ -38,7 +38,7 @@ export function activate(context: vscode.ExtensionContext) {
         new VscodeLmClient(),
         getApiKey,
     );
-    personalizationService.initialize();
+    void personalizationService.initialize();
 
     const silentFixService = new SilentFixService(personalizationService);
     const sideEditorProvider = SideEditorProvider.getInstance(context, llmBackgroundService);
@@ -95,7 +95,7 @@ export function activate(context: vscode.ExtensionContext) {
     const openSideEditorCommand = vscode.commands.registerCommand(
         'vibecodeease.openSideEditor',
         () => {
-            sideEditorProvider.openSideEditor();
+            void sideEditorProvider.openSideEditor();
         },
     );
     context.subscriptions.push(openSideEditorCommand);

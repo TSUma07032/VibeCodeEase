@@ -132,10 +132,12 @@ export class DiagnosticsService {
     }
 
     public getResultsForUri(uri: vscode.Uri): AnalysisResult[] {
-        return this.diagnosticsCache.get(uri.toString()) || [];
+        return this.diagnosticsCache.get(uri.toString()) ?? [];
     }
 
-    public dispose() {
-        this.disposables.forEach((d) => d.dispose());
+    public dispose(): void {
+        this.disposables.forEach((d) => {
+            d.dispose();
+        });
     }
 }

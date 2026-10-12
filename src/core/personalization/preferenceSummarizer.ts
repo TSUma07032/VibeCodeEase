@@ -42,7 +42,9 @@ export class PreferenceSummarizer {
         let rawResponse: unknown;
         if (config.provider === 'gemini') {
             const apiKey = await this.getApiKey();
-            if (!apiKey) {throw new Error('Gemini API key is required.');}
+            if (!apiKey) {
+                throw new Error('Gemini API key is required.');
+            }
             rawResponse = await this.geminiClient.generate(
                 prompt,
                 apiKey,

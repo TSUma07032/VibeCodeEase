@@ -14,7 +14,9 @@ export class GeminiEmbeddingProvider implements EmbeddingProvider {
     }
 
     public async embedBatch(texts: string[]): Promise<number[][]> {
-        if (texts.length === 0) {return [];}
+        if (texts.length === 0) {
+            return [];
+        }
 
         const apiKey = await this.getApiKey();
         if (!apiKey) {

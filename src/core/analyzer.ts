@@ -236,7 +236,7 @@ export class SharedAnalysisCache {
         const uri = document.uri.toString();
         let cached = this.cache.get(uri);
 
-        if (!cached || cached.version !== document.version) {
+        if (cached?.version !== document.version) {
             const text = document.getText();
             const languageId = document.languageId;
             const fileName = document.fileName;

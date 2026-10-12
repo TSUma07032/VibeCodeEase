@@ -1,4 +1,4 @@
-﻿import * as fs from 'fs';
+import * as fs from 'fs';
 import * as path from 'path';
 import type * as vscode from 'vscode';
 import type { PersonalizationProfile } from '../../types/personalization';
@@ -16,7 +16,7 @@ export class PreferenceStore {
 
     constructor(
         globalStorageUri: vscode.Uri,
-        private readonly embeddingProvider: EmbeddingProvider,
+        public readonly embeddingProvider: EmbeddingProvider,
         private readonly userId: string = 'local',
     ) {
         if (!fs.existsSync(globalStorageUri.fsPath)) {
@@ -134,7 +134,9 @@ export class PreferenceStore {
 
     private async recalculateEmbeddings(): Promise<void> {
         const allRecords = [...this.profile.likedRecords, ...this.profile.dislikedRecords];
-        if (allRecords.length === 0) {return;}
+        if (allRecords.length === 0) {
+            return;
+        }
 
         const texts = allRecords.map((r) => r.text);
         try {

@@ -80,7 +80,9 @@ suite('InterventionEngine Test Suite', () => {
         });
 
         test('未定義カチE��リめE��プロファイルはチE��ォルト値(0.5 -> SUGGESTION)を返すこと', () => {
-            const emptyProfile = { preferences: {} } as any;
+            const emptyProfile: UserPreferenceProfile = {
+                preferences: {} as UserPreferenceProfile['preferences'],
+            };
             assert.strictEqual(
                 InterventionEngine.getLevelForCategory('SYNTAX_TYPO', emptyProfile),
                 'SUGGESTION',

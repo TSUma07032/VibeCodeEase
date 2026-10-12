@@ -48,23 +48,23 @@ export class GlobalState {
     public initialize(context: vscode.ExtensionContext) {
         this.context = context;
         this._mode =
-            context.globalState.get<InterventionLevel>('vibecodeease.mode') || 'SUGGESTION';
+            context.globalState.get<InterventionLevel>('vibecodeease.mode') ?? 'SUGGESTION';
         this._presetMode =
-            context.globalState.get<PresetMode>('vibecodeease.presetMode') || DEFAULT_PRESET_MODE;
+            context.globalState.get<PresetMode>('vibecodeease.presetMode') ?? DEFAULT_PRESET_MODE;
 
         const config = vscode.workspace.getConfiguration('vibecodeease');
         this._llmProvider =
-            config.get<LlmProvider>('llmProvider') ||
-            context.globalState.get<LlmProvider>('vibecodeease.llmProvider') ||
+            config.get<LlmProvider>('llmProvider') ??
+            context.globalState.get<LlmProvider>('vibecodeease.llmProvider') ??
             'gemini';
         this._llmModel =
-            config.get<string>('llmModel') ||
-            context.globalState.get<string>('vibecodeease.llmModel') ||
+            config.get<string>('llmModel') ??
+            context.globalState.get<string>('vibecodeease.llmModel') ??
             'gemini-3.6-flash';
         this._llmTriggerMode =
-            context.globalState.get<LlmTriggerMode>('vibecodeease.llmTriggerMode') || 'on-save';
+            context.globalState.get<LlmTriggerMode>('vibecodeease.llmTriggerMode') ?? 'on-save';
         this._editorAppealLevel =
-            context.globalState.get<EditorAppealLevel>('vibecodeease.editorAppealLevel') ||
+            context.globalState.get<EditorAppealLevel>('vibecodeease.editorAppealLevel') ??
             'medium';
 
         const storedPrefs = context.globalState.get<UserPreferenceProfile>(
@@ -75,8 +75,7 @@ export class GlobalState {
         } else if (this._presetMode !== 'CUSTOM') {
             this._preferences = {
                 preferences: {
-                    ...PRESET_DEFINITIONS[this._presetMode]
-                        .preferences,
+                    ...PRESET_DEFINITIONS[this._presetMode].preferences,
                 },
             };
         }

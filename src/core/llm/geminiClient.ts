@@ -37,7 +37,7 @@ export class GeminiClient {
         apiKey: string,
         token: vscode.CancellationToken,
         modelName?: string,
-        responseSchema: any = INTERVENTION_RESPONSE_SCHEMA,
+        responseSchema: unknown = INTERVENTION_RESPONSE_SCHEMA,
     ): Promise<unknown> {
         const candidateModels = await this.discoverModels(apiKey, token, modelName);
 
@@ -92,7 +92,9 @@ export class GeminiClient {
         token: vscode.CancellationToken,
         modelName: string = 'text-embedding-004',
     ): Promise<number[][]> {
-        if (texts.length === 0) {return [];}
+        if (texts.length === 0) {
+            return [];
+        }
 
         const requests = texts.map((text) => ({
             model: `models/${modelName}`,
@@ -120,7 +122,7 @@ export class GeminiClient {
             embeddings?: Array<{ values: number[] }>;
         };
 
-        if (!data.embeddings || data.embeddings.length !== texts.length) {
+        if (data.embeddings?.length !== texts.length) {
             throw new Error('Geminiから期待される数のEmbeddingが返されませんでした。');
         }
 
@@ -232,7 +234,9 @@ export class GeminiClient {
             const cancellation = token.onCancellationRequested(() => {
                 request.destroy(new Error('リクエストがキャンセルされました。'));
             });
-            request.on('close', () => cancellation.dispose());
+            request.on('close', () => {
+                cancellation.dispose();
+            });
             request.on('error', reject);
 
             if (body) {

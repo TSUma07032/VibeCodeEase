@@ -62,8 +62,8 @@ export class ActionLogService {
         }
 
         const timestamp = new Date().toISOString();
-        const safePayload = (entry.payload || '').replace(/"/g, '""');
-        const line = `${timestamp},${this.userId},experiment,${entry.category},${entry.action},${entry.targetId || ''},${entry.value !== undefined ? entry.value : ''},"${safePayload}"\n`;
+        const safePayload = (entry.payload ?? '').replace(/"/g, '""');
+        const line = `${timestamp},${this.userId},experiment,${entry.category},${entry.action},${entry.targetId ?? ''},${entry.value ?? ''},"${safePayload}"\n`;
 
         try {
             fs.appendFileSync(this.logFilePath, line, 'utf8');

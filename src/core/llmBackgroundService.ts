@@ -26,23 +26,20 @@ export class LlmBackgroundService implements vscode.Disposable {
     private _timerId: NodeJS.Timeout | undefined;
     private _lastDocumentVersion: number | undefined;
 
-    public readonly onDidUpdateDashboard = new vscode.EventEmitter<any>();
+    public readonly onDidUpdateDashboard = new vscode.EventEmitter<unknown>();
 
     constructor(private readonly secrets: vscode.SecretStorage) {
         this._disposables.push(
             vscode.workspace.onDidSaveTextDocument((document) => {
                 const config = vscode.workspace.getConfiguration('vibecodeease');
                 let syncFreq = config.get<string>('llm.syncFrequency');
-                if (!syncFreq) {
-                    syncFreq = config.get<boolean>('analyzeOnSave') ? 'onSave' : 'manual';
-                }
+                syncFreq ??= config.get<boolean>('analyzeOnSave') ? 'onSave' : 'manual';
                 if (syncFreq !== 'onSave') {
                     return;
                 }
 
-                const editor = vscode.window.activeTextEditor;
-                if (editor && document === editor.document) {
-                    this.runAnalysis(document, true);
+                if (document === vscode.window.activeTextEditor?.document) {
+                    void this.runAnalysis(document, true);
                 }
             }),
         );
@@ -57,11 +54,9 @@ export class LlmBackgroundService implements vscode.Disposable {
         }
         const config = vscode.workspace.getConfiguration('vibecodeease');
         let syncFreq = config.get<string>('llm.syncFrequency');
-        if (!syncFreq) {
-            syncFreq = config.get<boolean>('analyzeOnSave') ? 'onSave' : 'manual';
-        }
+        syncFreq ??= config.get<boolean>('analyzeOnSave') ? 'onSave' : 'manual';
         if (syncFreq === 'interval') {
-            const intervalSecs = config.get<number>('llm.syncIntervalSeconds') || 10;
+            const intervalSecs = config.get<number>('llm.syncIntervalSeconds') ?? 10;
             this._timerId = setInterval(() => this.runAnalysisOnInterval(), intervalSecs * 1000);
         }
     }
@@ -73,7 +68,7 @@ export class LlmBackgroundService implements vscode.Disposable {
                 editor.document.uri.scheme === 'file' &&
                 editor.viewColumn !== vscode.ViewColumn.Beside
             ) {
-                this.runAnalysis(editor.document, true);
+                void this.runAnalysis(editor.document, true);
                 return;
             }
         }
@@ -118,11 +113,9 @@ export class LlmBackgroundService implements vscode.Disposable {
 
         if (state.llmProvider === 'gemini') {
             apiKey = await this.secrets.get('vibecodeease.geminiApiKey');
-            if (!apiKey) {
-                apiKey = vscode.workspace
-                    .getConfiguration('vibecodeease')
-                    .get<string>('geminiApiKey');
-            }
+            apiKey ??= vscode.workspace
+                .getConfiguration('vibecodeease')
+                .get<string>('geminiApiKey');
             if (!apiKey) {
                 this._status = 'error';
                 this.onDidUpdateDashboard.fire({ type: 'LLM_STATUS_UPDATE', status: 'error' });
@@ -279,8 +272,10 @@ export class LlmBackgroundService implements vscode.Disposable {
         }
     }
 
-    public dispose() {
-        this._disposables.forEach((d) => d.dispose());
+    public dispose(): void {
+        this._disposables.forEach((d) => {
+            d.dispose();
+        });
         if (this._cancellationTokenSource) {
             this._cancellationTokenSource.cancel();
             this._cancellationTokenSource.dispose();

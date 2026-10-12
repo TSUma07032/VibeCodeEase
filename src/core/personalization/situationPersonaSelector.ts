@@ -47,8 +47,12 @@ export function determinePersonaWeights(
 
     for (const record of situationRecords) {
         if (record.persona in stats) {
-            if (record.feedback === 'liked') {stats[record.persona].adopt++;}
-            if (record.feedback === 'disliked') {stats[record.persona].reject++;}
+            if (record.feedback === 'liked') {
+                stats[record.persona].adopt++;
+            }
+            if (record.feedback === 'disliked') {
+                stats[record.persona].reject++;
+            }
         }
     }
 

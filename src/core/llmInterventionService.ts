@@ -26,7 +26,7 @@ export class LlmInterventionService {
             /credentials/i,
         ];
         if (sensitivePatterns.some((pattern) => pattern.test(fileName))) {
-            const fileNameOnly = document.uri.path.split('/').pop() || document.fileName;
+            const fileNameOnly = document.uri.path.split('/').pop() ?? document.fileName;
             throw new Error(
                 `セキュリティ違反: 機密ファイル (${fileNameOnly}) はLLMに送信できません。`,
             );

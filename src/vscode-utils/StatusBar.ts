@@ -55,8 +55,10 @@ export class VibeStatusBar {
         }
     }
 
-    public dispose() {
+    public dispose(): void {
         this.statusBarItem.dispose();
-        this.disposables.forEach((d) => d.dispose());
+        this.disposables.forEach((d) => {
+            d.dispose();
+        });
     }
 }

@@ -142,7 +142,7 @@ export class AstAnalyzer {
                         node.name.getStart(sourceFile),
                     );
                     const end = sourceFile.getLineAndCharacterOfPosition(node.name.getEnd());
-                    const camel = name.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+                    const camel = name.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
                     results.push({
                         category: 'VAR_FUNC_MANAGEMENT',
                         level: 'SUGGESTION',
@@ -170,7 +170,7 @@ export class AstAnalyzer {
                         node.name.getStart(sourceFile),
                     );
                     const end = sourceFile.getLineAndCharacterOfPosition(node.name.getEnd());
-                    const camel = name.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+                    const camel = name.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
                     results.push({
                         category: 'VAR_FUNC_MANAGEMENT',
                         level: 'SUGGESTION',
@@ -202,11 +202,7 @@ export class AstAnalyzer {
      */
     private _detectEmptyBlock(sourceFile: ts.SourceFile, results: AnalysisResult[]): void {
         const visit = (node: ts.Node) => {
-            if (
-                ts.isTryStatement(node) &&
-                node.catchClause &&
-                node.catchClause.block.statements.length === 0
-            ) {
+            if (ts.isTryStatement(node) && node.catchClause?.block.statements.length === 0) {
                 const clause = node.catchClause;
                 const start = sourceFile.getLineAndCharacterOfPosition(clause.getStart(sourceFile));
                 const end = sourceFile.getLineAndCharacterOfPosition(clause.getEnd());
