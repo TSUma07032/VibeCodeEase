@@ -45,13 +45,22 @@ export class GlobalState {
         GlobalState.instance = new GlobalState();
     }
 
-    public initialize(context: vscode.ExtensionContext) {
+    public initialize(context: vscode.ExtensionContext): void {
         this.context = context;
         this._mode =
             context.globalState.get<InterventionLevel>('vibecodeease.mode') ?? 'SUGGESTION';
         this._presetMode =
             context.globalState.get<PresetMode>('vibecodeease.presetMode') ?? DEFAULT_PRESET_MODE;
+        this._editorAppealLevel =
+            context.globalState.get<EditorAppealLevel>('vibecodeease.editorAppealLevel') ??
+            'medium';
 
+        this.initLlmConfig(context);
+        this.initPreferences(context);
+        this._interventionLevelCache.clear();
+    }
+
+    private initLlmConfig(context: vscode.ExtensionContext): void {
         const config = vscode.workspace.getConfiguration('vibecodeease');
         this._llmProvider =
             config.get<LlmProvider>('llmProvider') ??
@@ -63,10 +72,9 @@ export class GlobalState {
             'gemini-3.6-flash';
         this._llmTriggerMode =
             context.globalState.get<LlmTriggerMode>('vibecodeease.llmTriggerMode') ?? 'on-save';
-        this._editorAppealLevel =
-            context.globalState.get<EditorAppealLevel>('vibecodeease.editorAppealLevel') ??
-            'medium';
+    }
 
+    private initPreferences(context: vscode.ExtensionContext): void {
         const storedPrefs = context.globalState.get<UserPreferenceProfile>(
             'vibecodeease.preferences',
         );
@@ -79,7 +87,6 @@ export class GlobalState {
                 },
             };
         }
-        this._interventionLevelCache.clear();
     }
 
     public get isInitialized(): boolean {
@@ -124,7 +131,7 @@ export class GlobalState {
         return this._editorAppealLevel;
     }
 
-    public async setMode(mode: InterventionLevel) {
+    public async setMode(mode: InterventionLevel): Promise<void> {
         this._mode = mode;
         if (this.context) {
             await this.context.globalState.update('vibecodeease.mode', mode);
@@ -132,7 +139,7 @@ export class GlobalState {
         this._onDidChangeState.fire();
     }
 
-    public async setPresetMode(preset: PresetMode) {
+    public async setPresetMode(preset: PresetMode): Promise<void> {
         this._presetMode = preset;
         if (preset !== 'CUSTOM') {
             const def = PRESET_DEFINITIONS[preset];
@@ -148,7 +155,7 @@ export class GlobalState {
         this._onDidChangeState.fire();
     }
 
-    public async updatePreference(category: PainCategory, value: number) {
+    public async updatePreference(category: PainCategory, value: number): Promise<void> {
         this._preferences.preferences[category] = Math.max(0.0, Math.min(1.0, value));
         this._presetMode = 'CUSTOM';
         if (this.context) {
@@ -159,7 +166,10 @@ export class GlobalState {
         this._onDidChangeState.fire();
     }
 
-    public async setFullPreferences(profile: UserPreferenceProfile, preset: PresetMode = 'CUSTOM') {
+    public async setFullPreferences(
+        profile: UserPreferenceProfile,
+        preset: PresetMode = 'CUSTOM',
+    ): Promise<void> {
         this._preferences = profile;
         this._presetMode = preset;
         if (this.context) {
@@ -170,7 +180,7 @@ export class GlobalState {
         this._onDidChangeState.fire();
     }
 
-    public async setLlmConfig(config: LlmConfig) {
+    public async setLlmConfig(config: LlmConfig): Promise<void> {
         this._llmProvider = config.provider;
         this._llmModel = config.model;
 
@@ -189,7 +199,7 @@ export class GlobalState {
         this._onDidChangeState.fire();
     }
 
-    public async setLlmTriggerMode(mode: LlmTriggerMode) {
+    public async setLlmTriggerMode(mode: LlmTriggerMode): Promise<void> {
         this._llmTriggerMode = mode;
         if (this.context) {
             await this.context.globalState.update('vibecodeease.llmTriggerMode', mode);
@@ -197,7 +207,7 @@ export class GlobalState {
         this._onDidChangeState.fire();
     }
 
-    public async setEditorAppealLevel(level: EditorAppealLevel) {
+    public async setEditorAppealLevel(level: EditorAppealLevel): Promise<void> {
         this._editorAppealLevel = level;
         if (this.context) {
             await this.context.globalState.update('vibecodeease.editorAppealLevel', level);
@@ -205,7 +215,7 @@ export class GlobalState {
         this._onDidChangeState.fire();
     }
 
-    public reloadConfiguration() {
+    public reloadConfiguration(): void {
         const config = vscode.workspace.getConfiguration('vibecodeease');
         const newProvider = config.get<LlmProvider>('llmProvider');
         const newModel = config.get<string>('llmModel');

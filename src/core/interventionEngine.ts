@@ -22,6 +22,13 @@ export const THRESHOLDS = {
     SUGGESTION_MAX: INTERVENTION_THRESHOLDS.SILENT_MIN, // 0.75
 } as const;
 
+export interface EducationalHintParams {
+    category: PainCategory;
+    originalText: string;
+    replacementText: string;
+    presetMode?: PresetMode;
+}
+
 export class InterventionEngine {
     /**
      * 単一カテゴリの嗜好値（0.0〜1.0）から介入レベル（SILENT / SUGGESTION / IGNORE）を判定する純粋関数
@@ -46,18 +53,18 @@ export class InterventionEngine {
     ): InterventionLevel {
         const rawValue = profile?.preferences?.[category];
         const value = clampPreferenceValue(rawValue, 0.5);
-        return this.determineLevel(value);
+        return InterventionEngine.determineLevel(value);
     }
 
     /**
      * 学習用途・コード理解のための教育的ヒントメッセージを生成する
      */
-    public static getEducationalHint(
-        category: PainCategory,
-        originalText: string,
-        replacementText: string,
-        presetMode: PresetMode = 'HINT',
-    ): string {
+    public static getEducationalHint({
+        category,
+        originalText,
+        replacementText,
+        presetMode = 'HINT',
+    }: EducationalHintParams): string {
         if (presetMode !== 'HINT') {
             return `💡 **Did you mean:** \`${replacementText}\`?`;
         }

@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { type AnalysisResult, PainCategory } from '../types';
+import type { AnalysisResult } from '../types';
 
 /**
  * TypeScript Compiler API を使った AST ベースの静的解析。

@@ -19,7 +19,9 @@ export class SilentFixService {
         );
     }
 
-    public setOnFixAppliedCallback(callback: (fixCount: number, documentUri: string) => void) {
+    public setOnFixAppliedCallback(
+        callback: (fixCount: number, documentUri: string) => void,
+    ): void {
         this.onFixAppliedCallback = callback;
     }
 

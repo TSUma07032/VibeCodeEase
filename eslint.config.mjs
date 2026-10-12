@@ -26,12 +26,17 @@ export default tseslint.config(
   ...tseslint.configs.recommendedTypeChecked,
 
   {
+    files: ["**/*.ts", "**/*.tsx"],
     languageOptions: {
       parserOptions: {
         project: true,
         tsconfigRootDir: import.meta.dirname,
       },
     },
+  },
+  {
+    files: ["**/*.js", "**/*.mjs", "**/*.cjs"],
+    extends: [tseslint.configs.disableTypeChecked],
   },
 
   {
@@ -124,6 +129,24 @@ export default tseslint.config(
         },
       ],
       semi: "warn",
+    },
+  },
+
+  // ==============================================================================
+  // [Test Specific Rules] テストコード専用の最適化設定
+  // ==============================================================================
+  {
+    files: ["src/test/**/*.{ts,tsx}", "**/*.test.ts"],
+    rules: {
+      "max-lines": "off", // テストファイル全体の行数制限を解除
+      "max-lines-per-function": [
+        "warn",
+        {
+          max: 200, // suite 内で複数テストを自然に記述できるよう200行に設定
+          skipBlankLines: true,
+          skipComments: true,
+        },
+      ],
     },
   }
 );

@@ -28,7 +28,12 @@ export class GeminiEmbeddingProvider implements EmbeddingProvider {
         setTimeout(() => source.cancel(), 30000);
 
         try {
-            return await this.geminiClient.embedBatch(texts, apiKey, source.token, this.modelName);
+            return await this.geminiClient.embedBatch({
+                texts,
+                apiKey,
+                token: source.token,
+                modelName: this.modelName,
+            });
         } finally {
             source.dispose();
         }

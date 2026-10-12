@@ -25,18 +25,27 @@ export interface ScoredCandidate extends Candidate {
     };
 }
 
+export interface RerankCandidatesParams {
+    candidates: Candidate[];
+    positiveProfile?: number[];
+    negativeProfile?: number[];
+    recentProfile?: number[];
+    personaWeights: PersonaWeights;
+    config?: RerankingConfig;
+}
+
 /**
  * Reranks candidates based on user preference profiles and current persona weights.
  * Pure function.
  */
-export function rerankCandidates(
-    candidates: Candidate[],
-    positiveProfile: number[] | undefined,
-    negativeProfile: number[] | undefined,
-    recentProfile: number[] | undefined,
-    personaWeights: PersonaWeights,
-    config: RerankingConfig = DEFAULT_RERANKING_CONFIG,
-): ScoredCandidate[] {
+export function rerankCandidates({
+    candidates,
+    positiveProfile,
+    negativeProfile,
+    recentProfile,
+    personaWeights,
+    config = DEFAULT_RERANKING_CONFIG,
+}: RerankCandidatesParams): ScoredCandidate[] {
     const validCandidates = candidates.filter(
         (c) => c.policyCompliant !== false && c.embedding && c.embedding.length > 0,
     );
@@ -51,7 +60,7 @@ export function rerankCandidates(
     }
 
     const scored = validCandidates.map((candidate) => {
-        const emb = candidate.embedding!;
+        const emb = candidate.embedding ?? [];
 
         const posScore =
             positiveProfile?.length === emb.length ? cosineSimilarity(emb, positiveProfile) : 0;

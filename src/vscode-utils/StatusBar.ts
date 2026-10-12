@@ -23,7 +23,7 @@ export class VibeStatusBar {
         this.disposables.push(sub);
     }
 
-    public updateState() {
+    public updateState(): void {
         const state = GlobalState.getInstance();
         const preset = state.presetMode;
 

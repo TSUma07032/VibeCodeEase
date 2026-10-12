@@ -23,7 +23,7 @@ export class ActionLogService {
         }
     }
 
-    public setWorkspaceRoot(rootPath: string) {
+    public setWorkspaceRoot(rootPath: string): void {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (workspaceFolders && workspaceFolders.length > 0) {
             const workspacePath = path.resolve(workspaceFolders[0].uri.fsPath);

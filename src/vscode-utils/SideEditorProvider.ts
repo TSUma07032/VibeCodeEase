@@ -2,12 +2,9 @@ import * as vscode from 'vscode';
 import { SharedAnalysisCache } from '../core/analyzer';
 import { InterventionManager } from '../core/interventionManager';
 import type { LlmBackgroundService } from '../core/llmBackgroundService';
-import { AnalysisResult } from '../types';
-import type {
-    AiInterventionLevel,
-    ExtensionToWebviewMessage,
-    WebviewToExtensionMessage,
-} from '../types/webviewMessage';
+import type { ExtensionToWebviewMessage, WebviewToExtensionMessage } from '../types/webviewMessage';
+import { fetchSideEditorSettings, saveLlmConfigSettings } from './sideEditorConfig';
+import { getSideEditorHtml } from './sideEditorHtml';
 
 // [AI-WARNING] DO NOT REMOVE THIS OPTIMIZATION: Updated SideEditorProvider to sync dashboard states and LLM config seamlessly.
 export class SideEditorProvider implements vscode.Disposable {
@@ -39,7 +36,7 @@ export class SideEditorProvider implements vscode.Disposable {
         return SideEditorProvider.instance;
     }
 
-    public async openSideEditor() {
+    public async openSideEditor(): Promise<void> {
         if (this.panel) {
             this.panel.reveal(vscode.ViewColumn.Beside);
         } else {
@@ -55,7 +52,10 @@ export class SideEditorProvider implements vscode.Disposable {
                 },
             );
 
-            this.panel.webview.html = this.getHtmlForWebview(this.panel.webview);
+            this.panel.webview.html = getSideEditorHtml(
+                this.panel.webview,
+                this.context.extensionUri,
+            );
 
             this.panel.onDidDispose(
                 () => {
@@ -112,141 +112,165 @@ export class SideEditorProvider implements vscode.Disposable {
     }
 
     // [AI-WARNING] DO NOT REMOVE THIS OPTIMIZATION: Retrieve configuration for UI settings, using fallback logic for sync frequency.
-    private async sendSettingsSync() {
-        const apiKey = await this.context.secrets.get('vibecodeease.geminiApiKey');
-        const config = vscode.workspace.getConfiguration('vibecodeease');
-        const level = config.get<string>(
-            'aiInterventionLevel',
-            'Level 2 (Refactoring)',
-        ) as AiInterventionLevel;
-
-        let frequency = config.get<string>('llm.syncFrequency');
-        frequency ??= config.get<boolean>('analyzeOnSave') ? 'onSave' : 'manual';
-
-        const intervalSeconds = config.get<number>('llm.syncIntervalSeconds') ?? 10;
-        const model = config.get<string>('llmModel') ?? 'gemini-3.5-flash-lite';
+    private async sendSettingsSync(): Promise<void> {
+        const settings = await fetchSideEditorSettings(this.context);
 
         this.panel?.webview.postMessage({
             type: 'SYNC_SETTINGS',
-            hasApiKey: Boolean(apiKey),
-            apiKeyLength: apiKey ? apiKey.length : 0,
-            interventionLevel: level,
-            frequency: frequency as 'manual' | 'onSave' | 'interval',
-            intervalSeconds: intervalSeconds,
-            model: model,
+            hasApiKey: Boolean(settings.apiKey),
+            apiKeyLength: settings.apiKey ? settings.apiKey.length : 0,
+            interventionLevel: settings.level,
+            frequency: settings.frequency,
+            intervalSeconds: settings.intervalSeconds,
+            model: settings.model,
         });
     }
 
     // [AI-WARNING] DO NOT REMOVE THIS OPTIMIZATION: Handle incoming IPC messages including config updates and force analysis.
-    private async handleMessage(message: WebviewToExtensionMessage) {
-        if (message.command === 'ready') {
-            if (this._currentDocumentUri) {
-                const doc = vscode.workspace.textDocuments.find(
-                    (d) => d.uri.toString() === this._currentDocumentUri!.toString(),
-                );
-                if (doc) {
-                    this.sendSyncDocument(doc.fileName, doc.getText());
-                    this.sendUpdateInterventions(doc);
-                }
-            }
-
-            await this.sendSettingsSync();
-
-            this.panel?.webview.postMessage({
-                type: 'LLM_DASHBOARD_INIT',
-                ...this.llmService.getDashboardState(),
-            });
-            return;
+    private async handleMessage(message: WebviewToExtensionMessage): Promise<void> {
+        switch (message.command) {
+            case 'ready':
+                await this.handleReadyMessage();
+                break;
+            case 'apply_intervention':
+                await this.handleApplyIntervention(message);
+                break;
+            case 'discard_intervention':
+                this.handleDiscardIntervention(message.id);
+                break;
+            case 'update_api_key':
+                await this.handleUpdateApiKey(message.apiKey);
+                break;
+            case 'update_intervention_level':
+                await vscode.workspace
+                    .getConfiguration('vibecodeease')
+                    .update(
+                        'aiInterventionLevel',
+                        message.level,
+                        vscode.ConfigurationTarget.Global,
+                    );
+                break;
+            case 'update_llm_config':
+                await this.handleUpdateLlmConfig(message);
+                break;
+            case 'clear_error_logs':
+                this.llmService.clearErrorLogs();
+                break;
+            case 'force_analyze':
+                this.handleForceAnalyze();
+                break;
         }
+    }
 
-        if (message.command === 'apply_intervention') {
-            this._isApplyingIntervention = true;
-            try {
-                if (!this._currentDocumentUri) {
-                    return;
-                }
-                const doc = vscode.workspace.textDocuments.find(
-                    (d) => d.uri.toString() === this._currentDocumentUri!.toString(),
-                );
-                if (!doc) {
-                    return;
-                }
-
-                const range = new vscode.Range(
-                    new vscode.Position(message.range.start.line, message.range.start.character),
-                    new vscode.Position(message.range.end.line, message.range.end.character),
-                );
-
-                await InterventionManager.applyIntervention(
-                    doc,
-                    message.id,
-                    message.newText,
-                    range,
-                );
-
-                this.sendUpdateInterventions(doc);
-                this.sendSyncDocument(doc.fileName, doc.getText());
-            } finally {
-                this._isApplyingIntervention = false;
-            }
-        } else if (message.command === 'discard_intervention') {
-            InterventionManager.discardIntervention(message.id);
-            if (this._currentDocumentUri) {
-                const doc = vscode.workspace.textDocuments.find(
-                    (d) => d.uri.toString() === this._currentDocumentUri!.toString(),
-                );
-                if (doc) {
-                    this.sendUpdateInterventions(doc);
-                }
-            }
-        } else if (message.command === 'update_api_key') {
-            if (message.apiKey) {
-                await this.context.secrets.store('vibecodeease.geminiApiKey', message.apiKey);
-            } else {
-                await this.context.secrets.delete('vibecodeease.geminiApiKey');
-            }
-            await this.sendSettingsSync();
-        } else if (message.command === 'update_intervention_level') {
-            await vscode.workspace
-                .getConfiguration('vibecodeease')
-                .update('aiInterventionLevel', message.level, vscode.ConfigurationTarget.Global);
-        } else if (message.command === 'update_llm_config') {
-            let interval = Number(message.intervalSeconds);
-            if (isNaN(interval) || interval < 5) {
-                interval = 5;
-            }
-            if (interval > 3600) {
-                interval = 3600;
-            }
-
-            const config = vscode.workspace.getConfiguration('vibecodeease');
-            await config.update(
-                'llm.syncFrequency',
-                message.frequency,
-                vscode.ConfigurationTarget.Global,
-            );
-            await config.update(
-                'llm.syncIntervalSeconds',
-                interval,
-                vscode.ConfigurationTarget.Global,
-            );
-            await config.update('llmModel', message.model, vscode.ConfigurationTarget.Global);
-
-            await this.sendSettingsSync();
-            this.llmService.startTimerIfConfigured();
-        } else if (message.command === 'clear_error_logs') {
-            this.llmService.clearErrorLogs();
-        } else if (message.command === 'force_analyze') {
-            let targetDoc = vscode.workspace.textDocuments.find(
+    private async handleReadyMessage(): Promise<void> {
+        if (this._currentDocumentUri) {
+            const doc = vscode.workspace.textDocuments.find(
                 (d) => d.uri.toString() === this._currentDocumentUri?.toString(),
             );
-            targetDoc ??= vscode.window.visibleTextEditors.find(
-                (e) =>
-                    e.document.uri.scheme === 'file' && e.viewColumn !== vscode.ViewColumn.Beside,
-            )?.document;
-            if (targetDoc) {
-                void this.llmService.runAnalysis(targetDoc, false);
+            if (doc) {
+                this.sendSyncDocument(doc.fileName, doc.getText());
+                this.sendUpdateInterventions(doc);
             }
+        }
+
+        await this.sendSettingsSync();
+
+        this.panel?.webview.postMessage({
+            type: 'LLM_DASHBOARD_INIT',
+            ...this.llmService.getDashboardState(),
+        });
+    }
+
+    /**
+     * [Why/Intent] Webviewからの介入適用要求を受け、ドキュメントの指定範囲を置換してUIへ最新状態を同期する。
+     */
+    private async handleApplyIntervention(
+        message: Extract<WebviewToExtensionMessage, { command: 'apply_intervention' }>,
+    ): Promise<void> {
+        // [Why/Intent] 介入適用中のドキュメント変更イベント発火によって
+        // 不要な再同期や循環呼び出し・競合が発生するのを防ぐフラグ保護
+        this._isApplyingIntervention = true;
+        try {
+            if (!this._currentDocumentUri) {
+                return;
+            }
+            const doc = vscode.workspace.textDocuments.find(
+                (d) => d.uri.toString() === this._currentDocumentUri?.toString(),
+            );
+            if (!doc) {
+                return;
+            }
+
+            const range = new vscode.Range(
+                new vscode.Position(message.range.start.line, message.range.start.character),
+                new vscode.Position(message.range.end.line, message.range.end.character),
+            );
+
+            await InterventionManager.applyIntervention({
+                document: doc,
+                id: message.id,
+                newText: message.newText,
+                range,
+            });
+
+            this.sendUpdateInterventions(doc);
+            this.sendSyncDocument(doc.fileName, doc.getText());
+        } finally {
+            this._isApplyingIntervention = false;
+        }
+    }
+
+    /**
+     * [Why/Intent] Webviewからの介入破棄要求を受け、マネージャーから除外して最新一覧をUIへ同期する。
+     */
+    private handleDiscardIntervention(id: string): void {
+        InterventionManager.discardIntervention(id);
+        if (this._currentDocumentUri) {
+            const doc = vscode.workspace.textDocuments.find(
+                (d) => d.uri.toString() === this._currentDocumentUri?.toString(),
+            );
+            if (!doc) {
+                return;
+            }
+            this.sendUpdateInterventions(doc);
+        }
+    }
+
+    /**
+     * [Why/Intent] Webviewで入力されたGemini APIキーをVS Code SecretStorageへセキュアに保存/削除する。
+     */
+    private async handleUpdateApiKey(apiKey?: string): Promise<void> {
+        if (apiKey) {
+            await this.context.secrets.store('vibecodeease.geminiApiKey', apiKey);
+        } else {
+            await this.context.secrets.delete('vibecodeease.geminiApiKey');
+        }
+        await this.sendSettingsSync();
+    }
+
+    /**
+     * [Why/Intent] WebviewからのLLM同期設定更新を受け、設定を保存してバックグラウンドタイマーを再起動する。
+     */
+    private async handleUpdateLlmConfig(
+        message: Extract<WebviewToExtensionMessage, { command: 'update_llm_config' }>,
+    ): Promise<void> {
+        await saveLlmConfigSettings(message.intervalSeconds, message.frequency, message.model);
+        await this.sendSettingsSync();
+        this.llmService.startTimerIfConfigured();
+    }
+
+    /**
+     * [Why/Intent] Webviewの「今すぐ解析」ボタン押下を受け、現在アクティブなファイルの手動解析を即時実行する。
+     */
+    private handleForceAnalyze(): void {
+        let targetDoc = vscode.workspace.textDocuments.find(
+            (d) => d.uri.toString() === this._currentDocumentUri?.toString(),
+        );
+        targetDoc ??= vscode.window.visibleTextEditors.find(
+            (e) => e.document.uri.scheme === 'file' && e.viewColumn !== vscode.ViewColumn.Beside,
+        )?.document;
+        if (targetDoc) {
+            void this.llmService.runAnalysis(targetDoc, false);
         }
     }
 
@@ -270,22 +294,19 @@ export class SideEditorProvider implements vscode.Disposable {
         }
     }
 
-    public sendUpdateInterventions(document: vscode.TextDocument) {
+    public sendUpdateInterventions(document: vscode.TextDocument): void {
         if (this.panel) {
             const results = SharedAnalysisCache.getInstance().getResults(document);
-            const interventions = results.map((r) => {
-                const id = InterventionManager.generateIssueId(document.uri.toString(), r);
-                return {
-                    id: id,
-                    range: {
-                        start: { line: r.range.start.line, character: r.range.start.character },
-                        end: { line: r.range.end.line, character: r.range.end.character },
-                    },
-                    originalText: r.interventions[0]?.originalText || '',
-                    replacementText: r.interventions[0]?.replacementText || '',
-                    message: r.interventions[0]?.message ?? '',
-                };
-            });
+            const interventions = results.map((r) => ({
+                id: InterventionManager.generateIssueId(document.uri.toString(), r),
+                range: {
+                    start: { line: r.range.start.line, character: r.range.start.character },
+                    end: { line: r.range.end.line, character: r.range.end.character },
+                },
+                originalText: r.interventions[0]?.originalText || '',
+                replacementText: r.interventions[0]?.replacementText || '',
+                message: r.interventions[0]?.message ?? '',
+            }));
 
             const message: ExtensionToWebviewMessage = {
                 type: 'UPDATE_INTERVENTIONS',
@@ -295,42 +316,7 @@ export class SideEditorProvider implements vscode.Disposable {
         }
     }
 
-    private getHtmlForWebview(webview: vscode.Webview): string {
-        const scriptUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(
-                this.context.extensionUri,
-                'webview-ui',
-                'dist',
-                'assets',
-                'index.js',
-            ),
-        );
-        const styleUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(
-                this.context.extensionUri,
-                'webview-ui',
-                'dist',
-                'assets',
-                'index.css',
-            ),
-        );
-
-        return `<!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <link href="${styleUri.toString()}" rel="stylesheet">
-                <title>vibeCodeEase Side Editor</title>
-            </head>
-            <body>
-                <div id="root"></div>
-                <script type="module" src="${scriptUri.toString()}"></script>
-            </body>
-            </html>`;
-    }
-
-    public dispose() {
+    public dispose(): void {
         if (this.panel) {
             this.panel.dispose();
             this.panel = undefined;

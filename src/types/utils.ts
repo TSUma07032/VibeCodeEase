@@ -32,7 +32,7 @@ export function parsePainCategory(
  * @returns 0.0〜1.0の範囲に補正された数値
  */
 export function clampPreferenceValue(value: unknown, defaultValue: number = 0.5): number {
-    if (typeof value !== 'number' || isNaN(value)) {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
         return defaultValue;
     }
     // ⚡ Bolt: 値のクランプにおいて、複数のif条件式をMath.minとMath.maxに置き換え

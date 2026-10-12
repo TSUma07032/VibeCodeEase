@@ -16,7 +16,7 @@ import { VibeStatusBar } from './vscode-utils/StatusBar';
  * [Why/Intent] 拡張機能の初期化。以前の CodeActionProvider や editorDecorator 等を撤廃し、
  * 左エディタ介入を完全排除して SideEditorProvider への登録のみに集約する（Side-by-Side構成へ刷新する設計方針）。
  */
-export function activate(context: vscode.ExtensionContext) {
+export function activate(context: vscode.ExtensionContext): void {
     GlobalState.getInstance().initialize(context);
 
     // ワークスペースパスの解決
@@ -32,12 +32,12 @@ export function activate(context: vscode.ExtensionContext) {
         key ??= vscode.workspace.getConfiguration('vibecodeease').get<string>('geminiApiKey');
         return key as string;
     };
-    const personalizationService = new PersonalizationService(
-        context.globalStorageUri,
-        new GeminiClient(),
-        new VscodeLmClient(),
+    const personalizationService = new PersonalizationService({
+        globalStorageUri: context.globalStorageUri,
+        geminiClient: new GeminiClient(),
+        vscodeLmClient: new VscodeLmClient(),
         getApiKey,
-    );
+    });
     void personalizationService.initialize();
 
     const silentFixService = new SilentFixService(personalizationService);
@@ -79,31 +79,15 @@ export function activate(context: vscode.ExtensionContext) {
         }),
     );
 
-    context.subscriptions.push(diagnosticsService);
-    context.subscriptions.push(silentFixService);
-    context.subscriptions.push(llmBackgroundService);
-    context.subscriptions.push(sideEditorProvider);
-
-    const disposable = vscode.commands.registerCommand('vibecodeease.helloWorld', () => {
-        vscode.window.showInformationMessage('Hello World from vibeCodeEase!');
-    });
-    context.subscriptions.push(disposable);
-
-    /**
-     * [Why/Intent] ユーザーが任意のタイミングで右側にAI提案エディタを開けるようにするコマンド。
-     */
-    const openSideEditorCommand = vscode.commands.registerCommand(
-        'vibecodeease.openSideEditor',
-        () => {
-            void sideEditorProvider.openSideEditor();
-        },
+    context.subscriptions.push(
+        diagnosticsService,
+        silentFixService,
+        llmBackgroundService,
+        sideEditorProvider,
+        new VibeStatusBar(),
     );
-    context.subscriptions.push(openSideEditorCommand);
 
-    const statusBar = new VibeStatusBar();
-    context.subscriptions.push(statusBar);
-
-    // コマンド登録
+    registerExtensionCommands(context, sideEditorProvider);
     registerCommands(context, { actionLogService });
 
     // セッション開始ログ
@@ -114,4 +98,18 @@ export function activate(context: vscode.ExtensionContext) {
     });
 }
 
-export function deactivate() {}
+function registerExtensionCommands(
+    context: vscode.ExtensionContext,
+    sideEditorProvider: SideEditorProvider,
+): void {
+    context.subscriptions.push(
+        vscode.commands.registerCommand('vibecodeease.helloWorld', () => {
+            vscode.window.showInformationMessage('Hello World from vibeCodeEase!');
+        }),
+        vscode.commands.registerCommand('vibecodeease.openSideEditor', () => {
+            void sideEditorProvider.openSideEditor();
+        }),
+    );
+}
+
+export function deactivate(): void {}

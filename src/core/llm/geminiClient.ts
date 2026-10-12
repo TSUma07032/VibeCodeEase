@@ -12,6 +12,37 @@ interface GeminiModelsResponse {
     models?: GeminiModel[];
 }
 
+/**
+ * [Why/Intent] Gemini API へのコンテンツ生成リクエストパラメータをまとめたオプションオブジェクト
+ */
+export interface GeminiGenerateOptions {
+    prompt: string;
+    apiKey: string;
+    token: vscode.CancellationToken;
+    modelName?: string;
+    responseSchema?: unknown;
+}
+
+/**
+ * [Why/Intent] 複数テキストの一括ベクトル化（batchEmbedContents）リクエストパラメータ
+ */
+export interface GeminiEmbedBatchOptions {
+    texts: string[];
+    apiKey: string;
+    token: vscode.CancellationToken;
+    modelName?: string;
+}
+
+/**
+ * [Why/Intent] HTTPSリクエスト送信処理のパラメータをまとめたヘルパー型
+ */
+interface RequestOptionsParam {
+    urlString: string;
+    token: vscode.CancellationToken;
+    options?: https.RequestOptions;
+    body?: string;
+}
+
 export class GeminiClient {
     private readonly preferredNames = [
         'gemini-3.8-flash',
@@ -30,52 +61,68 @@ export class GeminiClient {
     ];
 
     /**
+     * [Why/Intent] 指定モデルのエンドポイントへ generateContent リクエストを発行するヘルパー
+     */
+    private async callGenerateEndpoint(
+        modelName: string,
+        params: GeminiGenerateOptions,
+    ): Promise<{ statusCode: number; body: string }> {
+        const schema = params.responseSchema ?? INTERVENTION_RESPONSE_SCHEMA;
+        return this.request({
+            urlString: `https://generativelanguage.googleapis.com/v1beta/${modelName}:generateContent?key=${encodeURIComponent(params.apiKey)}`,
+            options: {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            },
+            token: params.token,
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: params.prompt }] }],
+                generationConfig: {
+                    responseMimeType: 'application/json',
+                    responseSchema: schema,
+                },
+            }),
+        });
+    }
+
+    /**
+     * [Why/Intent] APIレスポンスを検証し、candidate から生成JSON文字列を取り出してオブジェクトとしてパースする
+     */
+    private parseGenerateResponse(response: { statusCode: number; body: string }): unknown {
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+            const details = response.body.slice(0, 160);
+            throw new Error(
+                `Gemini APIリクエストに失敗しました（HTTP ${response.statusCode}）。${details}`,
+            );
+        }
+
+        const data = JSON.parse(response.body) as {
+            candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+        };
+        const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!raw) {
+            throw new Error('Geminiから介入プランが返されませんでした。');
+        }
+        return JSON.parse(raw);
+    }
+
+    /**
      * Gemini APIへリクエストを送信し、生成された未検証のJSONレスポンスオブジェクトを返す
      */
-    public async generate(
-        prompt: string,
-        apiKey: string,
-        token: vscode.CancellationToken,
-        modelName?: string,
-        responseSchema: unknown = INTERVENTION_RESPONSE_SCHEMA,
-    ): Promise<unknown> {
-        const candidateModels = await this.discoverModels(apiKey, token, modelName);
+    public async generate(params: GeminiGenerateOptions): Promise<unknown> {
+        const candidateModels = await this.discoverModels(
+            params.apiKey,
+            params.token,
+            params.modelName,
+        );
 
         for (const model of candidateModels) {
-            const response = await this.request(
-                `https://generativelanguage.googleapis.com/v1beta/${model.name}:generateContent?key=${encodeURIComponent(apiKey)}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                },
-                token,
-                JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: {
-                        responseMimeType: 'application/json',
-                        responseSchema: responseSchema,
-                    },
-                }),
-            );
+            const response = await this.callGenerateEndpoint(model.name, params);
 
             if (response.statusCode === 404) {
                 continue;
             }
-            if (response.statusCode < 200 || response.statusCode >= 300) {
-                const details = response.body.slice(0, 160);
-                throw new Error(
-                    `Gemini APIリクエストに失敗しました（HTTP ${response.statusCode}）。${details}`,
-                );
-            }
-
-            const data = JSON.parse(response.body) as {
-                candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-            };
-            const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!raw) {
-                throw new Error('Geminiから介入プランが返されませんでした。');
-            }
-            return JSON.parse(raw);
+            return this.parseGenerateResponse(response);
         }
 
         throw new Error(
@@ -86,30 +133,27 @@ export class GeminiClient {
     /**
      * Gemini REST APIを使用してテキストのバッチをEmbeddingに変換する
      */
-    public async embedBatch(
-        texts: string[],
-        apiKey: string,
-        token: vscode.CancellationToken,
-        modelName: string = 'text-embedding-004',
-    ): Promise<number[][]> {
+    public async embedBatch(params: GeminiEmbedBatchOptions): Promise<number[][]> {
+        const texts = params.texts;
         if (texts.length === 0) {
             return [];
         }
 
+        const modelName = params.modelName ?? 'text-embedding-004';
         const requests = texts.map((text) => ({
             model: `models/${modelName}`,
             content: { parts: [{ text }] },
         }));
 
-        const response = await this.request(
-            `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:batchEmbedContents?key=${encodeURIComponent(apiKey)}`,
-            {
+        const response = await this.request({
+            urlString: `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:batchEmbedContents?key=${encodeURIComponent(params.apiKey)}`,
+            options: {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
             },
-            token,
-            JSON.stringify({ requests }),
-        );
+            token: params.token,
+            body: JSON.stringify({ requests }),
+        });
 
         if (response.statusCode < 200 || response.statusCode >= 300) {
             const details = response.body.slice(0, 160);
@@ -134,11 +178,10 @@ export class GeminiClient {
         token: vscode.CancellationToken,
         targetModelName?: string,
     ): Promise<GeminiModel[]> {
-        const modelsResponse = await this.request(
-            `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
-            undefined,
+        const modelsResponse = await this.request({
+            urlString: `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
             token,
-        );
+        });
         if (modelsResponse.statusCode < 200 || modelsResponse.statusCode >= 300) {
             throw new Error(
                 `Geminiのモデル一覧取得に失敗しました（HTTP ${modelsResponse.statusCode}）。APIキーとGenerative Language APIの有効化を確認してください。`,
@@ -175,21 +218,18 @@ export class GeminiClient {
     }
 
     private async request(
-        urlString: string,
-        options: https.RequestOptions = {},
-        token: vscode.CancellationToken,
-        body?: string,
+        params: RequestOptionsParam,
     ): Promise<{ statusCode: number; body: string }> {
         const maxRetries = 1;
         let attempt = 0;
 
         while (true) {
-            const response = await this.doRequest(urlString, options, token, body);
+            const response = await this.doRequest(params);
 
             if (
                 (response.statusCode === 503 || response.statusCode === 429) &&
                 attempt < maxRetries &&
-                !token.isCancellationRequested
+                !params.token.isCancellationRequested
             ) {
                 // Quota exceeded の場合はリトライしない
                 if (response.body.toLowerCase().includes('quota')) {
@@ -206,17 +246,13 @@ export class GeminiClient {
         }
     }
 
-    private doRequest(
-        urlString: string,
-        options: https.RequestOptions = {},
-        token: vscode.CancellationToken,
-        body?: string,
-    ): Promise<{ statusCode: number; body: string }> {
+    private doRequest(params: RequestOptionsParam): Promise<{ statusCode: number; body: string }> {
         return new Promise((resolve, reject) => {
-            const url = new URL(urlString);
+            const url = new URL(params.urlString);
+            const requestOptions = params.options ?? {};
             const request = https.request(
                 url,
-                { ...options, method: options.method ?? 'GET', timeout: 30000 },
+                { ...requestOptions, method: requestOptions.method ?? 'GET', timeout: 30000 },
                 (response) => {
                     let responseBody = '';
                     response.setEncoding('utf8');
@@ -231,7 +267,7 @@ export class GeminiClient {
                 request.destroy(new Error('LLM API リクエストがタイムアウトしました。'));
             });
 
-            const cancellation = token.onCancellationRequested(() => {
+            const cancellation = params.token.onCancellationRequested(() => {
                 request.destroy(new Error('リクエストがキャンセルされました。'));
             });
             request.on('close', () => {
@@ -239,8 +275,8 @@ export class GeminiClient {
             });
             request.on('error', reject);
 
-            if (body) {
-                request.write(body);
+            if (params.body) {
+                request.write(params.body);
             }
             request.end();
         });

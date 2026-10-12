@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { AnalysisResult, PainCategory, ProposedIntervention } from '../types';
+import type { AnalysisResult, PainCategory } from '../types';
 import { AstAnalyzer } from './astAnalyzer';
 
 export interface TypoRule {
@@ -105,38 +105,61 @@ export class CodeAnalyzer {
 
         for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
             const lineText = lines[lineIndex];
+            const trailing = this.checkTrailingSpaces(lineText, lineIndex);
+            if (trailing) {
+                results.push(trailing);
+            }
+            results.push(...this.checkRuleMatches(lineText, lineIndex, languageId));
+        }
 
-            // カテゴリC: 末尾スペース検出
-            const trailingMatch = lineText.match(/^(.*\S)( +)$/);
-            if (trailingMatch) {
-                const trailingStart = trailingMatch[1].length;
-                results.push({
-                    category: 'INDENTATION_FORMATTING',
-                    level: 'SUGGESTION',
-                    range: {
-                        start: { line: lineIndex, character: trailingStart },
-                        end: { line: lineIndex, character: lineText.length },
-                    },
-                    interventions: [
-                        {
-                            originalText: lineText.slice(trailingStart),
-                            replacementText: '',
-                            message: '$(lightbulb) **末尾の余分なスペース**を削除できます。',
-                        },
-                    ],
-                });
+        results.push(...this.checkConsecutiveEmptyLines(lines));
+        return results;
+    }
+
+    private checkTrailingSpaces(lineText: string, lineIndex: number): AnalysisResult | null {
+        const trailingMatch = lineText.match(/^(.*\S)( +)$/);
+        if (!trailingMatch) {
+            return null;
+        }
+        const trailingStart = trailingMatch[1].length;
+        return {
+            category: 'INDENTATION_FORMATTING',
+            level: 'SUGGESTION',
+            range: {
+                start: { line: lineIndex, character: trailingStart },
+                end: { line: lineIndex, character: lineText.length },
+            },
+            interventions: [
+                {
+                    originalText: lineText.slice(trailingStart),
+                    replacementText: '',
+                    message: '$(lightbulb) **末尾の余分なスペース**を削除できます。',
+                },
+            ],
+        };
+    }
+
+    private checkRuleMatches(
+        lineText: string,
+        lineIndex: number,
+        languageId?: string,
+    ): AnalysisResult[] {
+        const results: AnalysisResult[] = [];
+        for (const rule of this.rules) {
+            if (rule.languageId && languageId && !rule.languageId.includes(languageId)) {
+                continue;
             }
 
-            // カテゴリA/B: ルールベースのタイポ検出
-            for (const rule of this.rules) {
-                // languageId フィルタ: ルールに言語指定がある場合は一致するときのみ検出
-                if (rule.languageId && languageId && !rule.languageId.includes(languageId)) {
-                    continue;
-                }
-
-                let matchIndex = lineText.indexOf(rule.pattern);
-                while (matchIndex !== -1) {
-                    const interventions: ProposedIntervention[] = [
+            let matchIndex = lineText.indexOf(rule.pattern);
+            while (matchIndex !== -1) {
+                results.push({
+                    category: rule.category,
+                    level: 'SUGGESTION',
+                    range: {
+                        start: { line: lineIndex, character: matchIndex },
+                        end: { line: lineIndex, character: matchIndex + rule.pattern.length },
+                    },
+                    interventions: [
                         {
                             originalText: rule.pattern,
                             replacementText: rule.replacement,
@@ -144,59 +167,64 @@ export class CodeAnalyzer {
                                 rule.message ??
                                 `$(lightbulb) **Did you mean:** \`${rule.replacement}\`?`,
                         },
-                    ];
-
-                    results.push({
-                        category: rule.category,
-                        level: 'SUGGESTION',
-                        range: {
-                            start: { line: lineIndex, character: matchIndex },
-                            end: { line: lineIndex, character: matchIndex + rule.pattern.length },
-                        },
-                        interventions,
-                    });
-                    matchIndex = lineText.indexOf(rule.pattern, matchIndex + rule.pattern.length);
-                }
+                    ],
+                });
+                matchIndex = lineText.indexOf(rule.pattern, matchIndex + rule.pattern.length);
             }
         }
+        return results;
+    }
 
-        // カテゴリC: 3行以上連続した空行を検出
+    private checkConsecutiveEmptyLines(lines: string[]): AnalysisResult[] {
+        const results: AnalysisResult[] = [];
         let emptyCount = 0;
         let emptyStart = -1;
+
         for (let i = 0; i < lines.length; i++) {
             if (lines[i].trim() === '') {
                 if (emptyCount === 0) {
                     emptyStart = i;
                 }
                 emptyCount++;
-            } else {
-                if (emptyCount >= 3) {
-                    // 3行以上連続空行: 先頭2行を残して以降を削除対象として提案
-                    for (let j = emptyStart + 2; j < emptyStart + emptyCount; j++) {
-                        results.push({
-                            category: 'INDENTATION_FORMATTING',
-                            level: 'SUGGESTION',
-                            range: {
-                                start: { line: j, character: 0 },
-                                end: { line: j, character: 0 },
-                            },
-                            interventions: [
-                                {
-                                    originalText: '',
-                                    replacementText: '',
-                                    message:
-                                        '$(lightbulb) **連続した空行**が多すぎます。2行以内にまとめると読みやすくなります。',
-                                },
-                            ],
-                        });
-                    }
-                }
-                emptyCount = 0;
-                emptyStart = -1;
+                continue;
             }
+
+            if (emptyCount >= 3) {
+                this.addEmptyLineResults(results, emptyStart, emptyCount);
+            }
+            emptyCount = 0;
+            emptyStart = -1;
         }
 
+        if (emptyCount >= 3) {
+            this.addEmptyLineResults(results, emptyStart, emptyCount);
+        }
         return results;
+    }
+
+    private addEmptyLineResults(
+        results: AnalysisResult[],
+        emptyStart: number,
+        emptyCount: number,
+    ): void {
+        for (let j = emptyStart + 2; j < emptyStart + emptyCount; j++) {
+            results.push({
+                category: 'INDENTATION_FORMATTING',
+                level: 'SUGGESTION',
+                range: {
+                    start: { line: j, character: 0 },
+                    end: { line: j, character: 0 },
+                },
+                interventions: [
+                    {
+                        originalText: '',
+                        replacementText: '',
+                        message:
+                            '$(lightbulb) **連続した空行**が多すぎます。2行以内にまとめると読みやすくなります。',
+                    },
+                ],
+            });
+        }
     }
 }
 
@@ -297,7 +325,7 @@ export class SharedAnalysisCache {
         this._onDidChange.fire();
     }
 
-    public clear() {
+    public clear(): void {
         this.cache.clear();
         this.externalResults.clear();
         this.ignoredIssues.clear();

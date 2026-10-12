@@ -1,7 +1,6 @@
 import * as assert from 'assert';
 import {
     determineInterventionLevel,
-    INTERVENTION_THRESHOLDS,
     InterventionEngine,
     THRESHOLDS,
 } from '../core/interventionEngine';
@@ -140,24 +139,24 @@ suite('InterventionEngine Test Suite', () => {
 
     suite('getEducationalHint', () => {
         test('HINTモード時に教育皁E�EレフィチE��スと解説が含まれること', () => {
-            const hint = InterventionEngine.getEducationalHint(
-                'SYNTAX_TYPO',
-                'functon',
-                'function',
-                'HINT',
-            );
+            const hint = InterventionEngine.getEducationalHint({
+                category: 'SYNTAX_TYPO',
+                originalText: 'functon',
+                replacementText: 'function',
+                presetMode: 'HINT',
+            });
             assert.ok(hint.includes('🎓 **学習ヒント (タイポ):**'));
             assert.ok(hint.includes('🎓 **学習ヒント (タイポ):**'));
             assert.ok(hint.includes('🎓 **学習ヒント (タイポ):**'));
         });
 
         test('HINTモード以外ではシンプルなサジェスト文を返すこと', () => {
-            const hint = InterventionEngine.getEducationalHint(
-                'SYNTAX_TYPO',
-                'functon',
-                'function',
-                'ARCHITECTURE',
-            );
+            const hint = InterventionEngine.getEducationalHint({
+                category: 'SYNTAX_TYPO',
+                originalText: 'functon',
+                replacementText: 'function',
+                presetMode: 'ARCHITECTURE',
+            });
             assert.strictEqual(hint, '💡 **Did you mean:** `function`?');
         });
     });

@@ -12,17 +12,14 @@ export interface SelectorResult {
     dominantPersona: PersonaId;
 }
 
-/**
- * Calculates current persona weights based on situation, learned history, and mode.
- * Pure function.
- */
-export function determinePersonaWeights(
-    situation: SituationId,
-    mode: PersonaMode,
-    records: ResponseRecord[],
-    lambda: number = 0.6, // Weight for situation vs learned history
-): SelectorResult {
-    // 1. If mode is fixed to a specific persona, return 100% for that persona
+export interface DeterminePersonaWeightsParams {
+    situation: SituationId;
+    mode: PersonaMode;
+    records: ResponseRecord[];
+    lambda?: number;
+}
+
+function getFixedPersona(mode: PersonaMode): SelectorResult | null {
     if (mode.startsWith('fixed:')) {
         const fixedId = mode.split(':')[1] as PersonaId;
         const weights: PersonaWeights = { exploration: 0, learning: 0, quality: 0 };
@@ -31,26 +28,24 @@ export function determinePersonaWeights(
             return { weights, dominantPersona: fixedId };
         }
     }
+    return null;
+}
 
-    // 2. Adaptive Mode (Persona E)
-    const situationWeights = SITUATION_WEIGHTS[situation];
-
-    // Filter records for this specific situation to learn situation-specific preferences
-    const situationRecords = records.filter((r) => r.situation === situation);
-
-    // Calculate learned weights using Laplace smoothing
+function calculateLearnedWeights(
+    records: ResponseRecord[],
+    situation: SituationId,
+): PersonaWeights {
     const stats: Record<PersonaId, { adopt: number; reject: number }> = {
         exploration: { adopt: 0, reject: 0 },
         learning: { adopt: 0, reject: 0 },
         quality: { adopt: 0, reject: 0 },
     };
 
-    for (const record of situationRecords) {
-        if (record.persona in stats) {
+    for (const record of records) {
+        if (record.situation === situation && record.persona in stats) {
             if (record.feedback === 'liked') {
                 stats[record.persona].adopt++;
-            }
-            if (record.feedback === 'disliked') {
+            } else if (record.feedback === 'disliked') {
                 stats[record.persona].reject++;
             }
         }
@@ -58,21 +53,24 @@ export function determinePersonaWeights(
 
     const learnedWeights: PersonaWeights = { exploration: 0, learning: 0, quality: 0 };
     let totalLearned = 0;
-
     for (const p of Object.keys(stats) as PersonaId[]) {
-        // Laplace smoothing: (adopt + 1) / (adopt + reject + 2)
         const s = stats[p];
         const val = (s.adopt + 1) / (s.adopt + s.reject + 2);
         learnedWeights[p] = val;
         totalLearned += val;
     }
 
-    // Normalize learned weights to sum to 1.0
     for (const p of Object.keys(learnedWeights) as PersonaId[]) {
         learnedWeights[p] /= totalLearned;
     }
+    return learnedWeights;
+}
 
-    // Mix situation preset and learned history
+function mixAndNormalizeWeights(
+    situationWeights: PersonaWeights,
+    learnedWeights: PersonaWeights,
+    lambda: number,
+): SelectorResult {
     const finalWeights: PersonaWeights = { exploration: 0, learning: 0, quality: 0 };
     let maxWeight = -1;
     let dominant: PersonaId = 'exploration';
@@ -85,7 +83,6 @@ export function determinePersonaWeights(
         }
     }
 
-    // Re-normalize final weights to ensure sum is 1.0
     let finalTotal = 0;
     for (const p of Object.keys(finalWeights) as PersonaId[]) {
         finalTotal += finalWeights[p];
@@ -94,8 +91,25 @@ export function determinePersonaWeights(
         finalWeights[p] /= finalTotal;
     }
 
-    return {
-        weights: finalWeights,
-        dominantPersona: dominant,
-    };
+    return { weights: finalWeights, dominantPersona: dominant };
+}
+
+/**
+ * Calculates current persona weights based on situation, learned history, and mode.
+ * Pure function.
+ */
+export function determinePersonaWeights({
+    situation,
+    mode,
+    records,
+    lambda = 0.6,
+}: DeterminePersonaWeightsParams): SelectorResult {
+    const fixed = getFixedPersona(mode);
+    if (fixed) {
+        return fixed;
+    }
+
+    const situationWeights = SITUATION_WEIGHTS[situation];
+    const learnedWeights = calculateLearnedWeights(records, situation);
+    return mixAndNormalizeWeights(situationWeights, learnedWeights, lambda);
 }

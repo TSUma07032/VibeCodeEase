@@ -1,13 +1,11 @@
 import * as vscode from 'vscode';
 import { GlobalState } from '../../state/globalState';
-import {
-    Candidate,
-    PersonaId,
-    type PersonalizationProfile,
-    type PersonaMode,
-    type PzMetrics,
-    type ResponseRecord,
-    type SituationId,
+import type {
+    PersonalizationProfile,
+    PersonaMode,
+    PzMetrics,
+    ResponseRecord,
+    SituationId,
 } from '../../types/personalization';
 import type { GeminiClient } from '../llm/geminiClient';
 import type { VscodeLmClient } from '../llm/vscodeLmClient';
@@ -19,6 +17,16 @@ import { PreferenceStore } from './preferenceStore';
 import { PreferenceSummarizer } from './preferenceSummarizer';
 import { DEFAULT_RERANKING_CONFIG, rerankCandidates, type ScoredCandidate } from './reranker';
 import { determinePersonaWeights } from './situationPersonaSelector';
+
+/**
+ * [Why/Intent] PersonalizationService の初期化に必要なストレージURIおよびLLM通信クライアント群
+ */
+export interface PersonalizationServiceParams {
+    globalStorageUri: vscode.Uri;
+    geminiClient: GeminiClient;
+    vscodeLmClient: VscodeLmClient;
+    getApiKey: () => Promise<string | undefined>;
+}
 
 export class PersonalizationService {
     private store: PreferenceStore;
@@ -36,33 +44,28 @@ export class PersonalizationService {
     private currentCandidates: ScoredCandidate[] = [];
     private currentSituation: SituationId = 'learning';
 
-    constructor(
-        globalStorageUri: vscode.Uri,
-        private readonly geminiClient: GeminiClient,
-        private readonly vscodeLmClient: VscodeLmClient,
-        private readonly getApiKey: () => Promise<string | undefined>,
-    ) {
+    constructor(params: PersonalizationServiceParams) {
         const getLlmConfig = () => GlobalState.getInstance().llmConfig;
 
         // Try Gemini Embedding first, fallback to Local Hash later if key is missing when embedding
         // We will initialize GeminiProvider. If it fails due to no key during embedBatch,
         // we might switch, but for simplicity, we pass a composite or just Local Hash if no key initially.
         // Let's create a proxy provider that falls back automatically.
-        const provider = new ProxyEmbeddingProvider(geminiClient, getApiKey);
+        const provider = new ProxyEmbeddingProvider(params.geminiClient, params.getApiKey);
 
-        this.store = new PreferenceStore(globalStorageUri, provider);
-        this.generator = new CandidateGenerator(
-            geminiClient,
-            vscodeLmClient,
+        this.store = new PreferenceStore(params.globalStorageUri, provider);
+        this.generator = new CandidateGenerator({
+            geminiClient: params.geminiClient,
+            vscodeLmClient: params.vscodeLmClient,
             getLlmConfig,
-            getApiKey,
-        );
-        this.summarizer = new PreferenceSummarizer(
-            geminiClient,
-            vscodeLmClient,
+            getApiKey: params.getApiKey,
+        });
+        this.summarizer = new PreferenceSummarizer({
+            geminiClient: params.geminiClient,
+            vscodeLmClient: params.vscodeLmClient,
             getLlmConfig,
-            getApiKey,
-        );
+            getApiKey: params.getApiKey,
+        });
     }
 
     public async initialize(): Promise<void> {
@@ -117,21 +120,21 @@ export class PersonalizationService {
         const profile = this.store.getProfile();
 
         // 1. Determine weights
-        const { weights } = determinePersonaWeights(
-            this.currentSituation,
-            profile.currentPersonaMode,
-            profile.likedRecords,
-        );
+        const { weights } = determinePersonaWeights({
+            situation: this.currentSituation,
+            mode: profile.currentPersonaMode,
+            records: profile.likedRecords,
+        });
 
         // 2. Generate candidates
-        const candidates = await this.generator.generateCandidates(
-            query,
+        const candidates = await this.generator.generateCandidates({
+            userQuery: query,
             contextCode,
-            this.currentSituation,
-            weights,
-            profile.preferenceSummary,
+            situation: this.currentSituation,
+            personaWeights: weights,
+            preferenceSummary: profile.preferenceSummary,
             token,
-        );
+        });
 
         // 3. Embed candidates
         const texts = candidates.map((c) => c.text);
@@ -141,14 +144,14 @@ export class PersonalizationService {
         }
 
         // 4. Rerank
-        const scored = rerankCandidates(
+        const scored = rerankCandidates({
             candidates,
-            profile.positiveProfile,
-            profile.negativeProfile,
-            profile.recentPreferences,
-            weights,
-            DEFAULT_RERANKING_CONFIG,
-        );
+            positiveProfile: profile.positiveProfile,
+            negativeProfile: profile.negativeProfile,
+            recentProfile: profile.recentPreferences,
+            personaWeights: weights,
+            config: DEFAULT_RERANKING_CONFIG,
+        });
 
         this.currentCandidates = scored;
         return scored;
@@ -158,7 +161,6 @@ export class PersonalizationService {
         candidateId: string,
         action: 'accept' | 'good' | 'bad' | 'regenerate',
     ): Promise<void> {
-        const profile = this.store.getProfile();
         const candidate = this.currentCandidates.find((c) => c.id === candidateId);
 
         if (action === 'regenerate') {
@@ -198,7 +200,7 @@ export class PersonalizationService {
         const record: ResponseRecord = {
             id: Date.now().toString() + '_' + candidate.id,
             text: candidate.text,
-            embedding: candidate.embedding!,
+            embedding: candidate.embedding ?? [],
             feedback,
             persona: candidate.persona,
             situation: this.currentSituation,

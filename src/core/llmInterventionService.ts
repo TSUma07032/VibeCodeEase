@@ -6,6 +6,23 @@ import { validatePlan } from './llm/planValidator';
 import { buildInterventionPrompt } from './llm/promptBuilder';
 import { VscodeLmClient } from './llm/vscodeLmClient';
 
+export interface CreateGeminiPlanOptions {
+    document: vscode.TextDocument;
+    token: vscode.CancellationToken;
+    apiKey: string;
+    modelName?: string;
+    preferenceSummary?: string;
+    presetMode?: PresetMode;
+}
+
+export interface CreatePlanOptions {
+    document: vscode.TextDocument;
+    token: vscode.CancellationToken;
+    modelSelector?: string;
+    preferenceSummary?: string;
+    presetMode?: PresetMode;
+}
+
 export class LlmInterventionService {
     constructor(
         private readonly geminiClient = new GeminiClient(),
@@ -36,33 +53,37 @@ export class LlmInterventionService {
     /**
      * Gemini REST API を使用してファイルの介入プラン（修正案）を作成する
      */
-    public async createGeminiPlan(
-        document: vscode.TextDocument,
-        token: vscode.CancellationToken,
-        apiKey: string,
-        modelName?: string,
-        preferenceSummary?: string,
-        presetMode?: PresetMode,
-    ): Promise<LlmInterventionPlan> {
-        this.validateDocument(document);
-        const prompt = buildInterventionPrompt(document, preferenceSummary, presetMode);
-        const rawResult = await this.geminiClient.generate(prompt, apiKey, token, modelName);
-        return validatePlan(rawResult, document);
+    public async createGeminiPlan(options: CreateGeminiPlanOptions): Promise<LlmInterventionPlan> {
+        this.validateDocument(options.document);
+        const prompt = buildInterventionPrompt(
+            options.document,
+            options.preferenceSummary,
+            options.presetMode,
+        );
+        const rawResult = await this.geminiClient.generate({
+            prompt,
+            apiKey: options.apiKey,
+            token: options.token,
+            modelName: options.modelName,
+        });
+        return validatePlan(rawResult, options.document);
     }
 
     /**
      * VS Code Language Model API を使用してファイルの介入プラン（修正案）を作成する
      */
-    public async createPlan(
-        document: vscode.TextDocument,
-        token: vscode.CancellationToken,
-        modelSelector?: string,
-        preferenceSummary?: string,
-        presetMode?: PresetMode,
-    ): Promise<LlmInterventionPlan> {
-        this.validateDocument(document);
-        const prompt = buildInterventionPrompt(document, preferenceSummary, presetMode);
-        const rawResult = await this.vscodeLmClient.generate(prompt, token, modelSelector);
-        return validatePlan(rawResult, document);
+    public async createPlan(options: CreatePlanOptions): Promise<LlmInterventionPlan> {
+        this.validateDocument(options.document);
+        const prompt = buildInterventionPrompt(
+            options.document,
+            options.preferenceSummary,
+            options.presetMode,
+        );
+        const rawResult = await this.vscodeLmClient.generate(
+            prompt,
+            options.token,
+            options.modelSelector,
+        );
+        return validatePlan(rawResult, options.document);
     }
 }

@@ -24,29 +24,72 @@ export const CANDIDATES_RESPONSE_SCHEMA = {
     },
 };
 
-export class CandidateGenerator {
-    constructor(
-        private readonly geminiClient: GeminiClient,
-        private readonly vscodeLmClient: VscodeLmClient,
-        private readonly getLlmConfig: () => { provider: LlmProvider; model: string },
-        private readonly getApiKey: () => Promise<string | undefined>,
-    ) {}
+/**
+ * [Why/Intent] CandidateGenerator の初期化に必要な依存サービス（LLMクライアント・設定取得関数等）
+ */
+export interface CandidateGeneratorParams {
+    geminiClient: GeminiClient;
+    vscodeLmClient: VscodeLmClient;
+    getLlmConfig: () => { provider: LlmProvider; model: string };
+    getApiKey: () => Promise<string | undefined>;
+}
 
-    public async generateCandidates(
-        userQuery: string,
-        contextCode: string | undefined,
-        situation: SituationId,
-        personaWeights: PersonaWeights,
-        preferenceSummary: string,
-        token: vscode.CancellationToken,
-    ): Promise<Candidate[]> {
-        const prompt = this.buildPrompt(
-            userQuery,
-            contextCode,
-            situation,
-            personaWeights,
-            preferenceSummary,
-        );
+/**
+ * [Why/Intent] 複数ペルソナ候補生成に必要なクエリ、コンテキストコード、シチュエーション、ペルソナ重み、要約
+ */
+export interface GenerateCandidatesParams {
+    userQuery: string;
+    contextCode: string | undefined;
+    situation: SituationId;
+    personaWeights: PersonaWeights;
+    preferenceSummary: string;
+    token: vscode.CancellationToken;
+}
+
+/**
+ * [Why/Intent] ペルソナ候補生成プロンプト構築に必要な入力パラメータ
+ */
+export interface BuildPromptParams {
+    userQuery: string;
+    contextCode: string | undefined;
+    situation: SituationId;
+    personaWeights: PersonaWeights;
+    preferenceSummary: string;
+}
+
+/**
+ * [Why/Intent] LLMから返された各候補オブジェクトが Candidate インターフェースの必須フィールドを満たすか判定するユーザー定義型ガード
+ */
+function isValidCandidate(obj: unknown): obj is Candidate {
+    if (typeof obj !== 'object' || obj === null) {
+        return false;
+    }
+    const rec = obj as Record<string, unknown>;
+    const validPersonas = ['exploration', 'learning', 'quality'];
+    return (
+        typeof rec.id === 'string' &&
+        typeof rec.persona === 'string' &&
+        validPersonas.includes(rec.persona) &&
+        typeof rec.text === 'string' &&
+        typeof rec.policyCompliant === 'boolean'
+    );
+}
+
+export class CandidateGenerator {
+    private readonly geminiClient: GeminiClient;
+    private readonly vscodeLmClient: VscodeLmClient;
+    private readonly getLlmConfig: () => { provider: LlmProvider; model: string };
+    private readonly getApiKey: () => Promise<string | undefined>;
+
+    constructor(params: CandidateGeneratorParams) {
+        this.geminiClient = params.geminiClient;
+        this.vscodeLmClient = params.vscodeLmClient;
+        this.getLlmConfig = params.getLlmConfig;
+        this.getApiKey = params.getApiKey;
+    }
+
+    public async generateCandidates(params: GenerateCandidatesParams): Promise<Candidate[]> {
+        const prompt = this.buildPrompt(params);
 
         const config = this.getLlmConfig();
         let rawResponse: unknown;
@@ -56,33 +99,27 @@ export class CandidateGenerator {
             if (!apiKey) {
                 throw new Error('Gemini API key is required.');
             }
-            rawResponse = await this.geminiClient.generate(
+            rawResponse = await this.geminiClient.generate({
                 prompt,
                 apiKey,
-                token,
-                config.model,
-                CANDIDATES_RESPONSE_SCHEMA,
-            );
+                token: params.token,
+                modelName: config.model,
+                responseSchema: CANDIDATES_RESPONSE_SCHEMA,
+            });
         } else {
-            rawResponse = await this.vscodeLmClient.generate(prompt, token, config.model);
+            rawResponse = await this.vscodeLmClient.generate(prompt, params.token, config.model);
         }
 
         return this.parseAndValidate(rawResponse);
     }
 
-    private buildPrompt(
-        userQuery: string,
-        contextCode: string | undefined,
-        situation: SituationId,
-        personaWeights: PersonaWeights,
-        preferenceSummary: string,
-    ): string {
-        const situationLabel = SITUATION_LABELS[situation];
+    private buildPrompt(params: BuildPromptParams): string {
+        const situationLabel = SITUATION_LABELS[params.situation];
 
         // Select which personas to generate candidates for.
         // We'll generate 4 candidates. To ensure diversity, we'll pick based on weights,
         // but ensure at least 3 distinct personas if possible.
-        const sortedPersonas = Object.entries(personaWeights)
+        const sortedPersonas = Object.entries(params.personaWeights)
             .sort(([, a], [, b]) => b - a)
             .map(([p]) => p as PersonaId);
 
@@ -113,7 +150,7 @@ ${DESIGNER_POLICY}
 
 Current Situation: ${situationLabel}
 User Preference Summary (if any):
-${preferenceSummary ? preferenceSummary : 'None yet.'}
+${params.preferenceSummary ? params.preferenceSummary : 'None yet.'}
 
 INSTRUCTIONS:
 1. Generate 4 candidates. ALL candidates must be factually correct and address the user's query.
@@ -128,9 +165,9 @@ Respond ONLY with a JSON array conforming exactly to this schema:
 ${JSON.stringify(CANDIDATES_RESPONSE_SCHEMA)}
 
 User Query:
-${userQuery}
+${params.userQuery}
 
-${contextCode ? `Selected Context Code:\n\`\`\`\n${contextCode}\n\`\`\`` : ''}
+${params.contextCode ? `Selected Context Code:\n\`\`\`\n${params.contextCode}\n\`\`\`` : ''}
 `;
     }
 
@@ -139,27 +176,15 @@ ${contextCode ? `Selected Context Code:\n\`\`\`\n${contextCode}\n\`\`\`` : ''}
             throw new Error('LLM response is not an array.');
         }
 
-        const validPersonas = ['exploration', 'learning', 'quality'];
         const candidates: Candidate[] = [];
 
         for (const item of raw) {
-            if (typeof item !== 'object' || item === null) {
-                continue;
-            }
-            const obj = item as Record<string, unknown>;
-
-            if (
-                typeof obj.id === 'string' &&
-                typeof obj.persona === 'string' &&
-                validPersonas.includes(obj.persona) &&
-                typeof obj.text === 'string' &&
-                typeof obj.policyCompliant === 'boolean'
-            ) {
+            if (isValidCandidate(item)) {
                 candidates.push({
-                    id: obj.id,
-                    persona: obj.persona as PersonaId,
-                    text: obj.text,
-                    policyCompliant: obj.policyCompliant,
+                    id: item.id,
+                    persona: item.persona,
+                    text: item.text,
+                    policyCompliant: item.policyCompliant,
                 });
             }
         }

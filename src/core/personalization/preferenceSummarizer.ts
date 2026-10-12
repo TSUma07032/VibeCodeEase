@@ -13,13 +13,25 @@ export const SUMMARY_RESPONSE_SCHEMA = {
     },
 };
 
+export interface PreferenceSummarizerParams {
+    geminiClient: GeminiClient;
+    vscodeLmClient: VscodeLmClient;
+    getLlmConfig: () => { provider: LlmProvider; model: string };
+    getApiKey: () => Promise<string | undefined>;
+}
+
 export class PreferenceSummarizer {
-    constructor(
-        private readonly geminiClient: GeminiClient,
-        private readonly vscodeLmClient: VscodeLmClient,
-        private readonly getLlmConfig: () => { provider: LlmProvider; model: string },
-        private readonly getApiKey: () => Promise<string | undefined>,
-    ) {}
+    private readonly geminiClient: GeminiClient;
+    private readonly vscodeLmClient: VscodeLmClient;
+    private readonly getLlmConfig: () => { provider: LlmProvider; model: string };
+    private readonly getApiKey: () => Promise<string | undefined>;
+
+    constructor(params: PreferenceSummarizerParams) {
+        this.geminiClient = params.geminiClient;
+        this.vscodeLmClient = params.vscodeLmClient;
+        this.getLlmConfig = params.getLlmConfig;
+        this.getApiKey = params.getApiKey;
+    }
 
     public async summarize(
         likedRecords: ResponseRecord[],
@@ -45,13 +57,13 @@ export class PreferenceSummarizer {
             if (!apiKey) {
                 throw new Error('Gemini API key is required.');
             }
-            rawResponse = await this.geminiClient.generate(
+            rawResponse = await this.geminiClient.generate({
                 prompt,
                 apiKey,
                 token,
-                config.model,
-                SUMMARY_RESPONSE_SCHEMA,
-            );
+                modelName: config.model,
+                responseSchema: SUMMARY_RESPONSE_SCHEMA,
+            });
         } else {
             rawResponse = await this.vscodeLmClient.generate(prompt, token, config.model);
         }

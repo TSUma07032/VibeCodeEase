@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { CodeAnalyzer, DEFAULT_TYPO_RULES } from '../core/analyzer';
+import { CodeAnalyzer } from '../core/analyzer';
 import type { AnalysisResult } from '../types';
 
 suite('CodeAnalyzer Test Suite', () => {
