@@ -1,4 +1,4 @@
-import { PainCategory, PAIN_CATEGORIES } from './painCategory';
+import { PAIN_CATEGORIES, type PainCategory } from './painCategory';
 
 const PAIN_CATEGORIES_SET = new Set(PAIN_CATEGORIES);
 
@@ -11,15 +11,15 @@ const PAIN_CATEGORIES_SET = new Set(PAIN_CATEGORIES);
  * @returns 有効なPainCategory
  */
 export function parsePainCategory(
-  category: string,
-  defaultFallback: PainCategory = 'SYNTAX_TYPO'
+    category: string,
+    defaultFallback: PainCategory = 'SYNTAX_TYPO',
 ): PainCategory {
-  // ⚡ Bolt: O(n)のArray.includesをO(1)のSet.hasに置き換え。
-  // 1,000万回の実行で約457msから約134msへと実行時間を削減。
-  if (PAIN_CATEGORIES_SET.has(category as PainCategory)) {
-    return category as PainCategory;
-  }
-  return defaultFallback;
+    // ⚡ Bolt: O(n)のArray.includesをO(1)のSet.hasに置き換え。
+    // 1,000万回の実行で約457msから約134msへと実行時間を削減。
+    if (PAIN_CATEGORIES_SET.has(category as PainCategory)) {
+        return category as PainCategory;
+    }
+    return defaultFallback;
 }
 
 /**
@@ -32,10 +32,10 @@ export function parsePainCategory(
  * @returns 0.0〜1.0の範囲に補正された数値
  */
 export function clampPreferenceValue(value: unknown, defaultValue: number = 0.5): number {
-  if (typeof value !== 'number' || isNaN(value)) {
-    return defaultValue;
-  }
-  // ⚡ Bolt: 値のクランプにおいて、複数のif条件式をMath.minとMath.maxに置き換え
-  // ベンチマーク: 実行時間を約310msから約62msへと大幅に削減（1,000万回の実行時）
-  return Math.min(Math.max(value, 0.0), 1.0);
+    if (typeof value !== 'number' || isNaN(value)) {
+        return defaultValue;
+    }
+    // ⚡ Bolt: 値のクランプにおいて、複数のif条件式をMath.minとMath.maxに置き換え
+    // ベンチマーク: 実行時間を約310msから約62msへと大幅に削減（1,000万回の実行時）
+    return Math.min(Math.max(value, 0.0), 1.0);
 }

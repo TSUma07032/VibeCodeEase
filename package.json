@@ -56,7 +56,34 @@
         },
         "vibecodeease.llmModel": {
           "type": "string",
-          "default": "gemini-3.6-flash",
+          "enum": [
+            "gemini-3.8-flash",
+            "gemini-3.8-live",
+            "gemini-3.8-live-extended-thinking",
+            "gemini-3.8-flash-tts",
+            "gemini-3.8-flash-lite-tts",
+            "gemini-3.6-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-3.1-flash-lite",
+            "gemini-nano-banana-2.1",
+            "gemini-3.1-flash-image",
+            "gemini-3.1-flash-lite-image",
+            "gemini-3-pro-image",
+            "gemini-3.1-pro-preview",
+            "gemini-3-flash-preview",
+            "gemini-3.5-live-translate-preview",
+            "gemini-3.1-flash-live-preview",
+            "gemini-3.1-flash-tts-preview",
+            "gemini-omni-1.1-flash",
+            "gemini-3.5-transcribe",
+            "gemini-3.5-transcribe-live",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-image",
+            "gemini-2.5-flash-native-audio-preview-12-2025",
+            "gemini-2.5-flash-preview-tts",
+            "gemini-2.5-flash-lite"
+          ],
+          "default": "gemini-3.5-flash-lite",
           "description": "LLM Model to use (e.g. gemini-3.6-flash, gpt-4o)"
         },
         "vibecodeease.aiInterventionLevel": {
@@ -72,7 +99,23 @@
         "vibecodeease.analyzeOnSave": {
           "type": "boolean",
           "default": true,
-          "description": "ファイル保存時に自動でAIによるコード推敲を実行します"
+          "description": "ファイル保存時に自動でAIによるコード推敲を実行します",
+          "deprecationMessage": "Use vibecodeease.llm.syncFrequency instead."
+        },
+        "vibecodeease.llm.syncFrequency": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "onSave",
+            "interval"
+          ],
+          "default": "onSave",
+          "description": "LLM API communication frequency"
+        },
+        "vibecodeease.llm.syncIntervalSeconds": {
+          "type": "number",
+          "default": 10,
+          "description": "Communication interval in seconds (5-3600)"
         }
       }
     }
@@ -91,7 +134,12 @@
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "check-types": "tsc --noEmit",
-    "lint": "eslint src",
+    "lint": "npm run lint:biome && npm run lint:eslint",
+    "lint:biome": "biome check .",
+    "lint:eslint": "eslint src",
+    "lint:fix": "biome check --write . && eslint src --fix",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
     "test:ui": "npm run test --prefix webview-ui",
     "test:e2e": "npm run test:e2e --prefix webview-ui",
     "test:e2e:headed": "npm run test:e2e:headed --prefix webview-ui",
@@ -99,6 +147,8 @@
     "test": "vscode-test"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@eslint/js": "^9.0.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
     "@types/vscode": "^1.125.0",
@@ -109,6 +159,7 @@
     "esbuild": "^0.25.9",
     "eslint": "^9.34.0",
     "npm-run-all": "^4.1.5",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.71.1"
   }
 }

@@ -1,6 +1,11 @@
 import * as assert from 'assert';
-import { InterventionEngine, determineInterventionLevel, INTERVENTION_THRESHOLDS, THRESHOLDS } from '../core/interventionEngine';
-import { PRESET_DEFINITIONS, UserPreferenceProfile } from '../types';
+import {
+    determineInterventionLevel,
+    INTERVENTION_THRESHOLDS,
+    InterventionEngine,
+    THRESHOLDS,
+} from '../core/interventionEngine';
+import { PRESET_DEFINITIONS, type UserPreferenceProfile } from '../types';
 
 suite('InterventionEngine Test Suite', () => {
     suite('determineLevel', () => {
@@ -11,8 +16,8 @@ suite('InterventionEngine Test Suite', () => {
         });
 
         test('0.40以丁E.75未満は SUGGESTION を返すこと', () => {
-            assert.strictEqual(InterventionEngine.determineLevel(0.40), 'SUGGESTION');
-            assert.strictEqual(InterventionEngine.determineLevel(0.50), 'SUGGESTION');
+            assert.strictEqual(InterventionEngine.determineLevel(0.4), 'SUGGESTION');
+            assert.strictEqual(InterventionEngine.determineLevel(0.5), 'SUGGESTION');
             assert.strictEqual(InterventionEngine.determineLevel(0.74), 'SUGGESTION');
         });
 
@@ -34,32 +39,56 @@ suite('InterventionEngine Test Suite', () => {
     suite('getLevelForCategory', () => {
         const profile: UserPreferenceProfile = {
             preferences: {
-                SYNTAX_TYPO: 0.85,             // SILENT
-                INDENTATION_FORMATTING: 0.5,  // SUGGESTION
-                VAR_FUNC_MANAGEMENT: 0.2,     // IGNORE
-                SYNTAX_ERROR_HANDLING: 0.4    // SUGGESTION
-            }
+                SYNTAX_TYPO: 0.85, // SILENT
+                INDENTATION_FORMATTING: 0.5, // SUGGESTION
+                VAR_FUNC_MANAGEMENT: 0.2, // IGNORE
+                SYNTAX_ERROR_HANDLING: 0.4, // SUGGESTION
+            },
         };
 
         test('吁E��チE��リの嗜好値に応じた介�Eレベルを判定できること', () => {
-            assert.strictEqual(InterventionEngine.getLevelForCategory('SYNTAX_TYPO', profile), 'SILENT');
-            assert.strictEqual(InterventionEngine.getLevelForCategory('INDENTATION_FORMATTING', profile), 'SUGGESTION');
-            assert.strictEqual(InterventionEngine.getLevelForCategory('VAR_FUNC_MANAGEMENT', profile), 'IGNORE');
-            assert.strictEqual(InterventionEngine.getLevelForCategory('SYNTAX_ERROR_HANDLING', profile), 'SUGGESTION');
+            assert.strictEqual(
+                InterventionEngine.getLevelForCategory('SYNTAX_TYPO', profile),
+                'SILENT',
+            );
+            assert.strictEqual(
+                InterventionEngine.getLevelForCategory('INDENTATION_FORMATTING', profile),
+                'SUGGESTION',
+            );
+            assert.strictEqual(
+                InterventionEngine.getLevelForCategory('VAR_FUNC_MANAGEMENT', profile),
+                'IGNORE',
+            );
+            assert.strictEqual(
+                InterventionEngine.getLevelForCategory('SYNTAX_ERROR_HANDLING', profile),
+                'SUGGESTION',
+            );
         });
 
         test('HINTプリセチE��のタイポ�ESILENT、設計�E構文は自劁E提案になること', () => {
             const HINTProfile: UserPreferenceProfile = {
-                preferences: { ...PRESET_DEFINITIONS.HINT.preferences }
+                preferences: { ...PRESET_DEFINITIONS.HINT.preferences },
             };
-            assert.strictEqual(InterventionEngine.getLevelForCategory('SYNTAX_TYPO', HINTProfile), 'SILENT');
-            assert.strictEqual(InterventionEngine.getLevelForCategory('VAR_FUNC_MANAGEMENT', HINTProfile), 'IGNORE');
+            assert.strictEqual(
+                InterventionEngine.getLevelForCategory('SYNTAX_TYPO', HINTProfile),
+                'SILENT',
+            );
+            assert.strictEqual(
+                InterventionEngine.getLevelForCategory('VAR_FUNC_MANAGEMENT', HINTProfile),
+                'IGNORE',
+            );
         });
 
         test('未定義カチE��リめE��プロファイルはチE��ォルト値(0.5 -> SUGGESTION)を返すこと', () => {
             const emptyProfile = { preferences: {} } as any;
-            assert.strictEqual(InterventionEngine.getLevelForCategory('SYNTAX_TYPO', emptyProfile), 'SUGGESTION');
-            assert.strictEqual(InterventionEngine.getLevelForCategory('SYNTAX_TYPO', undefined), 'SUGGESTION');
+            assert.strictEqual(
+                InterventionEngine.getLevelForCategory('SYNTAX_TYPO', emptyProfile),
+                'SUGGESTION',
+            );
+            assert.strictEqual(
+                InterventionEngine.getLevelForCategory('SYNTAX_TYPO', undefined),
+                'SUGGESTION',
+            );
         });
     });
 
@@ -69,16 +98,16 @@ suite('InterventionEngine Test Suite', () => {
                 SYNTAX_TYPO: 0.5,
                 INDENTATION_FORMATTING: 0.5,
                 VAR_FUNC_MANAGEMENT: 0.5,
-                SYNTAX_ERROR_HANDLING: 0.5
-            }
+                SYNTAX_ERROR_HANDLING: 0.5,
+            },
         };
 
         test('しきぁE��未満は IGNORE を返すこと', () => {
             const profile: UserPreferenceProfile = {
                 preferences: {
                     ...defaultProfile.preferences,
-                    SYNTAX_TYPO: THRESHOLDS.IGNORE_MAX - 0.1 // 0.3
-                }
+                    SYNTAX_TYPO: THRESHOLDS.IGNORE_MAX - 0.1, // 0.3
+                },
             };
             const level = determineInterventionLevel('SYNTAX_TYPO', profile);
             assert.strictEqual(level, 'IGNORE');
@@ -88,8 +117,8 @@ suite('InterventionEngine Test Suite', () => {
             const profile: UserPreferenceProfile = {
                 preferences: {
                     ...defaultProfile.preferences,
-                    SYNTAX_TYPO: THRESHOLDS.IGNORE_MAX // 0.4
-                }
+                    SYNTAX_TYPO: THRESHOLDS.IGNORE_MAX, // 0.4
+                },
             };
             const level = determineInterventionLevel('SYNTAX_TYPO', profile);
             assert.strictEqual(level, 'SUGGESTION');
@@ -99,8 +128,8 @@ suite('InterventionEngine Test Suite', () => {
             const profile: UserPreferenceProfile = {
                 preferences: {
                     ...defaultProfile.preferences,
-                    SYNTAX_TYPO: THRESHOLDS.SUGGESTION_MAX // 0.75
-                }
+                    SYNTAX_TYPO: THRESHOLDS.SUGGESTION_MAX, // 0.75
+                },
             };
             const level = determineInterventionLevel('SYNTAX_TYPO', profile);
             assert.strictEqual(level, 'SILENT');
@@ -109,14 +138,24 @@ suite('InterventionEngine Test Suite', () => {
 
     suite('getEducationalHint', () => {
         test('HINTモード時に教育皁E�EレフィチE��スと解説が含まれること', () => {
-            const hint = InterventionEngine.getEducationalHint('SYNTAX_TYPO', 'functon', 'function', 'HINT');
+            const hint = InterventionEngine.getEducationalHint(
+                'SYNTAX_TYPO',
+                'functon',
+                'function',
+                'HINT',
+            );
             assert.ok(hint.includes('🎓 **学習ヒント (タイポ):**'));
             assert.ok(hint.includes('🎓 **学習ヒント (タイポ):**'));
             assert.ok(hint.includes('🎓 **学習ヒント (タイポ):**'));
         });
 
         test('HINTモード以外ではシンプルなサジェスト文を返すこと', () => {
-            const hint = InterventionEngine.getEducationalHint('SYNTAX_TYPO', 'functon', 'function', 'ARCHITECTURE');
+            const hint = InterventionEngine.getEducationalHint(
+                'SYNTAX_TYPO',
+                'functon',
+                'function',
+                'ARCHITECTURE',
+            );
             assert.strictEqual(hint, '💡 **Did you mean:** `function`?');
         });
     });

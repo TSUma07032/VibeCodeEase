@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { validatePlan, toOriginalOffset } from '../core/llm/planValidator';
+import { toOriginalOffset, validatePlan } from '../core/llm/planValidator';
 
 suite('PlanValidator Test Suite', () => {
     suite('toOriginalOffset', () => {
@@ -28,19 +28,24 @@ suite('PlanValidator Test Suite', () => {
                 version: 1,
                 lineCount: lines.length,
                 getText: () => content,
-                lineAt: (line: number) => ({
-                    text: lines[line],
-                    lineNumber: line,
-                    range: new vscode.Range(line, 0, line, lines[line].length),
-                    rangeIncludingLineBreak: new vscode.Range(line, 0, line + 1, 0),
-                    firstNonWhitespaceCharacterIndex: 0,
-                    isEmptyOrWhitespace: lines[line].trim().length === 0
-                } as vscode.TextLine),
+                lineAt: (line: number) =>
+                    ({
+                        text: lines[line],
+                        lineNumber: line,
+                        range: new vscode.Range(line, 0, line, lines[line].length),
+                        rangeIncludingLineBreak: new vscode.Range(line, 0, line + 1, 0),
+                        firstNonWhitespaceCharacterIndex: 0,
+                        isEmptyOrWhitespace: lines[line].trim().length === 0,
+                    }) as vscode.TextLine,
                 positionAt: (offset: number) => {
                     let currentOffset = 0;
                     for (let i = 0; i < lines.length; i++) {
-                        const lineLengthWithBreak = lines[i].length + (content.includes('\r\n') ? 2 : 1);
-                        if (currentOffset + lineLengthWithBreak > offset || i === lines.length - 1) {
+                        const lineLengthWithBreak =
+                            lines[i].length + (content.includes('\r\n') ? 2 : 1);
+                        if (
+                            currentOffset + lineLengthWithBreak > offset ||
+                            i === lines.length - 1
+                        ) {
                             const char = Math.min(offset - currentOffset, lines[i].length);
                             return new vscode.Position(i, char);
                         }
@@ -55,7 +60,7 @@ suite('PlanValidator Test Suite', () => {
                     }
                     return offset + position.character;
                 },
-                uri: vscode.Uri.file('/path/to/test.ts')
+                uri: vscode.Uri.file('/path/to/test.ts'),
             } as unknown as vscode.TextDocument;
         }
 
@@ -72,9 +77,9 @@ suite('PlanValidator Test Suite', () => {
                         oldText: 'functon',
                         newText: 'function',
                         category: 'SYNTAX_TYPO',
-                        reason: 'Typo in keyword'
-                    }
-                ]
+                        reason: 'Typo in keyword',
+                    },
+                ],
             };
 
             const result = validatePlan(rawPlan, doc);
@@ -91,7 +96,10 @@ suite('PlanValidator Test Suite', () => {
             const doc = createMockDocument('test');
             assert.throws(() => validatePlan(null, doc), /LLMの介入プラン形式が不正です/);
             assert.throws(() => validatePlan({}, doc), /LLMの介入プランに必要な項目がありません/);
-            assert.throws(() => validatePlan({ summary: 123, edits: [] }, doc), /LLMの介入プランに必要な項目がありません/);
+            assert.throws(
+                () => validatePlan({ summary: 123, edits: [] }, doc),
+                /LLMの介入プランに必要な項目がありません/,
+            );
         });
 
         test('ファイル内に存在しないoldTextはエラーをスローすること', () => {
@@ -107,12 +115,15 @@ suite('PlanValidator Test Suite', () => {
                         oldText: 'nonExistentCode',
                         newText: 'newCode',
                         category: 'SYNTAX_TYPO',
-                        reason: 'Fix'
-                    }
-                ]
+                        reason: 'Fix',
+                    },
+                ],
             };
 
-            assert.throws(() => validatePlan(rawPlan, doc), /LLMが指定したoldTextをファイル内で見つけられません/);
+            assert.throws(
+                () => validatePlan(rawPlan, doc),
+                /LLMが指定したoldTextをファイル内で見つけられません/,
+            );
         });
 
         test('無効なPainCategoryはエラーをスローすること', () => {
@@ -128,9 +139,9 @@ suite('PlanValidator Test Suite', () => {
                         oldText: 'const',
                         newText: 'let',
                         category: 'INVALID_CATEGORY_NAME',
-                        reason: 'Fix'
-                    }
-                ]
+                        reason: 'Fix',
+                    },
+                ],
             };
 
             assert.throws(() => validatePlan(rawPlan, doc), /LLMの変更案に不正な値があります/);

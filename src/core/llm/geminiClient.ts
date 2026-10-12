@@ -1,6 +1,6 @@
-import * as vscode from 'vscode';
 import * as https from 'https';
 import { URL } from 'url';
+import type * as vscode from 'vscode';
 import { INTERVENTION_RESPONSE_SCHEMA } from './promptBuilder';
 
 interface GeminiModel {
@@ -26,13 +26,19 @@ export class GeminiClient {
         'gemini-2.5-flash',
         'gemini-2.5-flash-lite',
         'gemini-2.0-flash',
-        'gemini-2.0-flash-lite'
+        'gemini-2.0-flash-lite',
     ];
 
     /**
      * Gemini APIへリクエストを送信し、生成された未検証のJSONレスポンスオブジェクトを返す
      */
-    public async generate(prompt: string, apiKey: string, token: vscode.CancellationToken, modelName?: string, responseSchema: any = INTERVENTION_RESPONSE_SCHEMA): Promise<unknown> {
+    public async generate(
+        prompt: string,
+        apiKey: string,
+        token: vscode.CancellationToken,
+        modelName?: string,
+        responseSchema: any = INTERVENTION_RESPONSE_SCHEMA,
+    ): Promise<unknown> {
         const candidateModels = await this.discoverModels(apiKey, token, modelName);
 
         for (const model of candidateModels) {
@@ -47,9 +53,9 @@ export class GeminiClient {
                     contents: [{ parts: [{ text: prompt }] }],
                     generationConfig: {
                         responseMimeType: 'application/json',
-                        responseSchema: responseSchema
-                    }
-                })
+                        responseSchema: responseSchema,
+                    },
+                }),
             );
 
             if (response.statusCode === 404) {
@@ -57,7 +63,9 @@ export class GeminiClient {
             }
             if (response.statusCode < 200 || response.statusCode >= 300) {
                 const details = response.body.slice(0, 160);
-                throw new Error(`Gemini APIリクエストに失敗しました（HTTP ${response.statusCode}）。${details}`);
+                throw new Error(
+                    `Gemini APIリクエストに失敗しました（HTTP ${response.statusCode}）。${details}`,
+                );
             }
 
             const data = JSON.parse(response.body) as {
@@ -70,18 +78,25 @@ export class GeminiClient {
             return JSON.parse(raw);
         }
 
-        throw new Error('利用可能なGeminiモデルが見つかりません。APIキーが新規ユーザー向けモデルを利用できるか確認してください。');
+        throw new Error(
+            '利用可能なGeminiモデルが見つかりません。APIキーが新規ユーザー向けモデルを利用できるか確認してください。',
+        );
     }
 
     /**
      * Gemini REST APIを使用してテキストのバッチをEmbeddingに変換する
      */
-    public async embedBatch(texts: string[], apiKey: string, token: vscode.CancellationToken, modelName: string = 'text-embedding-004'): Promise<number[][]> {
-        if (texts.length === 0) return [];
-        
-        const requests = texts.map(text => ({
+    public async embedBatch(
+        texts: string[],
+        apiKey: string,
+        token: vscode.CancellationToken,
+        modelName: string = 'text-embedding-004',
+    ): Promise<number[][]> {
+        if (texts.length === 0) {return [];}
+
+        const requests = texts.map((text) => ({
             model: `models/${modelName}`,
-            content: { parts: [{ text }] }
+            content: { parts: [{ text }] },
         }));
 
         const response = await this.request(
@@ -91,12 +106,14 @@ export class GeminiClient {
                 headers: { 'Content-Type': 'application/json' },
             },
             token,
-            JSON.stringify({ requests })
+            JSON.stringify({ requests }),
         );
 
         if (response.statusCode < 200 || response.statusCode >= 300) {
             const details = response.body.slice(0, 160);
-            throw new Error(`Gemini Embedding APIリクエストに失敗しました（HTTP ${response.statusCode}）。${details}`);
+            throw new Error(
+                `Gemini Embedding APIリクエストに失敗しました（HTTP ${response.statusCode}）。${details}`,
+            );
         }
 
         const data = JSON.parse(response.body) as {
@@ -107,35 +124,48 @@ export class GeminiClient {
             throw new Error('Geminiから期待される数のEmbeddingが返されませんでした。');
         }
 
-        return data.embeddings.map(e => e.values);
+        return data.embeddings.map((e) => e.values);
     }
 
-    private async discoverModels(apiKey: string, token: vscode.CancellationToken, targetModelName?: string): Promise<GeminiModel[]> {
+    private async discoverModels(
+        apiKey: string,
+        token: vscode.CancellationToken,
+        targetModelName?: string,
+    ): Promise<GeminiModel[]> {
         const modelsResponse = await this.request(
             `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
             undefined,
-            token
+            token,
         );
         if (modelsResponse.statusCode < 200 || modelsResponse.statusCode >= 300) {
-            throw new Error(`Geminiのモデル一覧取得に失敗しました（HTTP ${modelsResponse.statusCode}）。APIキーとGenerative Language APIの有効化を確認してください。`);
+            throw new Error(
+                `Geminiのモデル一覧取得に失敗しました（HTTP ${modelsResponse.statusCode}）。APIキーとGenerative Language APIの有効化を確認してください。`,
+            );
         }
 
         const models = (JSON.parse(modelsResponse.body) as GeminiModelsResponse).models ?? [];
-        const availableModels = models.filter((model) => model.supportedGenerationMethods?.includes('generateContent'));
-        
-        let prefs = [...this.preferredNames];
+        const availableModels = models.filter((model) =>
+            model.supportedGenerationMethods?.includes('generateContent'),
+        );
+
+        const prefs = [...this.preferredNames];
         if (targetModelName && targetModelName !== 'auto') {
             prefs.unshift(targetModelName);
         }
 
         const preferredModels = prefs
-            .map((preferredName) => availableModels.find((model) => model.name.endsWith(`/${preferredName}`)))
+            .map((preferredName) =>
+                availableModels.find((model) => model.name.endsWith(`/${preferredName}`)),
+            )
             .filter((model): model is GeminiModel => model !== undefined);
 
         // ⚡ Bolt: $O(n^2)$ の Array.includes を $O(n)$ の Set.has ルックアップに置き換え
         // Benchmark: モデル探索におけるフィルタリングの計算量を削減し、APIクライアントの初期化を高速化
         const preferredModelsSet = new Set(preferredModels);
-        const candidateModels = [...preferredModels, ...availableModels.filter((model) => !preferredModelsSet.has(model))];
+        const candidateModels = [
+            ...preferredModels,
+            ...availableModels.filter((model) => !preferredModelsSet.has(model)),
+        ];
         if (candidateModels.length === 0) {
             throw new Error('Gemini APIでgenerateContentに対応するモデルが見つかりません。');
         }
@@ -146,15 +176,19 @@ export class GeminiClient {
         urlString: string,
         options: https.RequestOptions = {},
         token: vscode.CancellationToken,
-        body?: string
+        body?: string,
     ): Promise<{ statusCode: number; body: string }> {
         const maxRetries = 1;
         let attempt = 0;
 
         while (true) {
             const response = await this.doRequest(urlString, options, token, body);
-            
-            if ((response.statusCode === 503 || response.statusCode === 429) && attempt < maxRetries && !token.isCancellationRequested) {
+
+            if (
+                (response.statusCode === 503 || response.statusCode === 429) &&
+                attempt < maxRetries &&
+                !token.isCancellationRequested
+            ) {
                 // Quota exceeded の場合はリトライしない
                 if (response.body.toLowerCase().includes('quota')) {
                     return response;
@@ -162,10 +196,10 @@ export class GeminiClient {
                 attempt++;
                 // 待機時間を短縮（UIのフリーズ感を軽減）
                 const delayMs = 1000;
-                await new Promise(resolve => setTimeout(resolve, delayMs));
+                await new Promise((resolve) => setTimeout(resolve, delayMs));
                 continue;
             }
-            
+
             return response;
         }
     }
@@ -174,16 +208,22 @@ export class GeminiClient {
         urlString: string,
         options: https.RequestOptions = {},
         token: vscode.CancellationToken,
-        body?: string
+        body?: string,
     ): Promise<{ statusCode: number; body: string }> {
         return new Promise((resolve, reject) => {
             const url = new URL(urlString);
-            const request = https.request(url, { ...options, method: options.method ?? 'GET', timeout: 30000 }, (response) => {
-                let responseBody = '';
-                response.setEncoding('utf8');
-                response.on('data', (chunk: string) => responseBody += chunk);
-                response.on('end', () => resolve({ statusCode: response.statusCode ?? 0, body: responseBody }));
-            });
+            const request = https.request(
+                url,
+                { ...options, method: options.method ?? 'GET', timeout: 30000 },
+                (response) => {
+                    let responseBody = '';
+                    response.setEncoding('utf8');
+                    response.on('data', (chunk: string) => (responseBody += chunk));
+                    response.on('end', () =>
+                        resolve({ statusCode: response.statusCode ?? 0, body: responseBody }),
+                    );
+                },
+            );
 
             request.on('timeout', () => {
                 request.destroy(new Error('LLM API リクエストがタイムアウトしました。'));

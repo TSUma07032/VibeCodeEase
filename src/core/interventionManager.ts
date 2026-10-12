@@ -1,13 +1,18 @@
 import * as vscode from 'vscode';
+import type { AnalysisResult } from '../types';
 import { SharedAnalysisCache } from './analyzer';
-import { AnalysisResult } from '../types';
 
 export class InterventionManager {
     public static generateIssueId(documentUri: string, result: AnalysisResult): string {
         return `${documentUri}::${result.source ?? 'static'}::${result.category}::${result.range.start.line}::${result.range.start.character}`;
     }
 
-    public static async applyIntervention(document: vscode.TextDocument, id: string, newText: string, range: vscode.Range): Promise<boolean> {
+    public static async applyIntervention(
+        document: vscode.TextDocument,
+        id: string,
+        newText: string,
+        range: vscode.Range,
+    ): Promise<boolean> {
         const edit = new vscode.WorkspaceEdit();
         edit.replace(document.uri, range, newText);
         const success = await vscode.workspace.applyEdit(edit);
@@ -38,7 +43,10 @@ export class InterventionManager {
 
                 if (changeStartLine <= resultEndLine && changeEndLine >= resultStartLine) {
                     cache.ignoreIssue(id);
-                } else if (changeEndLine < resultStartLine && (change.text.includes('\n') || (change.rangeLength > 0 && change.text === ''))) {
+                } else if (
+                    changeEndLine < resultStartLine &&
+                    (change.text.includes('\n') || (change.rangeLength > 0 && change.text === ''))
+                ) {
                     // [Why/Intent] 複雑な行シフト計算による位置ズレやバグを回避し、実装の確実性とドキュメントの一貫性を最優先するため、
                     // 改行の増減が検出された場合はドキュメントのキャッシュを全破棄する。
                     const linesAdded = change.text.split('\n').length - 1;

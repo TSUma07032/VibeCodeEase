@@ -10,8 +10,8 @@ import React from 'react';
  * - onTabChange: タブがクリックされた際に親コンポーネント(App)に状態変更を通知するコールバック。
  */
 interface TabBarProps {
-  activeTab: 'code' | 'settings';
-  onTabChange: (tab: 'code' | 'settings') => void;
+  activeTab: 'code' | 'settings' | 'dashboard';
+  onTabChange: (tab: 'code' | 'settings' | 'dashboard') => void;
 }
 
 /**
@@ -51,6 +51,20 @@ export const TabBar: React.FC<TabBarProps> = ({ activeTab, onTabChange }) => {
         }}
       >
         [⚙️ Settings]
+      </button>
+      <button 
+        onClick={() => onTabChange('dashboard')}
+        style={{
+          padding: '8px 16px',
+          backgroundColor: activeTab === 'dashboard' ? 'var(--vscode-tab-activeBackground)' : 'transparent',
+          color: activeTab === 'dashboard' ? 'var(--vscode-tab-activeForeground)' : 'var(--vscode-tab-inactiveForeground)',
+          border: 'none',
+          borderTop: activeTab === 'dashboard' ? '1px solid var(--vscode-tab-activeBorderTop)' : '1px solid transparent',
+          cursor: 'pointer',
+          outline: 'none'
+        }}
+      >
+        [📊 Dashboard]
       </button>
     </div>
   );

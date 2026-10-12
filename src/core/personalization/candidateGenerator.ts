@@ -1,9 +1,14 @@
-import * as vscode from 'vscode';
-import { Candidate, PersonaId, SituationId, PersonaWeights } from '../../types/personalization';
+import type * as vscode from 'vscode';
+import type { LlmProvider } from '../../types';
+import type {
+    Candidate,
+    PersonaId,
+    PersonaWeights,
+    SituationId,
+} from '../../types/personalization';
+import type { GeminiClient } from '../llm/geminiClient';
+import type { VscodeLmClient } from '../llm/vscodeLmClient';
 import { DESIGNER_POLICY, PERSONA_DEFINITIONS, SITUATION_LABELS } from './personaDefinitions';
-import { GeminiClient } from '../llm/geminiClient';
-import { VscodeLmClient } from '../llm/vscodeLmClient';
-import { LlmProvider } from '../../types';
 
 export const CANDIDATES_RESPONSE_SCHEMA = {
     type: 'ARRAY',
@@ -14,17 +19,17 @@ export const CANDIDATES_RESPONSE_SCHEMA = {
             id: { type: 'STRING' },
             persona: { type: 'STRING', enum: ['exploration', 'learning', 'quality'] },
             text: { type: 'STRING' },
-            policyCompliant: { type: 'BOOLEAN' }
-        }
-    }
+            policyCompliant: { type: 'BOOLEAN' },
+        },
+    },
 };
 
 export class CandidateGenerator {
     constructor(
         private readonly geminiClient: GeminiClient,
         private readonly vscodeLmClient: VscodeLmClient,
-        private readonly getLlmConfig: () => { provider: LlmProvider, model: string },
-        private readonly getApiKey: () => Promise<string | undefined>
+        private readonly getLlmConfig: () => { provider: LlmProvider; model: string },
+        private readonly getApiKey: () => Promise<string | undefined>,
     ) {}
 
     public async generateCandidates(
@@ -33,17 +38,29 @@ export class CandidateGenerator {
         situation: SituationId,
         personaWeights: PersonaWeights,
         preferenceSummary: string,
-        token: vscode.CancellationToken
+        token: vscode.CancellationToken,
     ): Promise<Candidate[]> {
-        const prompt = this.buildPrompt(userQuery, contextCode, situation, personaWeights, preferenceSummary);
-        
+        const prompt = this.buildPrompt(
+            userQuery,
+            contextCode,
+            situation,
+            personaWeights,
+            preferenceSummary,
+        );
+
         const config = this.getLlmConfig();
         let rawResponse: unknown;
 
         if (config.provider === 'gemini') {
             const apiKey = await this.getApiKey();
-            if (!apiKey) throw new Error('Gemini API key is required.');
-            rawResponse = await this.geminiClient.generate(prompt, apiKey, token, config.model, CANDIDATES_RESPONSE_SCHEMA);
+            if (!apiKey) {throw new Error('Gemini API key is required.');}
+            rawResponse = await this.geminiClient.generate(
+                prompt,
+                apiKey,
+                token,
+                config.model,
+                CANDIDATES_RESPONSE_SCHEMA,
+            );
         } else {
             rawResponse = await this.vscodeLmClient.generate(prompt, token, config.model);
         }
@@ -56,32 +73,36 @@ export class CandidateGenerator {
         contextCode: string | undefined,
         situation: SituationId,
         personaWeights: PersonaWeights,
-        preferenceSummary: string
+        preferenceSummary: string,
     ): string {
         const situationLabel = SITUATION_LABELS[situation];
-        
+
         // Select which personas to generate candidates for.
-        // We'll generate 4 candidates. To ensure diversity, we'll pick based on weights, 
+        // We'll generate 4 candidates. To ensure diversity, we'll pick based on weights,
         // but ensure at least 3 distinct personas if possible.
         const sortedPersonas = Object.entries(personaWeights)
             .sort(([, a], [, b]) => b - a)
             .map(([p]) => p as PersonaId);
-        
+
         // Generate 4 candidates total
         const assignments: PersonaId[] = [
             sortedPersonas[0],
             sortedPersonas[0], // 2 from dominant
             sortedPersonas[1],
-            sortedPersonas[2]
+            sortedPersonas[2],
         ];
 
-        let instructionsForCandidates = assignments.map((p, idx) => {
-            const def = PERSONA_DEFINITIONS[p];
-            return `Candidate ${idx + 1} (id: "cand_${idx + 1}", persona: "${p}"):\n` +
-                   `Goal: ${def.purpose}\n` +
-                   `Characteristics: ${def.characteristics.join(', ')}\n` +
-                   `Outputs to include: ${def.expectedOutputs.join(', ')}`;
-        }).join('\n\n');
+        const instructionsForCandidates = assignments
+            .map((p, idx) => {
+                const def = PERSONA_DEFINITIONS[p];
+                return (
+                    `Candidate ${idx + 1} (id: "cand_${idx + 1}", persona: "${p}"):\n` +
+                    `Goal: ${def.purpose}\n` +
+                    `Characteristics: ${def.characteristics.join(', ')}\n` +
+                    `Outputs to include: ${def.expectedOutputs.join(', ')}`
+                );
+            })
+            .join('\n\n');
 
         return `
 You are a coding assistant. Your task is to generate 4 different candidate responses to the user's query.
@@ -120,12 +141,13 @@ ${contextCode ? `Selected Context Code:\n\`\`\`\n${contextCode}\n\`\`\`` : ''}
         const candidates: Candidate[] = [];
 
         for (const item of raw) {
-            if (typeof item !== 'object' || item === null) continue;
+            if (typeof item !== 'object' || item === null) {continue;}
             const obj = item as Record<string, unknown>;
-            
+
             if (
                 typeof obj.id === 'string' &&
-                typeof obj.persona === 'string' && validPersonas.includes(obj.persona) &&
+                typeof obj.persona === 'string' &&
+                validPersonas.includes(obj.persona) &&
                 typeof obj.text === 'string' &&
                 typeof obj.policyCompliant === 'boolean'
             ) {
@@ -133,7 +155,7 @@ ${contextCode ? `Selected Context Code:\n\`\`\`\n${contextCode}\n\`\`\`` : ''}
                     id: obj.id,
                     persona: obj.persona as PersonaId,
                     text: obj.text,
-                    policyCompliant: obj.policyCompliant
+                    policyCompliant: obj.policyCompliant,
                 });
             }
         }

@@ -1,6 +1,6 @@
 ﻿import * as vscode from 'vscode';
-import { SharedAnalysisCache } from './analyzer';
 import { GlobalState } from '../state/globalState';
+import { SharedAnalysisCache } from './analyzer';
 
 /**
  * ファイル保存時（onWillSaveTextDocument）に、
@@ -14,7 +14,7 @@ export class SilentFixService {
         this.disposables.push(
             vscode.workspace.onWillSaveTextDocument((event) => {
                 this.handleWillSave(event);
-            })
+            }),
         );
     }
 
@@ -33,8 +33,12 @@ export class SilentFixService {
         for (const result of results) {
             // SILENT 判定されたものだけを自動修正対象とする
             const level = globalState.getInterventionLevel(result.category);
-            const automation = this.personalizationService ? this.personalizationService.getProfile().applicationAutomation : 'manual';
-            if (automation !== 'auto') { continue; }
+            const automation = this.personalizationService
+                ? this.personalizationService.getProfile().applicationAutomation
+                : 'manual';
+            if (automation !== 'auto') {
+                continue;
+            }
             if (level !== 'SILENT') {
                 continue;
             }
@@ -45,7 +49,7 @@ export class SilentFixService {
                         result.range.start.line,
                         result.range.start.character,
                         result.range.end.line,
-                        result.range.end.character
+                        result.range.end.character,
                     );
                     edits.push(vscode.TextEdit.replace(range, intervention.replacementText));
                 }
@@ -61,7 +65,6 @@ export class SilentFixService {
     }
 
     public dispose() {
-        this.disposables.forEach(d => d.dispose());
+        this.disposables.forEach((d) => d.dispose());
     }
 }
-

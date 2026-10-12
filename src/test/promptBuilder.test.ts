@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 import { buildInterventionPrompt, INTERVENTION_RESPONSE_SCHEMA } from '../core/llm/promptBuilder';
 
 suite('PromptBuilder Test Suite', () => {
@@ -12,7 +12,7 @@ suite('PromptBuilder Test Suite', () => {
         const mockDoc = {
             fileName: '/path/to/mySample.ts',
             languageId: 'typescript',
-            getText: () => 'const greeting = "hello";'
+            getText: () => 'const greeting = "hello";',
         } as unknown as vscode.TextDocument;
 
         const prompt = buildInterventionPrompt(mockDoc);

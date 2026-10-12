@@ -1,26 +1,35 @@
-import * as vscode from 'vscode';
-import { LlmInterventionPlan } from '../types';
-import { buildInterventionPrompt } from './llm/promptBuilder';
-import { validatePlan } from './llm/planValidator';
+import type * as vscode from 'vscode';
+import type { LlmInterventionPlan } from '../types';
+import type { PresetMode } from '../types/preset';
 import { GeminiClient } from './llm/geminiClient';
+import { validatePlan } from './llm/planValidator';
+import { buildInterventionPrompt } from './llm/promptBuilder';
 import { VscodeLmClient } from './llm/vscodeLmClient';
-import { PresetMode } from '../types/preset';
 
 export class LlmInterventionService {
     constructor(
         private readonly geminiClient = new GeminiClient(),
-        private readonly vscodeLmClient = new VscodeLmClient()
-    ) { }
+        private readonly vscodeLmClient = new VscodeLmClient(),
+    ) {}
 
     /**
      * 🛡️ Sentinel: 機密ファイル（.env, .pem, .key, credentials等）がLLMに送信されるのを防ぐ
      */
     private validateDocument(document: vscode.TextDocument): void {
         const fileName = document.fileName.toLowerCase();
-        const sensitivePatterns = [/\.env/i, /\.pem/i, /\.key/i, /\.git/i, /secrets/i, /credentials/i];
-        if (sensitivePatterns.some(pattern => pattern.test(fileName))) {
+        const sensitivePatterns = [
+            /\.env/i,
+            /\.pem/i,
+            /\.key/i,
+            /\.git/i,
+            /secrets/i,
+            /credentials/i,
+        ];
+        if (sensitivePatterns.some((pattern) => pattern.test(fileName))) {
             const fileNameOnly = document.uri.path.split('/').pop() || document.fileName;
-            throw new Error(`セキュリティ違反: 機密ファイル (${fileNameOnly}) はLLMに送信できません。`);
+            throw new Error(
+                `セキュリティ違反: 機密ファイル (${fileNameOnly}) はLLMに送信できません。`,
+            );
         }
     }
 
@@ -33,7 +42,7 @@ export class LlmInterventionService {
         apiKey: string,
         modelName?: string,
         preferenceSummary?: string,
-        presetMode?: PresetMode
+        presetMode?: PresetMode,
     ): Promise<LlmInterventionPlan> {
         this.validateDocument(document);
         const prompt = buildInterventionPrompt(document, preferenceSummary, presetMode);
@@ -49,7 +58,7 @@ export class LlmInterventionService {
         token: vscode.CancellationToken,
         modelSelector?: string,
         preferenceSummary?: string,
-        presetMode?: PresetMode
+        presetMode?: PresetMode,
     ): Promise<LlmInterventionPlan> {
         this.validateDocument(document);
         const prompt = buildInterventionPrompt(document, preferenceSummary, presetMode);

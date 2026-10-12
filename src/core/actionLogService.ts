@@ -1,6 +1,6 @@
-import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as vscode from 'vscode';
 
 export interface ActionLogEntry {
     category: string;
@@ -28,8 +28,13 @@ export class ActionLogService {
         if (workspaceFolders && workspaceFolders.length > 0) {
             const workspacePath = path.resolve(workspaceFolders[0].uri.fsPath);
             const resolvedTarget = path.resolve(rootPath);
-            if (!resolvedTarget.startsWith(workspacePath + path.sep) && resolvedTarget !== workspacePath) {
-                throw new Error('セキュリティ違反: ワークスペース外のファイルへのアクセスが試行されました');
+            if (
+                !resolvedTarget.startsWith(workspacePath + path.sep) &&
+                resolvedTarget !== workspacePath
+            ) {
+                throw new Error(
+                    'セキュリティ違反: ワークスペース外のファイルへのアクセスが試行されました',
+                );
             }
         }
 

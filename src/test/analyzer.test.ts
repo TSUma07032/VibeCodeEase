@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import { CodeAnalyzer, DEFAULT_TYPO_RULES } from '../core/analyzer';
-import { AnalysisResult } from '../types';
+import type { AnalysisResult } from '../types';
 
 suite('CodeAnalyzer Test Suite', () => {
     let analyzer: CodeAnalyzer;
@@ -15,7 +15,7 @@ suite('CodeAnalyzer Test Suite', () => {
         const results = analyzer.analyze(code);
 
         // 末尾スペースなし・他のタイポなし → functon の 1件のみ
-        const typoResults = results.filter(r => r.interventions[0]?.originalText === 'functon');
+        const typoResults = results.filter((r) => r.interventions[0]?.originalText === 'functon');
         assert.strictEqual(typoResults.length, 1);
 
         const result: AnalysisResult = typoResults[0];
@@ -31,7 +31,9 @@ suite('CodeAnalyzer Test Suite', () => {
     test('should detect multiple typos on same line', () => {
         const code = `functon one() {}; functon two() {};`;
         const results = analyzer.analyze(code);
-        const functonResults = results.filter(r => r.interventions[0]?.originalText === 'functon');
+        const functonResults = results.filter(
+            (r) => r.interventions[0]?.originalText === 'functon',
+        );
         assert.strictEqual(functonResults.length, 2);
         assert.strictEqual(functonResults[0].range.start.character, 0);
         assert.strictEqual(functonResults[1].range.start.character, 18);
@@ -39,7 +41,7 @@ suite('CodeAnalyzer Test Suite', () => {
 
     test('should support custom typo rules', () => {
         const customAnalyzer = new CodeAnalyzer([
-            { pattern: 'retrun', replacement: 'return', category: 'SYNTAX_TYPO' }
+            { pattern: 'retrun', replacement: 'return', category: 'SYNTAX_TYPO' },
         ]);
         const results = customAnalyzer.analyze('retrun false;');
         assert.strictEqual(results.length, 1);
@@ -51,55 +53,55 @@ suite('CodeAnalyzer Test Suite', () => {
     suite('新キーワードタイポルール', () => {
         test('retrun を return として検出すること', () => {
             const results = analyzer.analyze('  retrun false;');
-            const hit = results.find(r => r.interventions[0]?.originalText === 'retrun');
+            const hit = results.find((r) => r.interventions[0]?.originalText === 'retrun');
             assert.ok(hit, 'retrun が検出されること');
-            assert.strictEqual(hit!.interventions[0].replacementText, 'return');
+            assert.strictEqual(hit.interventions[0].replacementText, 'return');
         });
 
         test('reutrn を return として検出すること', () => {
             const results = analyzer.analyze('reutrn null;');
-            const hit = results.find(r => r.interventions[0]?.originalText === 'reutrn');
+            const hit = results.find((r) => r.interventions[0]?.originalText === 'reutrn');
             assert.ok(hit, 'reutrn が検出されること');
         });
 
         test('consoel. を console. として検出すること', () => {
             const results = analyzer.analyze('consoel.log("hello");');
-            const hit = results.find(r => r.interventions[0]?.originalText === 'consoel.');
+            const hit = results.find((r) => r.interventions[0]?.originalText === 'consoel.');
             assert.ok(hit, 'consoel. が検出されること');
-            assert.strictEqual(hit!.interventions[0].replacementText, 'console.');
+            assert.strictEqual(hit.interventions[0].replacementText, 'console.');
         });
 
         test('thsi. を this. として検出すること', () => {
             const results = analyzer.analyze('thsi.name = "test";');
-            const hit = results.find(r => r.interventions[0]?.originalText === 'thsi.');
+            const hit = results.find((r) => r.interventions[0]?.originalText === 'thsi.');
             assert.ok(hit, 'thsi. が検出されること');
         });
 
         test('ture を true として検出すること', () => {
             const results = analyzer.analyze('const flag = ture;');
-            const hit = results.find(r => r.interventions[0]?.originalText === 'ture');
+            const hit = results.find((r) => r.interventions[0]?.originalText === 'ture');
             assert.ok(hit, 'ture が検出されること');
-            assert.strictEqual(hit!.interventions[0].replacementText, 'true');
+            assert.strictEqual(hit.interventions[0].replacementText, 'true');
         });
 
         test('flase を false として検出すること', () => {
             const results = analyzer.analyze('return flase;');
-            const hit = results.find(r => r.interventions[0]?.originalText === 'flase');
+            const hit = results.find((r) => r.interventions[0]?.originalText === 'flase');
             assert.ok(hit, 'flase が検出されること');
-            assert.strictEqual(hit!.interventions[0].replacementText, 'false');
+            assert.strictEqual(hit.interventions[0].replacementText, 'false');
         });
 
         test('awiat を await として検出すること', () => {
             const results = analyzer.analyze('const res = awiat fetch(url);');
-            const hit = results.find(r => r.interventions[0]?.originalText === 'awiat ');
+            const hit = results.find((r) => r.interventions[0]?.originalText === 'awiat ');
             assert.ok(hit, 'awiat が検出されること');
         });
 
         test('conts を const として検出すること', () => {
             const results = analyzer.analyze('conts x = 1;');
-            const hit = results.find(r => r.interventions[0]?.originalText === 'conts ');
+            const hit = results.find((r) => r.interventions[0]?.originalText === 'conts ');
             assert.ok(hit);
-            assert.strictEqual(hit!.interventions[0].replacementText, 'const ');
+            assert.strictEqual(hit.interventions[0].replacementText, 'const ');
         });
     });
 
@@ -107,9 +109,9 @@ suite('CodeAnalyzer Test Suite', () => {
     suite('記号タイポルール', () => {
         test('= > (スペース入り) を => として検出すること', () => {
             const results = analyzer.analyze('const fn = (x) = > x + 1;');
-            const hit = results.find(r => r.interventions[0]?.originalText === '= >');
+            const hit = results.find((r) => r.interventions[0]?.originalText === '= >');
             assert.ok(hit, '= > が検出されること');
-            assert.strictEqual(hit!.interventions[0].replacementText, '=>');
+            assert.strictEqual(hit.interventions[0].replacementText, '=>');
         });
     });
 
@@ -117,16 +119,22 @@ suite('CodeAnalyzer Test Suite', () => {
     suite('末尾スペース検出', () => {
         test('行末に余分なスペースがある行を検出すること', () => {
             const results = analyzer.analyze('const x = 1;   ');
-            const hit = results.find(r => r.category === 'INDENTATION_FORMATTING' &&
-                r.interventions[0]?.message?.includes('末尾'));
+            const hit = results.find(
+                (r) =>
+                    r.category === 'INDENTATION_FORMATTING' &&
+                    r.interventions[0]?.message?.includes('末尾'),
+            );
             assert.ok(hit, '末尾スペースが検出されること');
-            assert.strictEqual(hit!.interventions[0].replacementText, '');
+            assert.strictEqual(hit.interventions[0].replacementText, '');
         });
 
         test('末尾スペースがない行は検出しないこと', () => {
             const results = analyzer.analyze('const x = 1;');
-            const hit = results.find(r => r.category === 'INDENTATION_FORMATTING' &&
-                r.interventions[0]?.message?.includes('末尾'));
+            const hit = results.find(
+                (r) =>
+                    r.category === 'INDENTATION_FORMATTING' &&
+                    r.interventions[0]?.message?.includes('末尾'),
+            );
             assert.strictEqual(hit, undefined);
         });
     });
@@ -137,8 +145,12 @@ suite('CodeAnalyzer Test Suite', () => {
             const code = 'if condtion:\n    pass';
             const pyResults = analyzer.analyze(code, 'python');
             const jsResults = analyzer.analyze(code, 'javascript');
-            const pyHit = pyResults.find(r => r.interventions[0]?.originalText === 'if condtion:');
-            const jsHit = jsResults.find(r => r.interventions[0]?.originalText === 'if condtion:');
+            const pyHit = pyResults.find(
+                (r) => r.interventions[0]?.originalText === 'if condtion:',
+            );
+            const jsHit = jsResults.find(
+                (r) => r.interventions[0]?.originalText === 'if condtion:',
+            );
             assert.ok(pyHit, 'python ファイルでは検出されること');
             assert.strictEqual(jsHit, undefined, 'javascript ファイルでは検出されないこと');
         });
@@ -147,8 +159,8 @@ suite('CodeAnalyzer Test Suite', () => {
             const code = 'functon test() {}';
             const jsResults = analyzer.analyze(code, 'javascript');
             const pyResults = analyzer.analyze(code, 'python');
-            assert.ok(jsResults.find(r => r.interventions[0]?.originalText === 'functon'));
-            assert.ok(pyResults.find(r => r.interventions[0]?.originalText === 'functon'));
+            assert.ok(jsResults.find((r) => r.interventions[0]?.originalText === 'functon'));
+            assert.ok(pyResults.find((r) => r.interventions[0]?.originalText === 'functon'));
         });
 
         test('languageId が未指定の場合、Python限定ルールも検出されること（後方互換）', () => {
@@ -169,4 +181,3 @@ suite('CodeAnalyzer Test Suite', () => {
         assert.strictEqual(results.length, 0);
     });
 });
-

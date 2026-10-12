@@ -1,35 +1,35 @@
 import * as vscode from 'vscode';
-import { 
-    PersonaId, 
-    PersonaMode, 
-    SituationId, 
-    Candidate, 
-    ResponseRecord, 
-    PersonalizationProfile,
-    PzMetrics 
+import { GlobalState } from '../../state/globalState';
+import {
+    Candidate,
+    PersonaId,
+    type PersonalizationProfile,
+    type PersonaMode,
+    type PzMetrics,
+    type ResponseRecord,
+    type SituationId,
 } from '../../types/personalization';
-import { PreferenceStore } from './preferenceStore';
+import type { GeminiClient } from '../llm/geminiClient';
+import type { VscodeLmClient } from '../llm/vscodeLmClient';
 import { CandidateGenerator } from './candidateGenerator';
-import { PreferenceSummarizer } from './preferenceSummarizer';
+import type { EmbeddingProvider } from './embedding/embeddingProvider';
 import { GeminiEmbeddingProvider } from './embedding/geminiEmbeddingProvider';
 import { LocalHashEmbeddingProvider } from './embedding/localHashEmbeddingProvider';
-import { EmbeddingProvider } from './embedding/embeddingProvider';
+import { PreferenceStore } from './preferenceStore';
+import { PreferenceSummarizer } from './preferenceSummarizer';
+import { DEFAULT_RERANKING_CONFIG, rerankCandidates, type ScoredCandidate } from './reranker';
 import { determinePersonaWeights } from './situationPersonaSelector';
-import { rerankCandidates, ScoredCandidate, DEFAULT_RERANKING_CONFIG } from './reranker';
-import { GeminiClient } from '../llm/geminiClient';
-import { VscodeLmClient } from '../llm/vscodeLmClient';
-import { GlobalState } from '../../state/globalState';
 
 export class PersonalizationService {
     private store: PreferenceStore;
     private generator: CandidateGenerator;
     private summarizer: PreferenceSummarizer;
-    
+
     private metrics: PzMetrics = {
         totalInteractions: 0,
         preferenceHits: 0,
         acceptedCount: 0,
-        regenerationCount: 0
+        regenerationCount: 0,
     };
 
     // To track the current interaction state
@@ -40,19 +40,29 @@ export class PersonalizationService {
         globalStorageUri: vscode.Uri,
         private readonly geminiClient: GeminiClient,
         private readonly vscodeLmClient: VscodeLmClient,
-        private readonly getApiKey: () => Promise<string | undefined>
+        private readonly getApiKey: () => Promise<string | undefined>,
     ) {
         const getLlmConfig = () => GlobalState.getInstance().llmConfig;
 
         // Try Gemini Embedding first, fallback to Local Hash later if key is missing when embedding
-        // We will initialize GeminiProvider. If it fails due to no key during embedBatch, 
+        // We will initialize GeminiProvider. If it fails due to no key during embedBatch,
         // we might switch, but for simplicity, we pass a composite or just Local Hash if no key initially.
         // Let's create a proxy provider that falls back automatically.
         const provider = new ProxyEmbeddingProvider(geminiClient, getApiKey);
 
         this.store = new PreferenceStore(globalStorageUri, provider);
-        this.generator = new CandidateGenerator(geminiClient, vscodeLmClient, getLlmConfig, getApiKey);
-        this.summarizer = new PreferenceSummarizer(geminiClient, vscodeLmClient, getLlmConfig, getApiKey);
+        this.generator = new CandidateGenerator(
+            geminiClient,
+            vscodeLmClient,
+            getLlmConfig,
+            getApiKey,
+        );
+        this.summarizer = new PreferenceSummarizer(
+            geminiClient,
+            vscodeLmClient,
+            getLlmConfig,
+            getApiKey,
+        );
     }
 
     public async initialize(): Promise<void> {
@@ -99,14 +109,18 @@ export class PersonalizationService {
         await this.store.save();
     }
 
-    public async ask(query: string, contextCode: string | undefined, token: vscode.CancellationToken): Promise<ScoredCandidate[]> {
+    public async ask(
+        query: string,
+        contextCode: string | undefined,
+        token: vscode.CancellationToken,
+    ): Promise<ScoredCandidate[]> {
         const profile = this.store.getProfile();
-        
+
         // 1. Determine weights
         const { weights } = determinePersonaWeights(
             this.currentSituation,
             profile.currentPersonaMode,
-            profile.likedRecords
+            profile.likedRecords,
         );
 
         // 2. Generate candidates
@@ -116,11 +130,11 @@ export class PersonalizationService {
             this.currentSituation,
             weights,
             profile.preferenceSummary,
-            token
+            token,
         );
 
         // 3. Embed candidates
-        const texts = candidates.map(c => c.text);
+        const texts = candidates.map((c) => c.text);
         const embeddings = await (this.store as any).embeddingProvider.embedBatch(texts);
         for (let i = 0; i < candidates.length; i++) {
             candidates[i].embedding = embeddings[i];
@@ -133,17 +147,20 @@ export class PersonalizationService {
             profile.negativeProfile,
             profile.recentPreferences,
             weights,
-            DEFAULT_RERANKING_CONFIG
+            DEFAULT_RERANKING_CONFIG,
         );
 
         this.currentCandidates = scored;
         return scored;
     }
 
-    public async provideFeedback(candidateId: string, action: 'accept' | 'good' | 'bad' | 'regenerate'): Promise<void> {
+    public async provideFeedback(
+        candidateId: string,
+        action: 'accept' | 'good' | 'bad' | 'regenerate',
+    ): Promise<void> {
         const profile = this.store.getProfile();
-        const candidate = this.currentCandidates.find(c => c.id === candidateId);
-        
+        const candidate = this.currentCandidates.find((c) => c.id === candidateId);
+
         if (action === 'regenerate') {
             this.metrics.regenerationCount++;
             // Treat top candidate as weak negative if they hit regenerate
@@ -168,7 +185,9 @@ export class PersonalizationService {
 
         // Auto-summarize every 5 interactions
         if (this.metrics.totalInteractions > 0 && this.metrics.totalInteractions % 5 === 0) {
-            await this.updateSummaries(new vscode.CancellationTokenSource().token).catch(e => console.error(e));
+            await this.updateSummaries(new vscode.CancellationTokenSource().token).catch((e) =>
+                console.error(e),
+            );
         }
 
         await this.store.save();
@@ -184,7 +203,7 @@ export class PersonalizationService {
             persona: candidate.persona,
             situation: this.currentSituation,
             createdAt: Date.now(),
-            providerId: (this.store as any).embeddingProvider.providerId
+            providerId: (this.store as any).embeddingProvider.providerId,
         };
 
         if (feedback === 'liked') {
@@ -201,7 +220,7 @@ export class PersonalizationService {
         const { personaSummary, preferenceSummary } = await this.summarizer.summarize(
             profile.likedRecords,
             profile.dislikedRecords,
-            token
+            token,
         );
         profile.personaSummary = personaSummary;
         profile.preferenceSummary = preferenceSummary;
@@ -214,7 +233,7 @@ export class PersonalizationService {
             totalInteractions: 0,
             preferenceHits: 0,
             acceptedCount: 0,
-            regenerationCount: 0
+            regenerationCount: 0,
         };
         this.currentCandidates = [];
     }
@@ -229,7 +248,7 @@ class ProxyEmbeddingProvider implements EmbeddingProvider {
 
     constructor(
         geminiClient: GeminiClient,
-        private readonly getApiKey: () => Promise<string | undefined>
+        private readonly getApiKey: () => Promise<string | undefined>,
     ) {
         this.gemini = new GeminiEmbeddingProvider(geminiClient, getApiKey);
         this.local = new LocalHashEmbeddingProvider();
@@ -243,10 +262,16 @@ class ProxyEmbeddingProvider implements EmbeddingProvider {
         const apiKey = await this.getApiKey();
         if (apiKey) {
             // Re-assign providerId so records know what generated it
-            Object.defineProperty(this, 'providerId', { value: this.gemini.providerId, configurable: true });
+            Object.defineProperty(this, 'providerId', {
+                value: this.gemini.providerId,
+                configurable: true,
+            });
             return this.gemini.embedBatch(texts);
         } else {
-            Object.defineProperty(this, 'providerId', { value: this.local.providerId, configurable: true });
+            Object.defineProperty(this, 'providerId', {
+                value: this.local.providerId,
+                configurable: true,
+            });
             return this.local.embedBatch(texts);
         }
     }

@@ -18,13 +18,13 @@ suite('AnalysisCache Test Suite', () => {
             analyze: (text: string) => {
                 analyzeCallCount++;
                 return analyzer.analyze(text);
-            }
+            },
         } as any;
 
         const mockDoc: any = {
             uri: vscode.Uri.parse('file:///test.ts'),
             version: 1,
-            getText: () => 'functon test() {}'
+            getText: () => 'functon test() {}',
         };
 
         const res1 = cache.getOrAnalyze(mockDoc, mockAnalyzer);
@@ -42,13 +42,13 @@ suite('AnalysisCache Test Suite', () => {
             analyze: (text: string) => {
                 analyzeCallCount++;
                 return analyzer.analyze(text);
-            }
+            },
         } as any;
 
         const mockDoc: any = {
             uri: vscode.Uri.parse('file:///test.ts'),
             version: 1,
-            getText: () => 'functon test() {}'
+            getText: () => 'functon test() {}',
         };
 
         cache.getOrAnalyze(mockDoc, mockAnalyzer);
@@ -63,7 +63,7 @@ suite('AnalysisCache Test Suite', () => {
         const mockDoc: any = {
             uri: vscode.Uri.parse('file:///test.ts'),
             version: 1,
-            getText: () => 'functon test() {}'
+            getText: () => 'functon test() {}',
         };
 
         const res1 = cache.getOrAnalyze(mockDoc, analyzer);

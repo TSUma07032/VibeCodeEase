@@ -7,9 +7,11 @@ import type { ExtensionToWebviewMessage, WebviewIntervention, AiInterventionLeve
 import { TabBar } from './components/TabBar';
 import { MirrorEditor } from './components/MirrorEditor';
 import { SettingsPanel } from './components/SettingsPanel';
+import { DashboardPanel } from './components/DashboardPanel';
 
 import { vscode } from './utils/vscode';
 
+// [AI-WARNING] DO NOT REMOVE THIS OPTIMIZATION: Extending state for Dashboard and new llm config without disrupting existing logic.
 function App() {
     /**
      * [Why/Intent] Extensionから受信したドキュメント名・テキスト内容・提案一覧を保持・描画するため。
@@ -21,15 +23,24 @@ function App() {
     /**
      * [Why/Intent] ユーザーが閲覧している現在のタブ状態。
      */
-    const [activeTab, setActiveTab] = useState<'code' | 'settings'>('code');
+    const [activeTab, setActiveTab] = useState<'code' | 'settings' | 'dashboard'>('code');
     /**
      * [Why/Intent] APIキーはセキュリティ上Webviewには送信せず、設定の有無（boolean）のみを保持してUIを切り替えるため。
      */
     const [hasApiKey, setHasApiKey] = useState<boolean>(false);
+    const [apiKeyLength, setApiKeyLength] = useState<number>(0);
     /**
      * [Why/Intent] ユーザーが選択中のAI推敲レベル。
      */
     const [aiInterventionLevel, setAiInterventionLevel] = useState<AiInterventionLevel>('Level 2 (Refactoring)');
+
+    const [llmFrequency, setLlmFrequency] = useState<'manual' | 'onSave' | 'interval'>('onSave');
+    const [llmIntervalSeconds, setLlmIntervalSeconds] = useState<number>(10);
+    const [llmModel, setLlmModel] = useState<string>('gemini-3.5-flash-lite');
+
+    const [llmStatus, setLlmStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+    const [llmResponse, setLlmResponse] = useState<{ text: string; timestamp: number } | null>(null);
+    const [llmErrorLogs, setLlmErrorLogs] = useState<Array<{ message: string; timestamp: number }>>([]);
 
     /**
      * [Why/Intent] コンポーネントマウント時にメッセージリスナーを登録し、
@@ -48,7 +59,27 @@ function App() {
                     break;
                 case 'SYNC_SETTINGS':
                     setHasApiKey(message.hasApiKey);
+                    setApiKeyLength(message.apiKeyLength || 0);
                     setAiInterventionLevel(message.interventionLevel);
+                    if ('frequency' in message) {
+                        setLlmFrequency(message.frequency);
+                        setLlmIntervalSeconds(message.intervalSeconds);
+                        setLlmModel(message.model);
+                    }
+                    break;
+                case 'LLM_STATUS_UPDATE':
+                    setLlmStatus(message.status);
+                    break;
+                case 'LLM_RESPONSE_UPDATE':
+                    setLlmResponse({ text: message.text, timestamp: message.timestamp });
+                    break;
+                case 'LLM_ERROR_LOG':
+                    setLlmErrorLogs(prev => [...prev, { message: message.message, timestamp: message.timestamp }].slice(-50));
+                    break;
+                case 'LLM_DASHBOARD_INIT':
+                    setLlmResponse(message.response);
+                    setLlmErrorLogs(message.logs);
+                    setLlmStatus(message.status);
                     break;
             }
         };
@@ -145,10 +176,21 @@ function App() {
                 {activeTab === 'settings' && (
                     <SettingsPanel
                         hasApiKey={hasApiKey}
+                        apiKeyLength={apiKeyLength}
                         aiInterventionLevel={aiInterventionLevel}
+                        frequency={llmFrequency}
+                        intervalSeconds={llmIntervalSeconds}
+                        model={llmModel}
                         onUpdateApiKey={handleUpdateApiKey}
                         onUpdateLevel={handleUpdateLevel}
                         onForceAnalyze={handleForceAnalyze}
+                    />
+                )}
+                {activeTab === 'dashboard' && (
+                    <DashboardPanel
+                        status={llmStatus}
+                        response={llmResponse}
+                        logs={llmErrorLogs}
                     />
                 )}
             </div>

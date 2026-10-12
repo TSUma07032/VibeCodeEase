@@ -1,4 +1,10 @@
-import { PersonaId, PersonaMode, SituationId, PersonaWeights, ResponseRecord } from '../../types/personalization';
+import type {
+    PersonaId,
+    PersonaMode,
+    PersonaWeights,
+    ResponseRecord,
+    SituationId,
+} from '../../types/personalization';
 import { SITUATION_WEIGHTS } from './personaDefinitions';
 
 export interface SelectorResult {
@@ -14,7 +20,7 @@ export function determinePersonaWeights(
     situation: SituationId,
     mode: PersonaMode,
     records: ResponseRecord[],
-    lambda: number = 0.6 // Weight for situation vs learned history
+    lambda: number = 0.6, // Weight for situation vs learned history
 ): SelectorResult {
     // 1. If mode is fixed to a specific persona, return 100% for that persona
     if (mode.startsWith('fixed:')) {
@@ -28,21 +34,21 @@ export function determinePersonaWeights(
 
     // 2. Adaptive Mode (Persona E)
     const situationWeights = SITUATION_WEIGHTS[situation];
-    
+
     // Filter records for this specific situation to learn situation-specific preferences
-    const situationRecords = records.filter(r => r.situation === situation);
-    
+    const situationRecords = records.filter((r) => r.situation === situation);
+
     // Calculate learned weights using Laplace smoothing
     const stats: Record<PersonaId, { adopt: number; reject: number }> = {
         exploration: { adopt: 0, reject: 0 },
         learning: { adopt: 0, reject: 0 },
-        quality: { adopt: 0, reject: 0 }
+        quality: { adopt: 0, reject: 0 },
     };
 
     for (const record of situationRecords) {
         if (record.persona in stats) {
-            if (record.feedback === 'liked') stats[record.persona].adopt++;
-            if (record.feedback === 'disliked') stats[record.persona].reject++;
+            if (record.feedback === 'liked') {stats[record.persona].adopt++;}
+            if (record.feedback === 'disliked') {stats[record.persona].reject++;}
         }
     }
 
@@ -68,7 +74,7 @@ export function determinePersonaWeights(
     let dominant: PersonaId = 'exploration';
 
     for (const p of Object.keys(finalWeights) as PersonaId[]) {
-        finalWeights[p] = (lambda * situationWeights[p]) + ((1 - lambda) * learnedWeights[p]);
+        finalWeights[p] = lambda * situationWeights[p] + (1 - lambda) * learnedWeights[p];
         if (finalWeights[p] > maxWeight) {
             maxWeight = finalWeights[p];
             dominant = p;
@@ -86,6 +92,6 @@ export function determinePersonaWeights(
 
     return {
         weights: finalWeights,
-        dominantPersona: dominant
+        dominantPersona: dominant,
     };
 }

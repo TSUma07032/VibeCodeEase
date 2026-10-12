@@ -6,7 +6,10 @@
  * [Why/Intent] ユーザーが選択可能なAI推敲レベルの型定義。
  * マジックストリングを排除し、型安全な通信を実現するため。
  */
-export type AiInterventionLevel = 'Level 1 (Typo/Bug Fix)' | 'Level 2 (Refactoring)' | 'Level 3 (Architecture Optimization)';
+export type AiInterventionLevel =
+    | 'Level 1 (Typo/Bug Fix)'
+    | 'Level 2 (Refactoring)'
+    | 'Level 3 (Architecture Optimization)';
 
 /**
  * [Why/Intent] WebviewからExtensionへ送るメッセージ。
@@ -18,13 +21,28 @@ export type AiInterventionLevel = 'Level 1 (Typo/Bug Fix)' | 'Level 2 (Refactori
  * - force_analyze: 即座にドキュメントの再推敲を実行させるための要求
  */
 // Webview -> Extension
-export type WebviewToExtensionMessage = 
-  | { command: 'apply_intervention', id: string, newText: string, range: { start: { line: number, character: number }, end: { line: number, character: number } } }
-  | { command: 'discard_intervention', id: string }
-  | { command: 'ready' }
-  | { command: 'update_api_key', apiKey: string }
-  | { command: 'update_intervention_level', level: AiInterventionLevel }
-  | { command: 'force_analyze' };
+export type WebviewToExtensionMessage =
+    | {
+          command: 'apply_intervention';
+          id: string;
+          newText: string;
+          range: {
+              start: { line: number; character: number };
+              end: { line: number; character: number };
+          };
+      }
+    | { command: 'discard_intervention'; id: string }
+    | { command: 'ready' }
+    | { command: 'update_api_key'; apiKey: string }
+    | { command: 'update_intervention_level'; level: AiInterventionLevel }
+    | { command: 'force_analyze' }
+    | {
+          command: 'update_llm_config';
+          frequency: 'manual' | 'onSave' | 'interval';
+          intervalSeconds: number;
+          model: string;
+      }
+    | { command: 'clear_error_logs' };
 
 /**
  * [Why/Intent] ExtensionからWebviewへ送るメッセージ。
@@ -33,15 +51,32 @@ export type WebviewToExtensionMessage =
  * - SYNC_SETTINGS: ユーザー設定（APIキーの有無・推敲レベル）の初期同期および変更反映のため
  */
 // Extension -> Webview
-export type ExtensionToWebviewMessage = 
-  | { type: 'SYNC_DOCUMENT', fileName: string, text: string }
-  | { type: 'UPDATE_INTERVENTIONS', interventions: WebviewIntervention[] }
-  | { type: 'SYNC_SETTINGS', hasApiKey: boolean, interventionLevel: AiInterventionLevel };
+export type ExtensionToWebviewMessage =
+    | { type: 'SYNC_DOCUMENT'; fileName: string; text: string }
+    | { type: 'UPDATE_INTERVENTIONS'; interventions: WebviewIntervention[] }
+    | {
+          type: 'SYNC_SETTINGS';
+          hasApiKey: boolean;
+          apiKeyLength?: number;
+          interventionLevel: AiInterventionLevel;
+          frequency: 'manual' | 'onSave' | 'interval';
+          intervalSeconds: number;
+          model: string;
+      }
+    | { type: 'LLM_STATUS_UPDATE'; status: 'idle' | 'loading' | 'error' }
+    | { type: 'LLM_RESPONSE_UPDATE'; text: string; timestamp: number }
+    | { type: 'LLM_ERROR_LOG'; message: string; timestamp: number }
+    | {
+          type: 'LLM_DASHBOARD_INIT';
+          response: { text: string; timestamp: number } | null;
+          logs: Array<{ message: string; timestamp: number }>;
+          status: 'idle' | 'loading' | 'error';
+      };
 
 export interface WebviewIntervention {
-  id: string;
-  range: { start: { line: number, character: number }, end: { line: number, character: number } };
-  originalText: string;
-  replacementText: string;
-  message: string;
+    id: string;
+    range: { start: { line: number; character: number }; end: { line: number; character: number } };
+    originalText: string;
+    replacementText: string;
+    message: string;
 }

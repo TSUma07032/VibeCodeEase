@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { PainCategory, AnalysisResult } from '../types';
 import { GlobalState } from '../state/globalState';
+import type { AnalysisResult, PainCategory } from '../types';
 
 /**
  * VS CodeのDiagnostics（言語サーバーの赤波線・エラー）を監視し、
@@ -16,7 +16,7 @@ export class DiagnosticsService {
                 for (const uri of event.uris) {
                     this.updateDiagnosticsForUri(uri);
                 }
-            })
+            }),
         );
     }
 
@@ -30,7 +30,10 @@ export class DiagnosticsService {
 
         for (const diag of diagnostics) {
             // エラーまたは警告のみを対象とする
-            if (diag.severity !== vscode.DiagnosticSeverity.Error && diag.severity !== vscode.DiagnosticSeverity.Warning) {
+            if (
+                diag.severity !== vscode.DiagnosticSeverity.Error &&
+                diag.severity !== vscode.DiagnosticSeverity.Warning
+            ) {
                 continue;
             }
 
@@ -45,15 +48,15 @@ export class DiagnosticsService {
                 level,
                 range: {
                     start: { line: diag.range.start.line, character: diag.range.start.character },
-                    end: { line: diag.range.end.line, character: diag.range.end.character }
+                    end: { line: diag.range.end.line, character: diag.range.end.character },
                 },
                 interventions: [
                     {
                         originalText: '',
                         replacementText,
-                        message: diag.message
-                    }
-                ]
+                        message: diag.message,
+                    },
+                ],
             });
         }
 
@@ -66,7 +69,8 @@ export class DiagnosticsService {
      */
     public categorizeDiagnostic(diag: vscode.Diagnostic): PainCategory {
         const msg = diag.message;
-        const code = typeof diag.code === 'object' ? String(diag.code.value) : String(diag.code ?? '');
+        const code =
+            typeof diag.code === 'object' ? String(diag.code.value) : String(diag.code ?? '');
 
         // ⚡ Bolt: 複数の includes を単一の正規表現テストに置き換え
         // Benchmark: diagnostics の分類処理における文字列スキャン回数を削減し、実行速度を向上
@@ -74,11 +78,19 @@ export class DiagnosticsService {
             return 'SYNTAX_TYPO';
         }
 
-        if (/indent|tab|whitespace|trailing|formatting/i.test(msg) || code === 'trailing-whitespace') {
+        if (
+            /indent|tab|whitespace|trailing|formatting/i.test(msg) ||
+            code === 'trailing-whitespace'
+        ) {
             return 'INDENTATION_FORMATTING';
         }
 
-        if (/cannot find name|is not defined|declared but (its value is )?never used|unused|undefined variable|no-unused/i.test(msg) || /no-unused-vars|noUnusedLocals/.test(code)) {
+        if (
+            /cannot find name|is not defined|declared but (its value is )?never used|unused|undefined variable|no-unused/i.test(
+                msg,
+            ) ||
+            /no-unused-vars|noUnusedLocals/.test(code)
+        ) {
             return 'VAR_FUNC_MANAGEMENT';
         }
 
@@ -124,6 +136,6 @@ export class DiagnosticsService {
     }
 
     public dispose() {
-        this.disposables.forEach(d => d.dispose());
+        this.disposables.forEach((d) => d.dispose());
     }
 }

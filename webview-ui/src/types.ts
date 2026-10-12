@@ -24,7 +24,9 @@ export type WebviewToExtensionMessage =
   | { command: 'ready' }
   | { command: 'update_api_key', apiKey: string }
   | { command: 'update_intervention_level', level: AiInterventionLevel }
-  | { command: 'force_analyze' };
+  | { command: 'force_analyze' }
+  | { command: 'update_llm_config', frequency: 'manual' | 'onSave' | 'interval', intervalSeconds: number, model: string }
+  | { command: 'clear_error_logs' };
 
 /**
  * [Why/Intent] ExtensionからWebviewへ送るメッセージ。
@@ -36,7 +38,11 @@ export type WebviewToExtensionMessage =
 export type ExtensionToWebviewMessage = 
   | { type: 'SYNC_DOCUMENT', fileName: string, text: string }
   | { type: 'UPDATE_INTERVENTIONS', interventions: WebviewIntervention[] }
-  | { type: 'SYNC_SETTINGS', hasApiKey: boolean, interventionLevel: AiInterventionLevel };
+  | { type: 'SYNC_SETTINGS', hasApiKey: boolean, apiKeyLength?: number, interventionLevel: AiInterventionLevel, frequency: 'manual' | 'onSave' | 'interval', intervalSeconds: number, model: string }
+  | { type: 'LLM_STATUS_UPDATE', status: 'idle' | 'loading' | 'error' }
+  | { type: 'LLM_RESPONSE_UPDATE', text: string, timestamp: number }
+  | { type: 'LLM_ERROR_LOG', message: string, timestamp: number }
+  | { type: 'LLM_DASHBOARD_INIT', response: { text: string; timestamp: number } | null, logs: Array<{ message: string; timestamp: number }>, status: 'idle' | 'loading' | 'error' };
 
 export interface WebviewIntervention {
   id: string;

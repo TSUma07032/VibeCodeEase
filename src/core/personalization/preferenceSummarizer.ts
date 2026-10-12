@@ -1,34 +1,36 @@
-import * as vscode from 'vscode';
-import { ResponseRecord } from '../../types/personalization';
-import { GeminiClient } from '../llm/geminiClient';
-import { VscodeLmClient } from '../llm/vscodeLmClient';
-import { LlmProvider } from '../../types';
+import type * as vscode from 'vscode';
+import type { LlmProvider } from '../../types';
+import type { ResponseRecord } from '../../types/personalization';
+import type { GeminiClient } from '../llm/geminiClient';
+import type { VscodeLmClient } from '../llm/vscodeLmClient';
 
 export const SUMMARY_RESPONSE_SCHEMA = {
     type: 'OBJECT',
     required: ['personaSummary', 'preferenceSummary'],
     properties: {
         personaSummary: { type: 'STRING' },
-        preferenceSummary: { type: 'STRING' }
-    }
+        preferenceSummary: { type: 'STRING' },
+    },
 };
 
 export class PreferenceSummarizer {
     constructor(
         private readonly geminiClient: GeminiClient,
         private readonly vscodeLmClient: VscodeLmClient,
-        private readonly getLlmConfig: () => { provider: LlmProvider, model: string },
-        private readonly getApiKey: () => Promise<string | undefined>
+        private readonly getLlmConfig: () => { provider: LlmProvider; model: string },
+        private readonly getApiKey: () => Promise<string | undefined>,
     ) {}
 
     public async summarize(
         likedRecords: ResponseRecord[],
         dislikedRecords: ResponseRecord[],
-        token: vscode.CancellationToken
+        token: vscode.CancellationToken,
     ): Promise<{ personaSummary: string; preferenceSummary: string }> {
         // Take up to 8 recent records
         const recentLiked = likedRecords.sort((a, b) => b.createdAt - a.createdAt).slice(0, 8);
-        const recentDisliked = dislikedRecords.sort((a, b) => b.createdAt - a.createdAt).slice(0, 8);
+        const recentDisliked = dislikedRecords
+            .sort((a, b) => b.createdAt - a.createdAt)
+            .slice(0, 8);
 
         if (recentLiked.length === 0 && recentDisliked.length === 0) {
             return { personaSummary: '', preferenceSummary: '' };
@@ -36,12 +38,18 @@ export class PreferenceSummarizer {
 
         const prompt = this.buildPrompt(recentLiked, recentDisliked);
         const config = this.getLlmConfig();
-        
+
         let rawResponse: unknown;
         if (config.provider === 'gemini') {
             const apiKey = await this.getApiKey();
-            if (!apiKey) throw new Error('Gemini API key is required.');
-            rawResponse = await this.geminiClient.generate(prompt, apiKey, token, config.model, SUMMARY_RESPONSE_SCHEMA);
+            if (!apiKey) {throw new Error('Gemini API key is required.');}
+            rawResponse = await this.geminiClient.generate(
+                prompt,
+                apiKey,
+                token,
+                config.model,
+                SUMMARY_RESPONSE_SCHEMA,
+            );
         } else {
             rawResponse = await this.vscodeLmClient.generate(prompt, token, config.model);
         }
@@ -50,8 +58,18 @@ export class PreferenceSummarizer {
     }
 
     private buildPrompt(liked: ResponseRecord[], disliked: ResponseRecord[]): string {
-        const likedText = liked.map((r, i) => `Liked ${i + 1} (Persona: ${r.persona}, Situation: ${r.situation}):\n${r.text}`).join('\n\n');
-        const dislikedText = disliked.map((r, i) => `Disliked ${i + 1} (Persona: ${r.persona}, Situation: ${r.situation}):\n${r.text}`).join('\n\n');
+        const likedText = liked
+            .map(
+                (r, i) =>
+                    `Liked ${i + 1} (Persona: ${r.persona}, Situation: ${r.situation}):\n${r.text}`,
+            )
+            .join('\n\n');
+        const dislikedText = disliked
+            .map(
+                (r, i) =>
+                    `Disliked ${i + 1} (Persona: ${r.persona}, Situation: ${r.situation}):\n${r.text}`,
+            )
+            .join('\n\n');
 
         return `
 You are an analyst profiling a user's preferences for an AI coding assistant.
@@ -78,11 +96,11 @@ ${JSON.stringify(SUMMARY_RESPONSE_SCHEMA)}
         }
 
         const obj = raw as Record<string, unknown>;
-        
+
         if (typeof obj.personaSummary === 'string' && typeof obj.preferenceSummary === 'string') {
             return {
                 personaSummary: obj.personaSummary,
-                preferenceSummary: obj.preferenceSummary
+                preferenceSummary: obj.preferenceSummary,
             };
         }
 

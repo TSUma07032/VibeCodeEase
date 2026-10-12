@@ -1,14 +1,14 @@
-﻿import * as vscode from 'vscode';
+﻿import * as fs from 'fs';
 import * as path from 'path';
-import * as fs from 'fs';
-import { PersonalizationProfile } from '../../types/personalization';
+import type * as vscode from 'vscode';
+import type { PersonalizationProfile } from '../../types/personalization';
+import type { EmbeddingProvider } from './embedding/embeddingProvider';
 import { meanVector } from './vectorMath';
-import { EmbeddingProvider } from './embedding/embeddingProvider';
 
 export class PreferenceStore {
     private readonly filePath: string;
     private profile: PersonalizationProfile;
-    
+
     // Limits
     private readonly MAX_LIKED = 200;
     private readonly MAX_DISLIKED = 200;
@@ -17,13 +17,13 @@ export class PreferenceStore {
     constructor(
         globalStorageUri: vscode.Uri,
         private readonly embeddingProvider: EmbeddingProvider,
-        private readonly userId: string = 'local'
+        private readonly userId: string = 'local',
     ) {
         if (!fs.existsSync(globalStorageUri.fsPath)) {
             fs.mkdirSync(globalStorageUri.fsPath, { recursive: true });
         }
         this.filePath = path.join(globalStorageUri.fsPath, 'personalization.json');
-        
+
         this.profile = this.getEmptyProfile();
     }
 
@@ -38,7 +38,7 @@ export class PreferenceStore {
             personaSummary: '',
             visibilityLevel: 'subtle',
             explanationVerbosity: 'summary',
-            applicationAutomation: 'manual'
+            applicationAutomation: 'manual',
         };
     }
 
@@ -50,12 +50,18 @@ export class PreferenceStore {
         try {
             const raw = await fs.promises.readFile(this.filePath, 'utf-8');
             const data = JSON.parse(raw) as PersonalizationProfile;
-            
+
             // Check if provider changed
             let needsReEmbed = false;
-            if (data.likedRecords.length > 0 && data.likedRecords[0].providerId !== this.embeddingProvider.providerId) {
+            if (
+                data.likedRecords.length > 0 &&
+                data.likedRecords[0].providerId !== this.embeddingProvider.providerId
+            ) {
                 needsReEmbed = true;
-            } else if (data.dislikedRecords.length > 0 && data.dislikedRecords[0].providerId !== this.embeddingProvider.providerId) {
+            } else if (
+                data.dislikedRecords.length > 0 &&
+                data.dislikedRecords[0].providerId !== this.embeddingProvider.providerId
+            ) {
                 needsReEmbed = true;
             }
 
@@ -79,7 +85,11 @@ export class PreferenceStore {
     public async save(): Promise<void> {
         this.updateCentroids();
         try {
-            await fs.promises.writeFile(this.filePath, JSON.stringify(this.profile, null, 2), 'utf-8');
+            await fs.promises.writeFile(
+                this.filePath,
+                JSON.stringify(this.profile, null, 2),
+                'utf-8',
+            );
         } catch (e) {
             console.error('Failed to save personalization profile', e);
         }
@@ -92,19 +102,21 @@ export class PreferenceStore {
 
     private updateCentroids(): void {
         const p = this.profile;
-        
-        const likedVecs = p.likedRecords.map(r => r.embedding).filter(v => v && v.length > 0);
+
+        const likedVecs = p.likedRecords.map((r) => r.embedding).filter((v) => v && v.length > 0);
         p.positiveProfile = likedVecs.length > 0 ? meanVector(likedVecs) : undefined;
 
-        const dislikedVecs = p.dislikedRecords.map(r => r.embedding).filter(v => v && v.length > 0);
+        const dislikedVecs = p.dislikedRecords
+            .map((r) => r.embedding)
+            .filter((v) => v && v.length > 0);
         p.negativeProfile = dislikedVecs.length > 0 ? meanVector(dislikedVecs) : undefined;
 
         const recentVecs = p.likedRecords
             .sort((a, b) => b.createdAt - a.createdAt)
             .slice(0, this.MAX_RECENT)
-            .map(r => r.embedding)
-            .filter(v => v && v.length > 0);
-        
+            .map((r) => r.embedding)
+            .filter((v) => v && v.length > 0);
+
         p.recentPreferences = recentVecs.length > 0 ? meanVector(recentVecs) : undefined;
     }
 
@@ -122,9 +134,9 @@ export class PreferenceStore {
 
     private async recalculateEmbeddings(): Promise<void> {
         const allRecords = [...this.profile.likedRecords, ...this.profile.dislikedRecords];
-        if (allRecords.length === 0) return;
+        if (allRecords.length === 0) {return;}
 
-        const texts = allRecords.map(r => r.text);
+        const texts = allRecords.map((r) => r.text);
         try {
             const newEmbeddings = await this.embeddingProvider.embedBatch(texts);
             if (newEmbeddings.length !== allRecords.length) {

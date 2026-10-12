@@ -6,7 +6,10 @@ export class VibeStatusBar {
     private disposables: vscode.Disposable[] = [];
 
     constructor() {
-        this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+        this.statusBarItem = vscode.window.createStatusBarItem(
+            vscode.StatusBarAlignment.Right,
+            100,
+        );
         this.statusBarItem.name = 'vibeCodeEase Mode';
         this.statusBarItem.command = 'vibecodeease.switchMode';
 
@@ -27,15 +30,18 @@ export class VibeStatusBar {
         switch (preset) {
             case 'HINT':
                 this.statusBarItem.text = '$(lightbulb) Vibe: Hint';
-                this.statusBarItem.tooltip = 'vibeCodeEase: ヒントモード (解説ヒント中心) - クリックで変更';
+                this.statusBarItem.tooltip =
+                    'vibeCodeEase: ヒントモード (解説ヒント中心) - クリックで変更';
                 break;
             case 'ARCHITECTURE':
                 this.statusBarItem.text = '$(versions) Vibe: Architecture';
-                this.statusBarItem.tooltip = 'vibeCodeEase: アーキテクチャモード (リファクタ中心) - クリックで変更';
+                this.statusBarItem.tooltip =
+                    'vibeCodeEase: アーキテクチャモード (リファクタ中心) - クリックで変更';
                 break;
             case 'BUG_TYPO':
                 this.statusBarItem.text = '$(bug) Vibe: Bug/Typo';
-                this.statusBarItem.tooltip = 'vibeCodeEase: バグ・タイポ修正 (最小限の修正) - クリックで変更';
+                this.statusBarItem.tooltip =
+                    'vibeCodeEase: バグ・タイポ修正 (最小限の修正) - クリックで変更';
                 break;
             case 'CUSTOM': {
                 const prefs = state.preferences.preferences;
@@ -51,6 +57,6 @@ export class VibeStatusBar {
 
     public dispose() {
         this.statusBarItem.dispose();
-        this.disposables.forEach(d => d.dispose());
+        this.disposables.forEach((d) => d.dispose());
     }
 }

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { PainCategory, PAIN_CATEGORY_LABELS } from '../types';
 import { GlobalState } from '../state/globalState';
+import { PAIN_CATEGORY_LABELS, type PainCategory } from '../types';
 
 export interface ActionRecord {
     category: PainCategory;
@@ -28,7 +28,7 @@ export class AdaptiveEngine {
         this.history.push({
             category,
             action,
-            timestamp: Date.now()
+            timestamp: Date.now(),
         });
 
         if (action === 'APPLY') {
@@ -62,7 +62,10 @@ export class AdaptiveEngine {
             const categoryLabel = PAIN_CATEGORY_LABELS[category] || category;
             // ポップアップでの確認を省き、自動的にSILENTにアップグレードしてステータスバーで通知する
             globalState.updatePreference(category, 0.9).then(() => {
-                vscode.window.setStatusBarMessage(`$(zap) 【適応型提案】「${categoryLabel}」を連続承認したため、自動修正(SILENT)に切り替えました`, 5000);
+                vscode.window.setStatusBarMessage(
+                    `$(zap) 【適応型提案】「${categoryLabel}」を連続承認したため、自動修正(SILENT)に切り替えました`,
+                    5000,
+                );
             });
             return true;
         }
@@ -70,4 +73,3 @@ export class AdaptiveEngine {
         return false;
     }
 }
-
