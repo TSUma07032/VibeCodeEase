@@ -38,9 +38,9 @@ export class PreferenceSummarizer {
         dislikedRecords: ResponseRecord[],
         token: vscode.CancellationToken,
     ): Promise<{ personaSummary: string; preferenceSummary: string }> {
-        // Take up to 8 recent records
-        const recentLiked = likedRecords.sort((a, b) => b.createdAt - a.createdAt).slice(0, 8);
-        const recentDisliked = dislikedRecords
+        // Take up to 8 recent records without mutating input arrays
+        const recentLiked = [...likedRecords].sort((a, b) => b.createdAt - a.createdAt).slice(0, 8);
+        const recentDisliked = [...dislikedRecords]
             .sort((a, b) => b.createdAt - a.createdAt)
             .slice(0, 8);
 

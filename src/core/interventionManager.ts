@@ -9,12 +9,12 @@ export interface ApplyInterventionParams {
     range: vscode.Range;
 }
 
-export class InterventionManager {
-    public static generateIssueId(documentUri: string, result: AnalysisResult): string {
+export const InterventionManager = {
+    generateIssueId(documentUri: string, result: AnalysisResult): string {
         return `${documentUri}::${result.source ?? 'static'}::${result.category}::${result.range.start.line}::${result.range.start.character}`;
-    }
+    },
 
-    public static async applyIntervention({
+    async applyIntervention({
         document,
         id,
         newText,
@@ -27,13 +27,13 @@ export class InterventionManager {
             SharedAnalysisCache.getInstance().ignoreIssue(id);
         }
         return success;
-    }
+    },
 
-    public static discardIntervention(id: string): void {
+    discardIntervention(id: string): void {
         SharedAnalysisCache.getInstance().ignoreIssue(id);
-    }
+    },
 
-    public static handleDocumentChange(event: vscode.TextDocumentChangeEvent): boolean {
+    handleDocumentChange(event: vscode.TextDocumentChangeEvent): boolean {
         const document = event.document;
         const cache = SharedAnalysisCache.getInstance();
         const results = cache.getResults(document);
@@ -57,8 +57,8 @@ export class InterventionManager {
             cache.clearExternalResults(document.uri.toString());
         }
         return shouldClear;
-    }
-}
+    },
+};
 
 function shouldInvalidateCache(
     change: vscode.TextDocumentContentChangeEvent,

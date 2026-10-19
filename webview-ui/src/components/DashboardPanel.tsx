@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import DOMPurify from 'dompurify';
 import { vscode } from '../utils/vscode';
 
 // [AI-WARNING] DO NOT REMOVE THIS OPTIMIZATION: Dashboard implementation for LLM status, response, and error logs visualization.
@@ -13,12 +12,24 @@ interface DashboardPanelProps {
 export const DashboardPanel: React.FC<DashboardPanelProps> = ({ status, response, logs }) => {
   const [view, setView] = useState<'response' | 'log'>('response');
   const [isCopied, setIsCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) {
+        clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleCopy = () => {
     if (response) {
-      navigator.clipboard.writeText(response.text);
+      void Promise.resolve(navigator.clipboard?.writeText(response.text)).catch(() => {});
       setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
+      if (copyTimerRef.current) {
+        clearTimeout(copyTimerRef.current);
+      }
+      copyTimerRef.current = setTimeout(() => setIsCopied(false), 2000);
     }
   };
 
@@ -93,7 +104,7 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({ status, response
             {!response ? (
               <p>まだ解析結果はありません。</p>
             ) : (
-              <ReactMarkdown>{DOMPurify.sanitize(response.text)}</ReactMarkdown>
+              <ReactMarkdown>{response.text}</ReactMarkdown>
             )}
           </div>
         </div>

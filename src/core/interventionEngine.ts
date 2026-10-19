@@ -29,11 +29,11 @@ export interface EducationalHintParams {
     presetMode?: PresetMode;
 }
 
-export class InterventionEngine {
+export const InterventionEngine = {
     /**
      * 単一カテゴリの嗜好値（0.0〜1.0）から介入レベル（SILENT / SUGGESTION / IGNORE）を判定する純粋関数
      */
-    public static determineLevel(preferenceValue: number): InterventionLevel {
+    determineLevel(preferenceValue: number): InterventionLevel {
         const clamped = clampPreferenceValue(preferenceValue, 0.5);
         if (clamped >= INTERVENTION_THRESHOLDS.SILENT_MIN) {
             return 'SILENT';
@@ -42,24 +42,24 @@ export class InterventionEngine {
             return 'SUGGESTION';
         }
         return 'IGNORE';
-    }
+    },
 
     /**
      * カテゴリとユーザー嗜好プロファイルから、適用すべき介入レベルを取得する
      */
-    public static getLevelForCategory(
+    getLevelForCategory(
         category: PainCategory,
         profile?: UserPreferenceProfile,
     ): InterventionLevel {
         const rawValue = profile?.preferences?.[category];
         const value = clampPreferenceValue(rawValue, 0.5);
         return InterventionEngine.determineLevel(value);
-    }
+    },
 
     /**
      * 学習用途・コード理解のための教育的ヒントメッセージを生成する
      */
-    public static getEducationalHint({
+    getEducationalHint({
         category,
         originalText,
         replacementText,
@@ -81,8 +81,8 @@ export class InterventionEngine {
             default:
                 return `🎓 **学習ヒント:** \`${replacementText}\` への修正が推奨されます。`;
         }
-    }
-}
+    },
+};
 
 /**
  * ユーザーの嗜好値と対象のエラー（PainCategory）に基づいて、システムの介入レベルを決定する純粋関数

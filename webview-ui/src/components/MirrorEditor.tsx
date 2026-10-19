@@ -14,7 +14,7 @@ interface MirrorEditorProps {
 }
 
 export const MirrorEditor: React.FC<MirrorEditorProps> = ({ text, interventions, onApply, onDiscard }) => {
-    const lines = text.split('\n');
+    const lines = text.split(/\r?\n/);
     
     /**
      * [Why/Intent] 行ごとに複数の提案が存在したり、ユーザーが個別に開閉状態を維持できるようにするため、

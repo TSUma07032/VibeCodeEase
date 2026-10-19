@@ -1,5 +1,5 @@
-import * as https from 'https';
-import { URL } from 'url';
+import * as https from 'node:https';
+import { URL } from 'node:url';
 import type * as vscode from 'vscode';
 import { INTERVENTION_RESPONSE_SCHEMA } from './promptBuilder';
 
@@ -139,7 +139,7 @@ export class GeminiClient {
             return [];
         }
 
-        const modelName = params.modelName ?? 'text-embedding-004';
+        const modelName = params.modelName ?? 'gemini-embedding-001';
         const requests = texts.map((text) => ({
             model: `models/${modelName}`,
             content: { parts: [{ text }] },

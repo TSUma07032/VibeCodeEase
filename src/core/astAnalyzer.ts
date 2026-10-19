@@ -46,16 +46,14 @@ export class AstAnalyzer {
         const visit = (node: ts.Node) => {
             if (ts.isVariableStatement(node)) {
                 const declList = node.declarationList;
-                if (
-                    declList.flags & ts.NodeFlags.None &&
-                    !(declList.flags & ts.NodeFlags.Let) &&
-                    !(declList.flags & ts.NodeFlags.Const)
-                ) {
-                    // var 宣言
-                    const start = sourceFile.getLineAndCharacterOfPosition(
-                        node.getStart(sourceFile),
-                    );
-                    const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
+                if (!(declList.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const))) {
+                    // var 宣言（キーワード部分のみを置換範囲にする）
+                    const varStartPos = declList.getStart(sourceFile);
+                    const hasTrailingSpace =
+                        sourceFile.text.slice(varStartPos, varStartPos + 4) === 'var ';
+                    const spanLength = hasTrailingSpace ? 4 : 3;
+                    const start = sourceFile.getLineAndCharacterOfPosition(varStartPos);
+                    const end = sourceFile.getLineAndCharacterOfPosition(varStartPos + spanLength);
                     // 初期化子があれば const、なければ let を提案
                     const hasInit = declList.declarations.every((d) => d.initializer !== undefined);
                     const suggestion = hasInit ? 'const' : 'let';
@@ -70,8 +68,8 @@ export class AstAnalyzer {
                         },
                         interventions: [
                             {
-                                originalText: 'var ',
-                                replacementText: `${suggestion} `,
+                                originalText: hasTrailingSpace ? 'var ' : 'var',
+                                replacementText: hasTrailingSpace ? `${suggestion} ` : suggestion,
                                 message: `🌲 **\`var\` は非推奨**: \`${suggestion}\` の使用を検討してください。スコープが明確になり、意図しない再代入を防げます。`,
                             },
                         ],
@@ -101,6 +99,7 @@ export class AstAnalyzer {
                 const start = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
                 const end = sourceFile.getLineAndCharacterOfPosition(node.getEnd());
                 const methodName = node.expression.name.text;
+                const callText = node.getText(sourceFile);
 
                 results.push({
                     category: 'VAR_FUNC_MANAGEMENT',
@@ -112,8 +111,8 @@ export class AstAnalyzer {
                     },
                     interventions: [
                         {
-                            originalText: `console.${methodName}`,
-                            replacementText: '',
+                            originalText: callText,
+                            replacementText: `/* ${callText} */`,
                             message: `🌲 **デバッグ用コード** \`console.${methodName}\` が残っています。本番コードでは削除を検討してください。`,
                         },
                     ],
@@ -203,9 +202,9 @@ export class AstAnalyzer {
     private _detectEmptyBlock(sourceFile: ts.SourceFile, results: AnalysisResult[]): void {
         const visit = (node: ts.Node) => {
             if (ts.isTryStatement(node) && node.catchClause?.block.statements.length === 0) {
-                const clause = node.catchClause;
-                const start = sourceFile.getLineAndCharacterOfPosition(clause.getStart(sourceFile));
-                const end = sourceFile.getLineAndCharacterOfPosition(clause.getEnd());
+                const block = node.catchClause.block;
+                const start = sourceFile.getLineAndCharacterOfPosition(block.getStart(sourceFile));
+                const end = sourceFile.getLineAndCharacterOfPosition(block.getEnd());
 
                 results.push({
                     category: 'SYNTAX_ERROR_HANDLING',
@@ -217,8 +216,8 @@ export class AstAnalyzer {
                     },
                     interventions: [
                         {
-                            originalText: '',
-                            replacementText: '',
+                            originalText: block.getText(sourceFile),
+                            replacementText: '{ /* TODO: エラーハンドリングを追加 */ }',
                             message:
                                 '🌲 **空の catch ブロック**: エラーを無視しています。少なくとも `console.error(e)` を入れるか、エラーを再スローすることを検討してください。',
                         },

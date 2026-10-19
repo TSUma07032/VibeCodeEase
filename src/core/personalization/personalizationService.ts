@@ -32,6 +32,7 @@ export class PersonalizationService {
     private store: PreferenceStore;
     private generator: CandidateGenerator;
     private summarizer: PreferenceSummarizer;
+    private proxyProvider: ProxyEmbeddingProvider;
 
     private metrics: PzMetrics = {
         totalInteractions: 0,
@@ -47,13 +48,9 @@ export class PersonalizationService {
     constructor(params: PersonalizationServiceParams) {
         const getLlmConfig = () => GlobalState.getInstance().llmConfig;
 
-        // Try Gemini Embedding first, fallback to Local Hash later if key is missing when embedding
-        // We will initialize GeminiProvider. If it fails due to no key during embedBatch,
-        // we might switch, but for simplicity, we pass a composite or just Local Hash if no key initially.
-        // Let's create a proxy provider that falls back automatically.
-        const provider = new ProxyEmbeddingProvider(params.geminiClient, params.getApiKey);
+        this.proxyProvider = new ProxyEmbeddingProvider(params.geminiClient, params.getApiKey);
 
-        this.store = new PreferenceStore(params.globalStorageUri, provider);
+        this.store = new PreferenceStore(params.globalStorageUri, this.proxyProvider);
         this.generator = new CandidateGenerator({
             geminiClient: params.geminiClient,
             vscodeLmClient: params.vscodeLmClient,
@@ -69,6 +66,7 @@ export class PersonalizationService {
     }
 
     public async initialize(): Promise<void> {
+        await this.proxyProvider.refreshProviderId();
         await this.store.load();
         this.currentSituation = this.store.getProfile().currentSituation || 'learning';
     }
@@ -119,11 +117,11 @@ export class PersonalizationService {
     ): Promise<ScoredCandidate[]> {
         const profile = this.store.getProfile();
 
-        // 1. Determine weights
+        // 1. Determine weights using both liked and disliked records
         const { weights } = determinePersonaWeights({
             situation: this.currentSituation,
             mode: profile.currentPersonaMode,
-            records: profile.likedRecords,
+            records: [...profile.likedRecords, ...profile.dislikedRecords],
         });
 
         // 2. Generate candidates
@@ -157,39 +155,50 @@ export class PersonalizationService {
         return scored;
     }
 
+    private recordCandidateFeedback(
+        candidateId: string,
+        action: 'accept' | 'good' | 'bad' | 'regenerate',
+    ): void {
+        if (action === 'regenerate') {
+            this.metrics.regenerationCount++;
+            if (this.currentCandidates.length > 0) {
+                this.addRecord(this.currentCandidates[0], 'disliked');
+            }
+            return;
+        }
+        const candidate = this.currentCandidates.find((c) => c.id === candidateId);
+        if (!candidate) {
+            return;
+        }
+        this.metrics.totalInteractions++;
+        if (action === 'accept') {
+            this.metrics.acceptedCount++;
+            if (this.currentCandidates[0]?.id === candidateId) {
+                this.metrics.preferenceHits++;
+            }
+            this.addRecord(candidate, 'liked');
+        } else if (action === 'good') {
+            this.addRecord(candidate, 'liked');
+        } else {
+            this.addRecord(candidate, 'disliked');
+        }
+    }
+
     public async provideFeedback(
         candidateId: string,
         action: 'accept' | 'good' | 'bad' | 'regenerate',
     ): Promise<void> {
-        const candidate = this.currentCandidates.find((c) => c.id === candidateId);
+        this.recordCandidateFeedback(candidateId, action);
 
-        if (action === 'regenerate') {
-            this.metrics.regenerationCount++;
-            // Treat top candidate as weak negative if they hit regenerate
-            if (this.currentCandidates.length > 0) {
-                const top = this.currentCandidates[0];
-                this.addRecord(top, 'disliked');
-            }
-        } else if (candidate) {
-            this.metrics.totalInteractions++;
-            if (action === 'accept') {
-                this.metrics.acceptedCount++;
-                if (this.currentCandidates[0].id === candidateId) {
-                    this.metrics.preferenceHits++;
-                }
-                this.addRecord(candidate, 'liked');
-            } else if (action === 'good') {
-                this.addRecord(candidate, 'liked');
-            } else if (action === 'bad') {
-                this.addRecord(candidate, 'disliked');
-            }
-        }
-
-        // Auto-summarize every 5 interactions
         if (this.metrics.totalInteractions > 0 && this.metrics.totalInteractions % 5 === 0) {
-            await this.updateSummaries(new vscode.CancellationTokenSource().token).catch((e) =>
-                console.error(e),
-            );
+            const cts = new vscode.CancellationTokenSource();
+            try {
+                await this.updateSummaries(cts.token);
+            } catch (e) {
+                console.error(e);
+            } finally {
+                cts.dispose();
+            }
         }
 
         await this.store.save();
@@ -198,7 +207,7 @@ export class PersonalizationService {
     private addRecord(candidate: ScoredCandidate, feedback: 'liked' | 'disliked'): void {
         const profile = this.store.getProfile();
         const record: ResponseRecord = {
-            id: Date.now().toString() + '_' + candidate.id,
+            id: `${Date.now().toString()}_${candidate.id}`,
             text: candidate.text,
             embedding: candidate.embedding ?? [],
             feedback,
@@ -245,8 +254,9 @@ export class PersonalizationService {
  * Proxy that tries Gemini embedding, falls back to Local Hash if no API key
  */
 class ProxyEmbeddingProvider implements EmbeddingProvider {
-    private gemini: GeminiEmbeddingProvider;
-    private local: LocalHashEmbeddingProvider;
+    private readonly gemini: GeminiEmbeddingProvider;
+    private readonly local: LocalHashEmbeddingProvider;
+    private _activeProviderId = 'proxy-auto';
 
     constructor(
         geminiClient: GeminiClient,
@@ -257,24 +267,22 @@ class ProxyEmbeddingProvider implements EmbeddingProvider {
     }
 
     public get providerId(): string {
-        return 'proxy-auto'; // The actual records will save the concrete provider ID
+        return this._activeProviderId;
+    }
+
+    public async refreshProviderId(): Promise<string> {
+        const apiKey = await this.getApiKey();
+        this._activeProviderId = apiKey ? this.gemini.providerId : this.local.providerId;
+        return this._activeProviderId;
     }
 
     public async embedBatch(texts: string[]): Promise<number[][]> {
         const apiKey = await this.getApiKey();
         if (apiKey) {
-            // Re-assign providerId so records know what generated it
-            Object.defineProperty(this, 'providerId', {
-                value: this.gemini.providerId,
-                configurable: true,
-            });
+            this._activeProviderId = this.gemini.providerId;
             return this.gemini.embedBatch(texts);
-        } else {
-            Object.defineProperty(this, 'providerId', {
-                value: this.local.providerId,
-                configurable: true,
-            });
-            return this.local.embedBatch(texts);
         }
+        this._activeProviderId = this.local.providerId;
+        return this.local.embedBatch(texts);
     }
 }

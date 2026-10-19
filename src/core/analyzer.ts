@@ -139,6 +139,15 @@ export class CodeAnalyzer {
         };
     }
 
+    private isWordBoundaryMatch(lineText: string, matchIndex: number, pattern: string): boolean {
+        const prevChar = matchIndex > 0 ? lineText[matchIndex - 1] : '';
+        const afterIndex = matchIndex + pattern.length;
+        const nextChar = afterIndex < lineText.length ? lineText[afterIndex] : '';
+        const validStart = !/^[a-zA-Z_]/.test(pattern) || !/[a-zA-Z0-9_$]/.test(prevChar);
+        const validEnd = !/[a-zA-Z_]$/.test(pattern) || !/[a-zA-Z0-9_$]/.test(nextChar);
+        return validStart && validEnd;
+    }
+
     private checkRuleMatches(
         lineText: string,
         lineIndex: number,
@@ -152,24 +161,29 @@ export class CodeAnalyzer {
 
             let matchIndex = lineText.indexOf(rule.pattern);
             while (matchIndex !== -1) {
-                results.push({
-                    category: rule.category,
-                    level: 'SUGGESTION',
-                    range: {
-                        start: { line: lineIndex, character: matchIndex },
-                        end: { line: lineIndex, character: matchIndex + rule.pattern.length },
-                    },
-                    interventions: [
-                        {
-                            originalText: rule.pattern,
-                            replacementText: rule.replacement,
-                            message:
-                                rule.message ??
-                                `$(lightbulb) **Did you mean:** \`${rule.replacement}\`?`,
+                const afterIndex = matchIndex + rule.pattern.length;
+                if (this.isWordBoundaryMatch(lineText, matchIndex, rule.pattern)) {
+                    results.push({
+                        category: rule.category,
+                        level: 'SUGGESTION',
+                        range: {
+                            start: { line: lineIndex, character: matchIndex },
+                            end: { line: lineIndex, character: afterIndex },
                         },
-                    ],
-                });
-                matchIndex = lineText.indexOf(rule.pattern, matchIndex + rule.pattern.length);
+                        interventions: [
+                            {
+                                originalText: rule.pattern,
+                                replacementText: rule.replacement,
+                                message:
+                                    rule.message ??
+                                    `$(lightbulb) **Did you mean:** \`${rule.replacement}\`?`,
+                            },
+                        ],
+                    });
+                    matchIndex = lineText.indexOf(rule.pattern, afterIndex);
+                } else {
+                    matchIndex = lineText.indexOf(rule.pattern, matchIndex + 1);
+                }
             }
         }
         return results;

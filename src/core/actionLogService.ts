@@ -1,5 +1,5 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 
 export interface ActionLogEntry {
@@ -61,9 +61,11 @@ export class ActionLogService {
             return;
         }
 
+        const sanitizeField = (val: string | number | undefined): string =>
+            String(val ?? '').replace(/[\r\n,]/g, ' ');
         const timestamp = new Date().toISOString();
-        const safePayload = (entry.payload ?? '').replace(/"/g, '""');
-        const line = `${timestamp},${this.userId},experiment,${entry.category},${entry.action},${entry.targetId ?? ''},${entry.value ?? ''},"${safePayload}"\n`;
+        const safePayload = (entry.payload ?? '').replace(/\r?\n/g, '\\n').replace(/"/g, '""');
+        const line = `${timestamp},${this.userId},experiment,${sanitizeField(entry.category)},${sanitizeField(entry.action)},${sanitizeField(entry.targetId)},${sanitizeField(entry.value)},"${safePayload}"\n`;
 
         try {
             fs.appendFileSync(this.logFilePath, line, 'utf8');

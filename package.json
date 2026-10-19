@@ -144,6 +144,7 @@
     "test:e2e": "npm run test:e2e --prefix webview-ui",
     "test:e2e:headed": "npm run test:e2e:headed --prefix webview-ui",
     "test:all": "npm run test:ui && npm run test",
+    "test:llm": "npm run compile-tests && vscode-test --run out/test/llmIntegration.test.js",
     "test": "vscode-test"
   },
   "devDependencies": {

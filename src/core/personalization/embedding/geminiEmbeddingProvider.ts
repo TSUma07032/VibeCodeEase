@@ -8,7 +8,7 @@ export class GeminiEmbeddingProvider implements EmbeddingProvider {
     constructor(
         private readonly geminiClient: GeminiClient,
         private readonly getApiKey: () => Promise<string | undefined>,
-        private readonly modelName: string = 'text-embedding-004',
+        private readonly modelName: string = 'gemini-embedding-001',
     ) {
         this.providerId = `gemini:${this.modelName}`;
     }
@@ -24,8 +24,7 @@ export class GeminiEmbeddingProvider implements EmbeddingProvider {
         }
 
         const source = new vscode.CancellationTokenSource();
-        // Typically timeout or token should be passed from caller, but for simplicity here we create one
-        setTimeout(() => source.cancel(), 30000);
+        const timer = setTimeout(() => source.cancel(), 30000);
 
         try {
             return await this.geminiClient.embedBatch({
@@ -35,6 +34,7 @@ export class GeminiEmbeddingProvider implements EmbeddingProvider {
                 modelName: this.modelName,
             });
         } finally {
+            clearTimeout(timer);
             source.dispose();
         }
     }

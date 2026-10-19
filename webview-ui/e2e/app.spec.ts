@@ -1,13 +1,22 @@
-﻿import { test, expect } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+
+interface MockWindow {
+  __messagesToVsCode: unknown[];
+  acquireVsCodeApi: () => {
+    postMessage: (msg: unknown) => void;
+    getState: () => Record<string, unknown>;
+    setState: (state: Record<string, unknown>) => void;
+  };
+}
 
 test.describe('vibeCodeEase Webview UI (実画面 E2E テスト)', () => {
   test.beforeEach(async ({ page }) => {
-    // ページロード前に VS Code API をブラウザの window オブジェクトに注入
     await page.addInitScript(() => {
-      (window as any).__messagesToVsCode = [];
-      (window as any).acquireVsCodeApi = () => ({
-        postMessage: (msg: any) => {
-          (window as any).__messagesToVsCode.push(msg);
+      const mockWin = window as unknown as MockWindow;
+      mockWin.__messagesToVsCode = [];
+      mockWin.acquireVsCodeApi = () => ({
+        postMessage: (msg: unknown) => {
+          mockWin.__messagesToVsCode.push(msg);
         },
         getState: () => ({}),
         setState: () => {}
@@ -17,119 +26,89 @@ test.describe('vibeCodeEase Webview UI (実画面 E2E テスト)', () => {
     await page.goto('/');
   });
 
-  test('画面が正常に表示され、GET_SETTINGS が送信されること', async ({ page }) => {
-    // ヘッダータイトルの確認
-    const heading = page.locator('h1');
-    await expect(heading).toHaveText('✨ vibeCodeEase');
+  test('初期起動時に ready コマンドが送信され、ドキュメント同期後にミラーエディタが表示されること', async ({ page }) => {
+    await expect(page.getByText('Waiting for document sync...')).toBeVisible();
 
-    // プリセットセクションの確認
-    await expect(page.locator('text=🎓 学習モード (Learning)')).toBeVisible();
-    await expect(page.locator('text=⚡ フローモード (Flow)')).toBeVisible();
-    await expect(page.locator('text=🛠️ 職人モード (Zen)')).toBeVisible();
-    await expect(page.locator('text=⚙️ カスタム調整 (Custom)')).toBeVisible();
+    const messages = await page.evaluate(() => (window as unknown as MockWindow).__messagesToVsCode);
+    expect(messages).toEqual(expect.arrayContaining([{ command: 'ready' }]));
 
-    // 起動時に GET_SETTINGS が送信されたか
-    const messages = await page.evaluate(() => (window as any).__messagesToVsCode);
-    expect(messages).toEqual(
-      expect.arrayContaining([{ command: 'GET_SETTINGS' }])
-    );
-  });
-
-  test('プリセットカードをクリックしてモードを切り替えられること', async ({ page }) => {
-    // 「⚡ フローモード」をクリック
-    const flowCard = page.locator('.preset-card', { hasText: 'フローモード' });
-    await flowCard.click();
-
-    // active クラスが付くことを確認
-    await expect(flowCard).toHaveClass(/active/);
-
-    // 「🛠️ 職人モード」をクリック
-    const zenCard = page.locator('.preset-card', { hasText: '職人モード' });
-    await zenCard.click();
-
-    await expect(zenCard).toHaveClass(/active/);
-    await expect(flowCard).not.toHaveClass(/active/);
-
-    // VS Code へ SET_PRESET メッセージが送信されたことを確認
-    const messages = await page.evaluate(() => (window as any).__messagesToVsCode);
-    expect(messages).toEqual(
-      expect.arrayContaining([
-        { command: 'SET_PRESET', payload: 'FLOW' },
-        { command: 'SET_PRESET', payload: 'ZEN' }
-      ])
-    );
-  });
-
-  test('スライダーを操作するとカスタムモードになり設定値が送信されること', async ({ page }) => {
-    // 最初のスライダー（タイポ）を操作
-    const firstSlider = page.locator('input[type="range"]').first();
-    await firstSlider.fill('0.95');
-
-    // カスタム調整カードが active になることを確認
-    const customCard = page.locator('.preset-card', { hasText: 'カスタム調整' });
-    await expect(customCard).toHaveClass(/active/);
-
-    // UPDATE_PREFERENCE_VALUE が送信されたことを確認
-    const messages = await page.evaluate(() => (window as any).__messagesToVsCode);
-    expect(messages).toEqual(
-      expect.arrayContaining([
-        {
-          command: 'UPDATE_PREFERENCE_VALUE',
-          payload: { category: 'SYNTAX_TYPO', value: 0.95 }
-        }
-      ])
-    );
-  });
-
-  test('解析ボタンのクリックからプラン表示・承認までの一連のフローが動くこと', async ({ page }) => {
-    // 「現在のファイルを解析」ボタンをクリック
-    const analyzeBtn = page.getByRole('button', { name: /現在のファイルを解析/ });
-    await analyzeBtn.click();
-
-    // ANALYZE_CURRENT_FILE が送信されたことを確認
-    let messages = await page.evaluate(() => (window as any).__messagesToVsCode);
-    expect(messages).toEqual(
-      expect.arrayContaining([{ command: 'ANALYZE_CURRENT_FILE' }])
-    );
-
-    // 拡張機能からプランデータを受信した状況をシミュレート
     await page.evaluate(() => {
       window.dispatchEvent(
         new MessageEvent('message', {
           data: {
-            type: 'INTERVENTION_PLAN',
-            payload: {
-              summary: 'タイポ1件の自動修正を提案します',
-              edits: [
-                {
-                  startLine: 0,
-                  startCharacter: 0,
-                  endLine: 0,
-                  endCharacter: 7,
-                  newText: 'function',
-                  category: 'SYNTAX_TYPO',
-                  reason: 'functon を修正'
-                }
-              ]
-            }
+            type: 'SYNC_DOCUMENT',
+            fileName: '/workspace/src/index.ts',
+            text: 'functon greet() {\n  return "hello";\n}'
+          }
+        })
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'UPDATE_INTERVENTIONS',
+            interventions: [
+              {
+                id: 'proposal-1',
+                range: { start: { line: 0, character: 0 }, end: { line: 0, character: 7 } },
+                originalText: 'functon',
+                replacementText: 'function',
+                message: '予約語 function のタイポを修正します'
+              }
+            ]
           }
         })
       );
     });
 
-    // プランセクションが表示されること
-    await expect(page.locator('text=📋 介入プラン')).toBeVisible();
-    await expect(page.locator('text=タイポ1件の自動修正を提案します')).toBeVisible();
-    await expect(page.locator('text=functon を修正')).toBeVisible();
+    await expect(page.getByText('index.ts')).toBeVisible();
+    await expect(page.getByTitle('View AI Proposal')).toBeVisible();
 
-    // 「承認して適用」ボタンをクリック
-    const applyBtn = page.getByRole('button', { name: '承認して適用' });
-    await applyBtn.click();
+    await page.getByTitle('View AI Proposal').click();
+    await expect(page.getByText('予約語 function のタイポを修正します')).toBeVisible();
 
-    // APPLY_PLAN が送信されたことを確認
-    messages = await page.evaluate(() => (window as any).__messagesToVsCode);
-    expect(messages).toEqual(
-      expect.arrayContaining([{ command: 'APPLY_PLAN' }])
+    await page.getByRole('button', { name: '[反映 (Accept)]' }).click();
+    const updatedMessages = await page.evaluate(() => (window as unknown as MockWindow).__messagesToVsCode);
+    expect(updatedMessages).toEqual(
+      expect.arrayContaining([
+        {
+          command: 'apply_intervention',
+          id: 'proposal-1',
+          newText: 'function',
+          range: { start: { line: 0, character: 0 }, end: { line: 0, character: 7 } }
+        }
+      ])
     );
   });
+
+  test('設定タブで API キーのフォーカス後に未入力でフォーカスを外しても既存キーが消去されないこと', async ({ page }) => {
+    await page.evaluate(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'SYNC_SETTINGS',
+            hasApiKey: true,
+            apiKeyLength: 10,
+            interventionLevel: 'Level 2 (Refactoring)',
+            frequency: 'onSave',
+            intervalSeconds: 15,
+            model: 'gemini-3.5-flash-lite'
+          }
+        })
+      );
+    });
+
+    await page.getByRole('button', { name: '[⚙️ Settings]' }).click();
+    await expect(page.getByText('✅ APIキー設定済み')).toBeVisible();
+
+    const apiKeyInput = page.locator('input[type="password"]');
+    await apiKeyInput.focus();
+    await apiKeyInput.blur();
+
+    const messages = await page.evaluate(() => (window as unknown as MockWindow).__messagesToVsCode);
+    const apiKeyCommands = messages.filter(
+      (m) => typeof m === 'object' && m !== null && (m as { command?: string }).command === 'update_api_key'
+    );
+    expect(apiKeyCommands).toHaveLength(0);
+  });
 });
+

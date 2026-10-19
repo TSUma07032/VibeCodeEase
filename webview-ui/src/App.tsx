@@ -3,11 +3,13 @@
  * Extensionからのイベントを購読して状態（ドキュメント内容・提案一覧）を管理・分配する責務を持つ。
  */
 import { useEffect, useState } from 'react';
-import type { ExtensionToWebviewMessage, WebviewIntervention, AiInterventionLevel } from './types';
-import { TabBar } from './components/TabBar';
+import type { ExtensionToWebviewMessage, WebviewIntervention, AiInterventionLevel, LearningSessionState } from './types';
+import { TabBar, type TabType } from './components/TabBar';
 import { MirrorEditor } from './components/MirrorEditor';
 import { SettingsPanel } from './components/SettingsPanel';
 import { DashboardPanel } from './components/DashboardPanel';
+import { LearningScaffoldingPanel } from './components/LearningScaffoldingPanel';
+import { LearningDebugPanel } from './components/scaffolding/LearningDebugPanel';
 
 import { vscode } from './utils/vscode';
 
@@ -23,7 +25,11 @@ function App() {
     /**
      * [Why/Intent] ユーザーが閲覧している現在のタブ状態。
      */
-    const [activeTab, setActiveTab] = useState<'code' | 'settings' | 'dashboard'>('code');
+    const [activeTab, setActiveTab] = useState<TabType>('code');
+    /**
+     * [Why/Intent] 学習支援セッションの最新状態を保持し、ScaffoldingパネルおよびDebugインスペクタへ分配するため。
+     */
+    const [learningState, setLearningState] = useState<LearningSessionState | null>(null);
     /**
      * [Why/Intent] APIキーはセキュリティ上Webviewには送信せず、設定の有無（boolean）のみを保持してUIを切り替えるため。
      */
@@ -47,8 +53,15 @@ function App() {
      * アンマウント時に解除することでメモリリークを防ぎ、Extensionとの通信を維持する。
      */
     useEffect(() => {
-        const handleMessage = (event: MessageEvent<ExtensionToWebviewMessage>) => {
+        const handleMessage = (event: MessageEvent<ExtensionToWebviewMessage | { type: 'SYNC_SESSION_STATE'; payload: LearningSessionState }>) => {
             const message = event.data;
+            if (!message || typeof message !== 'object') {
+                return;
+            }
+            if ('type' in message && message.type === 'SYNC_SESSION_STATE') {
+                setLearningState(message.payload);
+                return;
+            }
             switch (message.type) {
                 case 'SYNC_DOCUMENT':
                     setFileName(message.fileName);
@@ -192,6 +205,12 @@ function App() {
                         response={llmResponse}
                         logs={llmErrorLogs}
                     />
+                )}
+                {activeTab === 'learning' && (
+                    <LearningScaffoldingPanel vscode={vscode} isActive={activeTab === 'learning'} initialState={learningState} />
+                )}
+                {activeTab === 'learning-debug' && (
+                    <LearningDebugPanel state={learningState} vscode={vscode} />
                 )}
             </div>
         </div>

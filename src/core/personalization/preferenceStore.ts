@@ -1,9 +1,18 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type * as vscode from 'vscode';
 import type { PersonalizationProfile } from '../../types/personalization';
 import type { EmbeddingProvider } from './embedding/embeddingProvider';
 import { meanVector } from './vectorMath';
+
+function filterConsistentVectors(vectors: Array<number[] | undefined>): number[][] {
+    const nonEmpty = vectors.filter((v): v is number[] => Array.isArray(v) && v.length > 0);
+    if (nonEmpty.length === 0) {
+        return [];
+    }
+    const targetDim = nonEmpty[nonEmpty.length - 1].length;
+    return nonEmpty.filter((v) => v.length === targetDim);
+}
 
 export class PreferenceStore {
     private readonly filePath: string;
@@ -53,16 +62,19 @@ export class PreferenceStore {
 
             // Check if provider changed
             let needsReEmbed = false;
-            if (
-                data.likedRecords.length > 0 &&
-                data.likedRecords[0].providerId !== this.embeddingProvider.providerId
-            ) {
-                needsReEmbed = true;
-            } else if (
-                data.dislikedRecords.length > 0 &&
-                data.dislikedRecords[0].providerId !== this.embeddingProvider.providerId
-            ) {
-                needsReEmbed = true;
+            const currentProviderId = this.embeddingProvider.providerId;
+            if (currentProviderId && currentProviderId !== 'proxy-auto') {
+                if (
+                    data.likedRecords.length > 0 &&
+                    data.likedRecords[0].providerId !== currentProviderId
+                ) {
+                    needsReEmbed = true;
+                } else if (
+                    data.dislikedRecords.length > 0 &&
+                    data.dislikedRecords[0].providerId !== currentProviderId
+                ) {
+                    needsReEmbed = true;
+                }
             }
 
             this.profile = data;
@@ -103,19 +115,18 @@ export class PreferenceStore {
     private updateCentroids(): void {
         const p = this.profile;
 
-        const likedVecs = p.likedRecords.map((r) => r.embedding).filter((v) => v && v.length > 0);
+        const likedVecs = filterConsistentVectors(p.likedRecords.map((r) => r.embedding));
         p.positiveProfile = likedVecs.length > 0 ? meanVector(likedVecs) : undefined;
 
-        const dislikedVecs = p.dislikedRecords
-            .map((r) => r.embedding)
-            .filter((v) => v && v.length > 0);
+        const dislikedVecs = filterConsistentVectors(p.dislikedRecords.map((r) => r.embedding));
         p.negativeProfile = dislikedVecs.length > 0 ? meanVector(dislikedVecs) : undefined;
 
-        const recentVecs = p.likedRecords
-            .sort((a, b) => b.createdAt - a.createdAt)
-            .slice(0, this.MAX_RECENT)
-            .map((r) => r.embedding)
-            .filter((v) => v && v.length > 0);
+        const recentVecs = filterConsistentVectors(
+            [...p.likedRecords]
+                .sort((a, b) => b.createdAt - a.createdAt)
+                .slice(0, this.MAX_RECENT)
+                .map((r) => r.embedding),
+        );
 
         p.recentPreferences = recentVecs.length > 0 ? meanVector(recentVecs) : undefined;
     }
@@ -123,12 +134,14 @@ export class PreferenceStore {
     public enforceLimits(): void {
         const p = this.profile;
         if (p.likedRecords.length > this.MAX_LIKED) {
-            p.likedRecords.sort((a, b) => b.createdAt - a.createdAt);
-            p.likedRecords = p.likedRecords.slice(0, this.MAX_LIKED);
+            p.likedRecords = [...p.likedRecords]
+                .sort((a, b) => b.createdAt - a.createdAt)
+                .slice(0, this.MAX_LIKED);
         }
         if (p.dislikedRecords.length > this.MAX_DISLIKED) {
-            p.dislikedRecords.sort((a, b) => b.createdAt - a.createdAt);
-            p.dislikedRecords = p.dislikedRecords.slice(0, this.MAX_DISLIKED);
+            p.dislikedRecords = [...p.dislikedRecords]
+                .sort((a, b) => b.createdAt - a.createdAt)
+                .slice(0, this.MAX_DISLIKED);
         }
     }
 

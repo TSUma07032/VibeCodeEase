@@ -27,10 +27,10 @@ export function activate(context: vscode.ExtensionContext): void {
     const diagnosticsService = new DiagnosticsService();
     const llmBackgroundService = new LlmBackgroundService(context.secrets);
 
-    const getApiKey = async () => {
+    const getApiKey = async (): Promise<string | undefined> => {
         let key = await context.secrets.get('vibecodeease.geminiApiKey');
         key ??= vscode.workspace.getConfiguration('vibecodeease').get<string>('geminiApiKey');
-        return key as string;
+        return key;
     };
     const personalizationService = new PersonalizationService({
         globalStorageUri: context.globalStorageUri,

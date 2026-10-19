@@ -21,7 +21,7 @@ export class GlobalState {
     private _presetMode: PresetMode = DEFAULT_PRESET_MODE;
     private _preferences: UserPreferenceProfile = { ...DEFAULT_USER_PREFERENCES };
     private _llmProvider: LlmProvider = 'gemini';
-    private _llmModel: string = 'gemini-3.6-flash';
+    private _llmModel: string = 'gemini-3.5-flash-lite';
     private _llmTriggerMode: LlmTriggerMode = 'on-save';
     private _editorAppealLevel: EditorAppealLevel = 'medium';
     private _interventionLevelCache = new Map<PainCategory, InterventionLevel>();
@@ -69,7 +69,7 @@ export class GlobalState {
         this._llmModel =
             config.get<string>('llmModel') ??
             context.globalState.get<string>('vibecodeease.llmModel') ??
-            'gemini-3.6-flash';
+            'gemini-3.5-flash-lite';
         this._llmTriggerMode =
             context.globalState.get<LlmTriggerMode>('vibecodeease.llmTriggerMode') ?? 'on-save';
     }
