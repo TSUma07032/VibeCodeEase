@@ -315,9 +315,6 @@ export class WebviewMessageHandler {
     public async sendCurrentSettings(webview: vscode.Webview): Promise<void> {
         const state = GlobalState.getInstance();
         let apiKey = await this.secrets.get('vibecodeease.geminiApiKey');
-        if (!apiKey) {
-            apiKey = vscode.workspace.getConfiguration('vibecodeease').get<string>('geminiApiKey');
-        }
 
         // ルールカタログ: DEFAULT_TYPO_RULES を軽量 RuleSummary にシリアライズ
         const activeRules: RuleSummary[] = DEFAULT_TYPO_RULES.map(r => ({
@@ -362,9 +359,6 @@ export class WebviewMessageHandler {
                     const state = GlobalState.getInstance();
                     if (state.llmProvider === 'gemini') {
                         let apiKey = await this.secrets.get('vibecodeease.geminiApiKey');
-                        if (!apiKey) {
-                            apiKey = vscode.workspace.getConfiguration('vibecodeease').get<string>('geminiApiKey');
-                        }
                         if (!apiKey) {
                             throw new Error('Gemini APIキーが設定されていません。設定(Settings)またはサイドバーからGemini APIキーを設定してください。');
                         }
