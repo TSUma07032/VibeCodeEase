@@ -34,7 +34,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const { PersonalizationService } = require('./core/personalization/personalizationService');
 	const { GeminiClient } = require('./core/llm/geminiClient');
 	const { VscodeLmClient } = require('./core/llm/vscodeLmClient');
-	const getApiKey = async () => { let key = await context.secrets.get('vibecodeease.geminiApiKey'); if (!key) key = vscode.workspace.getConfiguration('vibecodeease').get('geminiApiKey'); return key; };
+	const getApiKey = async () => { return await context.secrets.get('vibecodeease.geminiApiKey'); };
 	const personalizationService = new PersonalizationService(context.globalStorageUri, new GeminiClient(), new VscodeLmClient(), getApiKey);
 	personalizationService.initialize();
 

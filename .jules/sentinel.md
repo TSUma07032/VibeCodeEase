@@ -9,3 +9,7 @@
 **脆弱性:** `GeminiClient` のAPIリクエスト失敗時のエラーメッセージに、APIからの生のレスポンスボディ (`details`) が含まれていました。もしレスポンスボディ内にAPIキーやリクエスト時の機密データが含まれていた場合、エラーメッセージとして漏洩する可能性がありました。
 **学び:** 外部APIの呼び出しにおいて、エラーハンドリング時に生のレスポンスボディをそのままUIやログに出力すると、予期せぬ情報漏洩（Information Leakage）を引き起こす可能性があります。
 **予防策:** エラーメッセージにはステータスコードや一般的な解決策のみを含め、機密データを含みうる生のレスポンスボディは安全に破棄するか、マスク処理を行ってから出力する必要があります。
+## 2024-11-20 - [Critical] Prevent API Key Leakage via settings.json
+**脆弱性:** `package.json` の `configuration` に `vibecodeease.geminiApiKey` が定義されており、`vscode.workspace.getConfiguration().get()` を通じて読み込まれていました。これにより、ユーザーのAPIキーがワークスペースの `settings.json` に平文で保存され、漏洩するリスクがありました。
+**学び:** 拡張機能において、APIキー等のシークレット情報を `package.json` の `configuration` に定義すると、設定ファイルに平文で保存されるため危険です。
+**予防策:** 認証情報の管理には必ず `vscode.SecretStorage` (`context.secrets`) のみを使用し、`package.json` に設定項目を設けないようにします。
