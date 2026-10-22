@@ -1,0 +1,9 @@
+💡 **実施内容 (What):**
+`src/commands.ts` 内の `vscode.window.showQuickPick`（モード切替）および `vscode.window.showInputBox`（APIキー設定）に `title` プロパティを追加しました。
+
+🎯 **理由・目的 (Why):**
+入力や選択を求めるUIにおいて、どの拡張機能からの要求かが不明確だとユーザーを混乱させるため。`title` を明示することでコンテキストを与え、アクセシビリティと安心感を向上させます。
+
+📸 **Before/After:**
+- Before: タイトルなしでプレースホルダーやプロンプトのみが表示されていた。
+- After: ウィンドウ上部に「vibeCodeEase: 動作モード選択」等のタイトルが表示されるようになった。
