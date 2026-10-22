@@ -37,6 +37,7 @@ function registerSwitchModeCommand(actionLogService: ActionLogService): vscode.D
         ];
 
         const selected = await vscode.window.showQuickPick(items, {
+            title: 'vibeCodeEase: 動作モード選択',
             placeHolder: 'vibeCodeEase の動作モードを選択してください',
         });
 
@@ -59,6 +60,7 @@ function registerSwitchModeCommand(actionLogService: ActionLogService): vscode.D
 function registerConfigureKeyCommand(context: vscode.ExtensionContext): vscode.Disposable {
     return vscode.commands.registerCommand('vibecodeease.configureGeminiKey', async () => {
         const key = await vscode.window.showInputBox({
+            title: 'vibeCodeEase: Gemini API設定',
             prompt: 'Gemini API キーを入力してください（空欄で削除）',
             password: true,
             ignoreFocusOut: true,
