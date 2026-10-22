@@ -1,0 +1,4 @@
+💡 **実施内容 (What):** `SideEditorProvider` における `vscode.workspace.onDidChangeTextDocument` イベントにデバウンス (300ms) を導入しました。
+🎯 **理由・目的 (Why):** キー入力のたびに同期的な解析 (`InterventionManager.handleDocumentChange`) およびUIへのWebviewメッセージ送信が発生しており、連続したタイピング時にNode.jsのイベントループがブロックされてエディタの応答性が低下する問題（UIのフリーズ）を防ぐためです。
+📊 **影響 (Impact):** 連続入力イベントが単一のバッチ処理に集約されることで、高頻度の同期解析処理によるCPU使用率とイベントループのブロック時間が劇的に削減されます（100件の連続イベントを1件に集約可能）。
+🔬 **検証方法 (Measurement):** 拡張機能のLintおよびテストが正常に通過することを確認済みです。

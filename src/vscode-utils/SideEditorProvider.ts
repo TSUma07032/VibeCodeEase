@@ -133,6 +133,9 @@ export class SideEditorProvider implements vscode.Disposable {
         }
     }
 
+    private _documentChangeDebounceTimer: NodeJS.Timeout | undefined;
+    private _pendingChanges: vscode.TextDocumentContentChangeEvent[] = [];
+
     private registerListeners(): void {
         vscode.window.onDidChangeActiveTextEditor(
             (editor) => {
@@ -151,9 +154,22 @@ export class SideEditorProvider implements vscode.Disposable {
                 }
                 const doc = event.document;
                 if (doc.uri.toString() === this._currentDocumentUri?.toString()) {
-                    InterventionManager.handleDocumentChange(event);
-                    this.sendUpdateInterventions(doc);
-                    this.sendSyncDocument(doc.fileName, doc.getText());
+                    this._pendingChanges.push(...event.contentChanges);
+                    if (this._documentChangeDebounceTimer) {
+                        clearTimeout(this._documentChangeDebounceTimer);
+                    }
+                    // ⚡ Bolt: 頻繁なテキスト入力イベントをデバウンスし、同期的な解析処理によるイベントループのブロックを軽減
+                    this._documentChangeDebounceTimer = setTimeout(() => {
+                        const syntheticEvent = {
+                            document: doc,
+                            contentChanges: this._pendingChanges,
+                            reason: event.reason,
+                        };
+                        InterventionManager.handleDocumentChange(syntheticEvent);
+                        this.sendUpdateInterventions(doc);
+                        this.sendSyncDocument(doc.fileName, doc.getText());
+                        this._pendingChanges = [];
+                    }, 300);
                 }
             },
             null,
