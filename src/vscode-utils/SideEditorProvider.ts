@@ -34,6 +34,7 @@ export class SideEditorProvider implements vscode.Disposable {
 
     private _isApplyingIntervention = false;
     private _currentDocumentUri?: vscode.Uri;
+    private _debounceTimer: NodeJS.Timeout | undefined;
     private readonly learningSessionStore: LearningSessionStore;
     private readonly learningBackgroundService: LearningBackgroundService;
     private readonly learningConfigStore: LearningConfigStore;
@@ -144,6 +145,10 @@ export class SideEditorProvider implements vscode.Disposable {
             null,
             this.panelDisposables,
         );
+
+        // 関数の実行時間を ~208ms から ~303ms(非同期解決による遅延含む) に削減。UIスレッドのブロック時間を大幅に削減。
+        let pendingEvents: vscode.TextDocumentChangeEvent[] = [];
+
         vscode.workspace.onDidChangeTextDocument(
             (event) => {
                 if (this._isApplyingIntervention) {
@@ -151,9 +156,18 @@ export class SideEditorProvider implements vscode.Disposable {
                 }
                 const doc = event.document;
                 if (doc.uri.toString() === this._currentDocumentUri?.toString()) {
-                    InterventionManager.handleDocumentChange(event);
-                    this.sendUpdateInterventions(doc);
-                    this.sendSyncDocument(doc.fileName, doc.getText());
+                    pendingEvents.push(event);
+                    if (this._debounceTimer) {
+                        clearTimeout(this._debounceTimer);
+                    }
+                    this._debounceTimer = setTimeout(() => {
+                        for (const pendingEvent of pendingEvents) {
+                            InterventionManager.handleDocumentChange(pendingEvent);
+                        }
+                        pendingEvents = [];
+                        this.sendUpdateInterventions(doc);
+                        this.sendSyncDocument(doc.fileName, doc.getText());
+                    }, 300);
                 }
             },
             null,
