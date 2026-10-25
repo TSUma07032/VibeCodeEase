@@ -287,12 +287,18 @@ export class LlmBackgroundService implements vscode.Disposable {
         apiKey?: string,
     ): Promise<void> {
         this._onDidStartAnalysis.fire();
-        const statusBarDisposable = vscode.window.setStatusBarMessage(
-            '$(sync~spin) vibeCodeEase: AI 解析中...',
-        );
 
         try {
-            const plan = await this.executeLlmPlan(document, token, apiKey);
+            const plan = await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Window,
+                    title: 'vibeCodeEase: AI 解析中...',
+                },
+                async () => {
+                    return this.executeLlmPlan(document, token, apiKey);
+                },
+            );
+
             if (token.isCancellationRequested) {
                 this._status = 'idle';
                 this.onDidUpdateDashboard.fire({ type: 'LLM_STATUS_UPDATE', status: 'idle' });
@@ -302,7 +308,6 @@ export class LlmBackgroundService implements vscode.Disposable {
         } catch (error) {
             this.handleAnalysisError(error, token);
         } finally {
-            statusBarDisposable.dispose();
             this._onDidCompleteAnalysis.fire(document.uri);
         }
     }

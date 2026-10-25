@@ -31,3 +31,6 @@
 ## 2026-10-22 - Add title to QuickPick and InputBox
 **学び:** `showInputBox` や `showQuickPick` で入力や選択を求める際、`title` が無いと、どの拡張機能がそれを要求しているのかユーザーには分からず混乱を招く。`title` プロパティを追加することでコンテキストが明確になり、ユーザーの安心感とアクセシビリティが向上する。
 **アクション:** `vscode.window.showInputBox` や `vscode.window.showQuickPick` を使用する際は、必ず `title` プロパティを設定し、要求元の拡張機能と目的を明示する。
+## 2026-10-25 - LLM API呼び出しに進捗インジケータを追加
+**学び:** 非同期で行われるLLM API解析の実行中など、数秒かかる処理において、ステータスバーのテキスト変更（`setStatusBarMessage`）だけでは視認性が低く、処理が進行中なのかフリーズしているのかユーザーに不安を与える。
+**アクション:** ウィンドウレベルのネイティブなローディングスピナー（`vscode.window.withProgress` と `ProgressLocation.Window` の組み合わせ）を使用することで、エディタのフローを邪魔せずに、処理中であることを明確かつ適切に伝える。
