@@ -123,16 +123,13 @@ export class LlmBackgroundService implements vscode.Disposable {
         this.onDidUpdateDashboard.fire({ type: 'LLM_DASHBOARD_INIT', ...this.getDashboardState() });
     }
 
-    /** [Why/Intent] Geminiプロバイダ利用時に必要なAPIキーをSecretStorageおよび設定からフォールバック取得する */
+    /** [Why/Intent] Geminiプロバイダ利用時に必要なAPIキーをSecretStorageからのみ取得する */
     private async prepareApiKey(provider: string): Promise<string | undefined> {
         if (provider !== 'gemini') {
             return undefined;
         }
-        const secretKey = await this.secrets.get('vibecodeease.geminiApiKey');
-        return (
-            secretKey ??
-            vscode.workspace.getConfiguration('vibecodeease').get<string>('geminiApiKey')
-        );
+        // 🛡️ Sentinel: APIキーは平文の設定ファイル (settings.json) からの取得を禁止し、SecretStorageに限定する
+        return await this.secrets.get('vibecodeease.geminiApiKey');
     }
 
     /** [Why/Intent] ユーザー設定のプロバイダに応じたプラン作成処理へ委譲する */

@@ -120,10 +120,10 @@ export class LlmInterventionService {
      */
     public async requestStructuredOutput(options: RequestStructuredOutputOptions): Promise<string> {
         let apiKey = options.apiKey;
+        // 🛡️ Sentinel: APIキーは平文の設定ファイルからの取得を禁止し、SecretStorageに限定する
         if (!apiKey && this.secrets) {
             apiKey = await this.secrets.get('vibecodeease.geminiApiKey');
         }
-        apiKey ??= vscode.workspace.getConfiguration('vibecodeease').get<string>('geminiApiKey');
         if (!apiKey) {
             throw new Error('API Key is missing');
         }

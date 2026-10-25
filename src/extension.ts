@@ -28,9 +28,8 @@ export function activate(context: vscode.ExtensionContext): void {
     const llmBackgroundService = new LlmBackgroundService(context.secrets);
 
     const getApiKey = async (): Promise<string | undefined> => {
-        let key = await context.secrets.get('vibecodeease.geminiApiKey');
-        key ??= vscode.workspace.getConfiguration('vibecodeease').get<string>('geminiApiKey');
-        return key;
+        // 🛡️ Sentinel: APIキーは平文の設定ファイルからの取得を禁止し、SecretStorageに限定する
+        return await context.secrets.get('vibecodeease.geminiApiKey');
     };
     const personalizationService = new PersonalizationService({
         globalStorageUri: context.globalStorageUri,
