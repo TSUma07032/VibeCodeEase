@@ -1,15 +1,9 @@
-💡 **実施内容 (What):**
-- ステータスバーのツールチップを `vscode.MarkdownString` を用いたリッチな表示に変更
-- Gemini APIキー入力時の InputBox にわかりやすいプレースホルダー (`例: AIzaSy...`) を追加
-- コマンド経由でのコード適用 (`vibecodeease.applyIntervention`) 成功時に、邪魔にならないステータスバー通知を追加
+💡 実施内容 (What):
+- `src/extension.ts` 内の `vibecodeease.helloWorld` コマンドにおける通知を `showInformationMessage` から `setStatusBarMessage` に変更しました。
 
-🎯 **理由・目的 (Why):**
-- カスタムモード時の設定値（複数項目）が1行のプレーンテキストで表示され視認性が低かったため、Markdownで整理・構造化して読みやすくした。
-- APIキーの入力形式の例を示すことで、開発者が迷わず入力できるようにした。
-- コードの適用が成功したかどうかのフィードバックが欠落していたため、集中を妨げないステータスバーメッセージで状態を伝達するようにした。
+🎯 理由・目的 (Why):
+- ユーザーの作業を中断させるポップアップ通知を控えめなステータスバーメッセージに変更することで、開発者のフローを阻害しない直感的で快適なUXを提供するため。
 
-📸 **Before/After:**
-- [Before] ツールチップ: `vibeCodeEase: カスタム設定 ( SYNTAX_TYPO: 0.8, ... ) - クリックで変更`
-- [After] ツールチップ: Markdownのリスト形式や太字、アイコンを使用した構造的な表示
-- [Before] InputBox プレースホルダー: なし
-- [After] InputBox プレースホルダー: `例: AIzaSy...`
+📸 Before/After:
+- **Before:** `vscode.window.showInformationMessage('Hello World from vibeCodeEase!');`
+- **After:** `vscode.window.setStatusBarMessage('$(info) Hello World from vibeCodeEase!', 3000);`

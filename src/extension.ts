@@ -103,7 +103,7 @@ function registerExtensionCommands(
 ): void {
     context.subscriptions.push(
         vscode.commands.registerCommand('vibecodeease.helloWorld', () => {
-            vscode.window.showInformationMessage('Hello World from vibeCodeEase!');
+            vscode.window.setStatusBarMessage('$(info) Hello World from vibeCodeEase!', 3000);
         }),
         vscode.commands.registerCommand('vibecodeease.openSideEditor', () => {
             void sideEditorProvider.openSideEditor();
