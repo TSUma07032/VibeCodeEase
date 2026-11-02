@@ -10,8 +10,9 @@ suite('PromptBuilder Test Suite', () => {
     } as unknown as vscode.TextDocument;
 
     test('スキーマに必要なプロパティが定義されていること', () => {
-        assert.strictEqual(INTERVENTION_RESPONSE_SCHEMA.type, 'OBJECT');
-        assert.deepStrictEqual(INTERVENTION_RESPONSE_SCHEMA.required, ['summary', 'edits']);
+        const schema = INTERVENTION_RESPONSE_SCHEMA;
+        assert.strictEqual((schema as { type?: string }).type, 'object');
+        assert.deepStrictEqual((schema as { required?: string[] }).required, ['summary', 'edits']);
     });
 
     test('ドキュメント情報とコンテンツを含むプロンプトが生成されること', () => {

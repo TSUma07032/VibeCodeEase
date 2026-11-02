@@ -1,11 +1,13 @@
-💡 実施内容 (What):
-`InterventionManager.handleDocumentChange` 内のイベント処理ループにて、`includes` の代わりに `indexOf` を使用するよう変更し、さらに重複キャッシュ破棄判定時の結果配列の走査において早期ブレイクを追加しました。
+🎯 消化したTODO:
+- [x] ZodスキーマからJSON Schemaを自動生成し、OpenAI等の直接APIのStructured Outputs（strict: true）へ渡す。
 
-🎯 理由・目的 (Why):
-ドキュメントの変更イベントは非常に高頻度で発火するため、僅かな最適化もイベントループのブロックを防止し、エディタの応答性を高める重要な役割を持ちます。
+💡 実装内容 (What):
+- `zod-to-json-schema` パッケージを用いて、`src/core/llm/promptBuilder.ts` でハードコードされていた `INTERVENTION_RESPONSE_SCHEMA` を、`LlmInterventionPlanSchema` (Zod) からの自動生成に置き換えました。
 
-📊 影響 (Impact):
-対象処理の実行時間を約 212ms から 154ms に短縮（大規模な変更・解析結果に対するベンチマーク）。
+🔗 活用した基盤:
+- `src/types/llmIntervention.ts` に定義済みの `LlmInterventionPlanSchema` を活用。
 
-🔬 検証方法 (Measurement):
-`npm run test` が全て通過することを確認。
+📝 次のステップ:
+- [ ] 直接API用のLLMプロバイダー抽象化を追加し、VS Code Language Model APIと切り替え可能にする。
+- [ ] Zodによるレスポンス再検証と、スキーマ不一致・拒否応答・タイムアウト時のエラー処理を追加する。
+- [ ] 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。
