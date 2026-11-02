@@ -43,3 +43,7 @@
 ## 2024-10-27 - 編集イベントループの不要な配列割当と再計算を排除
 **学び:** キャッシュ無効化のための判定ロジック(`change.text.split('\n')`による行数計算や`includes`)がループ内で重複計算されており、無駄な文字列表現の生成とO(n^2)の遅延が発生していた。
 **アクション:** イベントループ等のホットパス内では高コストな配列割当を避け、`indexOf`を用いた軽量な走査を行う。また、ループ内で不変な条件は必ず外側にホイストし、無駄な再計算を防ぐ。
+
+## 2024-11-25 - Early Break Optimization on Cache Updates
+**学び:** `InterventionManager.handleDocumentChange`において、`includes`の使用と不要なループの走査によるパフォーマンスの低下が確認されました。ソート済みの配列の特性を活かしていない全件走査が存在していました。
+**アクション:** ホットパス内の`includes`を`indexOf`に置き換え、ソート済み配列(`results`)に対する探索では`result.range.start.line > change.range.end.line`の時点で早期に`break`を行うことで処理時間を最適化します。
