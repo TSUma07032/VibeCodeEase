@@ -1,11 +1,13 @@
-💡 **実施内容 (What):**
-`InterventionManager.handleDocumentChange` におけるキャッシュ無効化判定ロジックの改善。ループ内で不変なデータ（行追加数の計算等）のホイストと、`split('\n')` に代わる `indexOf` を用いた配列割当を伴わない行数カウントを実装しました。
+🎯 消化したTODO:
+- [x] ZodスキーマからJSON Schemaを自動生成し、OpenAI等の直接APIのStructured Outputs（strict: true）へ渡す。
 
-🎯 **理由・目的 (Why):**
-エディタのテキスト入力イベント（ホットパス）の度に実行されるため、無駄な配列確保やネストされたループ内での再計算がUIのメインスレッドをブロックし、パフォーマンス低下の要因となっていたため。
+💡 実装内容 (What):
+- `zod-to-json-schema` パッケージを用いて、`src/core/llm/promptBuilder.ts` でハードコードされていた `INTERVENTION_RESPONSE_SCHEMA` を、`LlmInterventionPlanSchema` (Zod) からの自動生成に置き換えました。
 
-📊 **影響 (Impact):**
-大量のキャッシュ・変更がある場合の判定関数の実行時間を ~33.7ms から ~6.6ms に削減。不要なガベージコレクションを抑制しました。
+🔗 活用した基盤:
+- `src/types/llmIntervention.ts` に定義済みの `LlmInterventionPlanSchema` を活用。
 
-🔬 **検証方法 (Measurement):**
-`xvfb-run -a npm test` を用いて、すべての単体テスト（InterventionEngine/InterventionManager 等）がパスし、挙動が変化していないことを確認します。
+📝 次のステップ:
+- [ ] 直接API用のLLMプロバイダー抽象化を追加し、VS Code Language Model APIと切り替え可能にする。
+- [ ] Zodによるレスポンス再検証と、スキーマ不一致・拒否応答・タイムアウト時のエラー処理を追加する。
+- [ ] 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。
