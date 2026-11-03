@@ -241,7 +241,11 @@ export class LlmBackgroundService implements vscode.Disposable {
         if (token.isCancellationRequested) {
             return;
         }
-        console.error('[LlmBackgroundService] Analysis failed:', error);
+        // 🛡️ Sentinel: 機密情報（システムプロンプトやAPIキー等）の漏洩を防ぐため、生のエラーオブジェクトではなく安全なメッセージのみをログ出力する
+        console.error(
+            '[LlmBackgroundService] Analysis failed:',
+            error instanceof Error ? error.message : String(error),
+        );
         const errorMessage = error instanceof Error ? error.message : String(error);
         this._onDidError.fire(errorMessage);
         this.showErrorMessage(errorMessage);

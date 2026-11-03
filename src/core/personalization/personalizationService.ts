@@ -195,7 +195,8 @@ export class PersonalizationService {
             try {
                 await this.updateSummaries(cts.token);
             } catch (e) {
-                console.error(e);
+                // 🛡️ Sentinel: 機密情報の漏洩を防ぐため、生のエラーオブジェクトではなく安全なメッセージのみをログ出力する
+                console.error(e instanceof Error ? e.message : String(e));
             } finally {
                 cts.dispose();
             }
