@@ -28,4 +28,6 @@ export interface AnalysisResult {
     interventions: ProposedIntervention[];
     /** 解析の出所: static=ルールベース静的解析, ast=ASTベース, llm=LLMバックグラウンド */
     source?: 'static' | 'ast' | 'llm';
+    /** キャッシュ内で一意に識別するためのID（遅延生成） */
+    issueId?: string;
 }

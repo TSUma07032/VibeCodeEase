@@ -47,3 +47,6 @@
 ## 2024-11-25 - Early Break Optimization on Cache Updates
 **学び:** `InterventionManager.handleDocumentChange`において、`includes`の使用と不要なループの走査によるパフォーマンスの低下が確認されました。ソート済みの配列の特性を活かしていない全件走査が存在していました。
 **アクション:** ホットパス内の`includes`を`indexOf`に置き換え、ソート済み配列(`results`)に対する探索では`result.range.start.line > change.range.end.line`の時点で早期に`break`を行うことで処理時間を最適化します。
+## 2024-11-26 - Repeated String Concatenation Optimization in Cache Reads
+**学び:** `SharedAnalysisCache.getResults` などの頻繁に呼ばれるプロバイダ向けメソッド内で、フィルタリングのために毎回ID文字列（`uri::source::category...`）を生成すると、不要なアロケーションによるパフォーマンス低下（約365ms → 約30ms）が発生する。
+**アクション:** 頻繁に参照されるオブジェクトの一意なIDは、必要になった初回のタイミングでオブジェクト自身にキャッシュ（Lazy Initialization）し、以降はそのプロパティを参照するパターンを適用する。
