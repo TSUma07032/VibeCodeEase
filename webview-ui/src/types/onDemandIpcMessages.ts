@@ -1,5 +1,6 @@
 /**
- * [Why/Intent] Webview側における双方向IPCメッセージ型定義。
+ * [Why/Intent] VS Code拡張機能ホストとWebviewオンデマンドサイドパネル間の
+ * 双方向IPCメッセージ型定義。
  */
 import type {
     ChatMessage,
@@ -10,8 +11,8 @@ import type {
 } from './onDemandIntervention';
 
 /**
- * [Why/Intent] VS Code拡張機能本体（Extensionホスト）からWebviewサイドパネルへ送信されるメッセージの判別共用体定義。
- * 介入詳細の展開、チャット受信、履歴状態同期、ローディング状態制御を網羅する。
+ * [Why/Intent] VS Code拡張機能ホストからWebview側へ送信されるオンデマンド通知メッセージ型群。
+ * 介入詳細展開、チャット応答、履歴状態同期、ローディング状態制御、再推敲結果更新を担う。
  */
 export type ExtensionToWebviewInterventionMessage =
     | {
@@ -23,10 +24,33 @@ export type ExtensionToWebviewInterventionMessage =
           };
       }
     | {
+          type: 'UPDATE_INTERVENTION_DETAIL';
+          payload: {
+              interventionId: string;
+              detail: InterventionDetail;
+          };
+      }
+    | {
+          type: 'SET_REFINE_LOADING';
+          payload: {
+              interventionId: string;
+              isLoading: boolean;
+              error?: string;
+          };
+      }
+    | {
           type: 'RECEIVE_CHAT_MESSAGE';
           payload: {
               interventionId: string;
               message: ChatMessage;
+          };
+      }
+    | {
+          type: 'SET_CHAT_LOADING';
+          payload: {
+              interventionId: string;
+              isLoading: boolean;
+              error?: string;
           };
       }
     | {
@@ -35,18 +59,11 @@ export type ExtensionToWebviewInterventionMessage =
               documentUri: string;
               interventions: InterventionItem[];
           };
-      }
-    | {
-          type: 'SET_CHAT_LOADING';
-          payload: {
-              interventionId: string;
-              isLoading: boolean;
-          };
       };
 
 /**
- * [Why/Intent] WebviewサイドパネルからVS Code拡張機能本体（Extensionホスト）へ送信されるメッセージの判別共用体定義。
- * 介入の適用/アンドゥ/却下、チャット送信、ペルソナ変更、能動的介入要求、パネル閉じる操作を網羅する。
+ * [Why/Intent] Webview側からVS Code拡張機能ホストへ要求を発行するオンデマンドアクションメッセージ型群。
+ * 提案適用・差分アンドゥ・提案却下・チャット送信・方針修正・ペルソナ切替・設定更新・パネルクローズを担う。
  */
 export type WebviewToExtensionInterventionMessage =
     | {
@@ -59,6 +76,31 @@ export type WebviewToExtensionInterventionMessage =
       }
     | {
           type: 'DISCARD_INTERVENTION';
+          payload: { interventionId: string };
+      }
+    | {
+          type: 'REFINE_INTERVENTION';
+          payload: {
+              interventionId: string;
+              userInstruction: string;
+              personaId: PersonaId;
+          };
+      }
+    | {
+          type: 'UPDATE_QUICK_SETTINGS';
+          payload: {
+              personaId?: PersonaId;
+              frequency?: 'manual' | 'onSave' | 'interval';
+              intervalSeconds?: number;
+              model?: string;
+          };
+      }
+    | {
+          type: 'UPDATE_API_KEY';
+          payload: { apiKey: string };
+      }
+    | {
+          type: 'REQUEST_EXPAND_DETAIL';
           payload: { interventionId: string };
       }
     | {

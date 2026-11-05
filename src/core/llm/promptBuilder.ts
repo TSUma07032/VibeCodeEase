@@ -71,6 +71,18 @@ export const CHAT_RESPONSE_SCHEMA: Record<string, unknown> = {
 };
 
 /**
+ * [Why/Intent] 変更方針修正（Refine Intervention）時にGemini APIへ渡す構造化レスポンススキーマ。
+ */
+export const REFINE_INTERVENTION_RESPONSE_SCHEMA: Record<string, unknown> = {
+    type: 'object',
+    properties: {
+        proposedCode: { type: 'string' },
+        summary: { type: 'string' },
+    },
+    required: ['proposedCode', 'summary'],
+};
+
+/**
  * [Why/Intent] プリセットモードに応じたレビュー指示文を解決するヘルパー（複雑度抑制）
  */
 function resolveModeInstruction(presetMode?: PresetMode): string {
@@ -179,6 +191,29 @@ export const PromptBuilder = {
             `提案コード:\n${detail.proposedCode}`,
             `ユーザーの質問・指示: ${userMessage}`,
             '回答は日本語で作成し、JSON形式 {"text": "あなたの返答内容"} で出力してください。',
+        ].join('\n');
+    },
+
+    /**
+     * [Why/Intent] ユーザーからの修正方針指示（「こういう方向で変えて？」）を反映し、
+     * 提案コードおよび変更理由を再推敲するためのプロンプトを生成する。
+     */
+    buildRefinePrompt(
+        personaId: PersonaId,
+        detail: InterventionDetail,
+        userInstruction: string,
+    ): string {
+        const personaPrompt = PERSONA_PROMPTS[personaId] ?? PERSONA_PROMPTS.concise;
+        return [
+            personaPrompt,
+            '対象の提案をユーザーの指示に基づいて修正・再推敲してください。',
+            `タイトル: ${detail.title}`,
+            `変更前のコード:\n${detail.originalCode}`,
+            `現在の提案コード:\n${detail.proposedCode}`,
+            `現在の変更理由: ${detail.summary}`,
+            `ユーザーからの修正指示: ${userInstruction}`,
+            '必ず以下のJSONフォーマットのみで出力してください（Markdownのコードフェンス等で囲まないでください）：',
+            '{"proposedCode": "修正後の完全なコード文字列", "summary": "修正された変更理由（日本語）"}',
         ].join('\n');
     },
 };

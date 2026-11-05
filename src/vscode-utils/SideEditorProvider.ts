@@ -17,7 +17,7 @@ import { LearningConfigStore } from '../core/scaffolding/learningConfigStore';
 import { LearningSessionStore } from '../core/scaffolding/learningSessionStore';
 import type { LearningWebviewMessage } from '../types/learningScaffolding';
 import type { LearningSettingsWebviewMessage } from '../types/learningSettings';
-import type { InterventionDetail } from '../types/onDemandIntervention';
+import type { InterventionDetail, PersonaId } from '../types/onDemandIntervention';
 import type { WebviewToExtensionInterventionMessage } from '../types/onDemandIpcMessages';
 import type { ExtensionToWebviewMessage, WebviewToExtensionMessage } from '../types/webviewMessage';
 import { dispatchLegacyCommand, fetchSideEditorSettings } from './sideEditorConfig';
@@ -41,6 +41,9 @@ const ON_DEMAND_IPC_TYPES = new Set([
     'SWITCH_PERSONA',
     'CLOSE_SIDE_PANEL',
     'REQUEST_ACTIVE_INTERVENTION',
+    'REFINE_INTERVENTION',
+    'UPDATE_QUICK_SETTINGS',
+    'UPDATE_API_KEY',
 ]);
 
 /**
@@ -108,6 +111,10 @@ export class SideEditorProvider implements vscode.Disposable {
             postMessage: (msg) => {
                 void this.panel?.webview.postMessage(msg);
             },
+            /**
+             * [Why/Intent] 対象ドキュメント内で originalCode を動的テキスト検索（indexOf）してRangeを特定し、
+             * newCode への置換 WorkspaceEdit を適用する。行編集等のズレが生じていても動的に正確な位置を特定できる。
+             */
             applyEditorEdit: async (uri, originalCode, newCode) => {
                 const doc = findTargetDocument(vscode.Uri.parse(uri));
                 if (!doc) {
@@ -126,6 +133,47 @@ export class SideEditorProvider implements vscode.Disposable {
             },
             closePanel: () => {
                 this.panel?.dispose();
+            },
+            updateQuickSettings: async (settings) => {
+                const config = vscode.workspace.getConfiguration('vibecodeease');
+                if (settings.frequency) {
+                    await config.update(
+                        'llm.syncFrequency',
+                        settings.frequency,
+                        vscode.ConfigurationTarget.Global,
+                    );
+                }
+                if (settings.intervalSeconds !== undefined) {
+                    await config.update(
+                        'llm.syncIntervalSeconds',
+                        settings.intervalSeconds,
+                        vscode.ConfigurationTarget.Global,
+                    );
+                }
+                if (settings.model) {
+                    await config.update(
+                        'llmModel',
+                        settings.model,
+                        vscode.ConfigurationTarget.Global,
+                    );
+                }
+                if (settings.personaId) {
+                    await this.context.workspaceState.update(
+                        'vibecodeease.currentPersona',
+                        settings.personaId,
+                    );
+                }
+                this.llmService.startTimerIfConfigured();
+                await this.sendSettingsSync();
+            },
+            updateApiKey: async (apiKey: string) => {
+                const repo = new LlmConfigRepository(this.context.secrets);
+                await repo.setApiKey(apiKey);
+                this.llmService.startTimerIfConfigured();
+                await this.sendSettingsSync();
+            },
+            expandDetail: async (interventionId: string) => {
+                await this.expandIntervention(interventionId);
             },
         });
     }
@@ -297,6 +345,12 @@ export class SideEditorProvider implements vscode.Disposable {
         let pendingEvents: vscode.TextDocumentChangeEvent[] = [];
 
         vscode.workspace.onDidChangeTextDocument(
+            /**
+             * [Why/Intent] ユーザーによるエディタ編集を検知し、提案の行追従・自動破棄を行うリスナー。
+             * 提案適用・差分アンドゥ実行中（`_isApplyingIntervention || onDemandIpcHandler.isApplyingIntervention`）は
+             * 自身による置換がイベントとして跳ね返ってくるため二重排他ガードで完全スキップし、循環ループを抑止する。
+             * また、300ms デバウンス処理によりキーストロークごとの高頻度な履歴更新・IPC送信負荷を緩和する。
+             */
             (event) => {
                 if (
                     this._isApplyingIntervention ||
@@ -336,6 +390,9 @@ export class SideEditorProvider implements vscode.Disposable {
             frequency: s.frequency,
             intervalSeconds: s.intervalSeconds,
             model: s.model,
+            personaId:
+                this.context.workspaceState.get<PersonaId>('vibecodeease.currentPersona') ??
+                'mentor',
         });
     }
 
@@ -495,7 +552,10 @@ export class SideEditorProvider implements vscode.Disposable {
     }
 
     /**
-     * [Why/Intent] 対象ドキュメントの最新解析結果（介入プラン）を取得し、Webview UIへ更新メッセージを送信する
+     * [Why/Intent] バックグラウンド解析キャッシュ（SharedAnalysisCache）から得られた新規介入結果を抽出し、
+     * 未登録の項目のみ InterventionHistoryStore へ永続化保存する。
+     * タイトルの45文字閾値は、狭幅になりやすいVS Codeサイドバー（Besideペイン）内での視認性確保と
+     * カード一覧でのレイアウト崩れを防ぐための省略表示（truncate）上限値として規定されている。
      */
     private syncResultsToHistoryStore(
         document: vscode.TextDocument,
@@ -506,6 +566,8 @@ export class SideEditorProvider implements vscode.Disposable {
             this.historyStore.getInterventions(docUri).map((item) => item.id),
         );
         const now = new Date().toISOString();
+        const currentPersona =
+            this.context.workspaceState.get<PersonaId>('vibecodeease.currentPersona') ?? 'mentor';
 
         for (const r of results) {
             const first = r.interventions[0];
@@ -528,7 +590,7 @@ export class SideEditorProvider implements vscode.Disposable {
                 summary: cleanReason,
                 range: r.range,
                 status: 'pending',
-                personaId: 'concise',
+                personaId: currentPersona,
                 originalCode: first.originalText,
                 proposedCode: first.replacementText,
                 createdAt: now,
@@ -539,6 +601,11 @@ export class SideEditorProvider implements vscode.Disposable {
         }
     }
 
+    /**
+     * [Why/Intent] 対象ドキュメントの最新解析結果を履歴ストアへ同期永続化し、
+     * エディタ側のインライン装飾（Decoration）の再描画コマンドを実行した上で、
+     * Webviewパネルへ最新履歴リスト（SYNC_HISTORY_STATE）および旧互換介入リストをブロードキャストする。
+     */
     public sendUpdateInterventions(document: vscode.TextDocument): void {
         const results = SharedAnalysisCache.getInstance().getResults(document);
         this.syncResultsToHistoryStore(document, results);

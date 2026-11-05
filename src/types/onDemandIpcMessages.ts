@@ -12,7 +12,7 @@ import type {
 
 /**
  * [Why/Intent] VS Code拡張機能ホストからWebview側へ送信されるオンデマンド通知メッセージ型群。
- * 介入詳細展開、チャット応答、履歴状態同期、ローディング状態制御を担う。
+ * 介入詳細展開、チャット応答、履歴状態同期、ローディング状態制御、再推敲結果更新を担う。
  */
 export type ExtensionToWebviewInterventionMessage =
     | {
@@ -24,10 +24,33 @@ export type ExtensionToWebviewInterventionMessage =
           };
       }
     | {
+          type: 'UPDATE_INTERVENTION_DETAIL';
+          payload: {
+              interventionId: string;
+              detail: InterventionDetail;
+          };
+      }
+    | {
+          type: 'SET_REFINE_LOADING';
+          payload: {
+              interventionId: string;
+              isLoading: boolean;
+              error?: string;
+          };
+      }
+    | {
           type: 'RECEIVE_CHAT_MESSAGE';
           payload: {
               interventionId: string;
               message: ChatMessage;
+          };
+      }
+    | {
+          type: 'SET_CHAT_LOADING';
+          payload: {
+              interventionId: string;
+              isLoading: boolean;
+              error?: string;
           };
       }
     | {
@@ -36,18 +59,11 @@ export type ExtensionToWebviewInterventionMessage =
               documentUri: string;
               interventions: InterventionItem[];
           };
-      }
-    | {
-          type: 'SET_CHAT_LOADING';
-          payload: {
-              interventionId: string;
-              isLoading: boolean;
-          };
       };
 
 /**
  * [Why/Intent] Webview側からVS Code拡張機能ホストへ要求を発行するオンデマンドアクションメッセージ型群。
- * 提案適用・差分アンドゥ・提案却下・チャット送信・ペルソナ切替・能動的指示・パネルクローズを担う。
+ * 提案適用・差分アンドゥ・提案却下・チャット送信・方針修正・ペルソナ切替・設定更新・パネルクローズを担う。
  */
 export type WebviewToExtensionInterventionMessage =
     | {
@@ -60,6 +76,31 @@ export type WebviewToExtensionInterventionMessage =
       }
     | {
           type: 'DISCARD_INTERVENTION';
+          payload: { interventionId: string };
+      }
+    | {
+          type: 'REFINE_INTERVENTION';
+          payload: {
+              interventionId: string;
+              userInstruction: string;
+              personaId: PersonaId;
+          };
+      }
+    | {
+          type: 'UPDATE_QUICK_SETTINGS';
+          payload: {
+              personaId?: PersonaId;
+              frequency?: 'manual' | 'onSave' | 'interval';
+              intervalSeconds?: number;
+              model?: string;
+          };
+      }
+    | {
+          type: 'UPDATE_API_KEY';
+          payload: { apiKey: string };
+      }
+    | {
+          type: 'REQUEST_EXPAND_DETAIL';
           payload: { interventionId: string };
       }
     | {
