@@ -123,6 +123,9 @@ function registerExtensionCommands(
         vscode.commands.registerCommand('vibecodeease.openSideEditor', () => {
             void sideEditorProvider.openSideEditor();
         }),
+        vscode.commands.registerCommand('vibecodeease.openSettings', () => {
+            void sideEditorProvider.openSettings();
+        }),
     );
 }
 

@@ -1,7 +1,8 @@
 /**
  * [Why/Intent] Side-by-SideエディタのReact側ルートコンポーネントであり、
  * Extensionからのイベントを購読して状態（ドキュメント内容・提案一覧・各種設定）を管理・分配する責務を持つ。
- * EXPAND_INTERVENTION_DETAILを受信した際はオンデマンド2カラムサイドパネル（OnDemandSidePanel）を展開描画する。
+ * EXPAND_INTERVENTION_DETAILを受信した際はオンデマンド2カラムサイドパネル（OnDemandSidePanel）を展開描画し、
+ * NAVIGATE_TO_SETTINGSを受信した際は設定画面（SettingsPanel）へ直接タブ遷移する。
  */
 import { useEffect, useState } from 'react';
 import { MirrorEditor } from './components/MirrorEditor';
@@ -60,6 +61,11 @@ function App() {
                     case 'EXPAND_INTERVENTION_DETAIL':
                         setOnDemandDetail(message.payload.detail);
                         setOnDemandPersona(message.payload.persona);
+                        break;
+                    case 'NAVIGATE_TO_SETTINGS':
+                        // [Why/Intent] オンデマンド2カラム詳細が表示されている場合、設定画面との表示競合やレイアウト崩れを防ぐため、詳細選択を解除(null)した上で設定タブへ切り替える
+                        setOnDemandDetail(null);
+                        setActiveTab('settings');
                         break;
                     case 'SYNC_HISTORY_STATE': {
                         setOnDemandDetail((prev) => {

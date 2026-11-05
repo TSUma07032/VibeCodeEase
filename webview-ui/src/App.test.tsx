@@ -143,6 +143,74 @@ describe('App Component', () => {
     fireEvent.click(screen.getByText('🚀 今すぐコードを推敲する (Analyze Now)'));
     expect(mockPostMessage).toHaveBeenCalledWith({ command: 'force_analyze' });
   });
+
+  it('switches to SettingsPanel upon receiving NAVIGATE_TO_SETTINGS message', () => {
+    render(<App />);
+    expect(screen.getByText('Waiting for document sync...')).toBeInTheDocument();
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'NAVIGATE_TO_SETTINGS',
+          },
+        })
+      );
+    });
+
+    expect(screen.getByText('設定カテゴリ:')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Enter API Key')).toBeInTheDocument();
+  });
+
+  it('clears onDemandDetail and switches to SettingsPanel upon receiving NAVIGATE_TO_SETTINGS during on-demand view', () => {
+    render(<App />);
+    // オンデマンド詳細を展開
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'EXPAND_INTERVENTION_DETAIL',
+            payload: {
+              interventionId: 'int-on-demand',
+              persona: 'concise',
+              detail: {
+                id: 'int-on-demand',
+                title: 'On Demand Refactoring',
+                summary: 'Refactor something',
+                range: { start: { line: 0, character: 0 }, end: { line: 0, character: 10 } },
+                status: 'pending',
+                personaId: 'concise',
+                originalCode: 'const a = 1;',
+                proposedCode: 'const a = 2;',
+                createdAt: '2026-11-05T00:00:00Z',
+                updatedAt: '2026-11-05T00:00:00Z',
+                chatHistory: [],
+              },
+            },
+          },
+        })
+      );
+    });
+
+    // オンデマンドパネルが表示されていることを確認
+    expect(screen.getByText('On Demand Refactoring')).toBeInTheDocument();
+
+    // NAVIGATE_TO_SETTINGS を受信
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'NAVIGATE_TO_SETTINGS',
+          },
+        })
+      );
+    });
+
+    // オンデマンドパネルが閉じ、SettingsPanel が表示されること
+    expect(screen.queryByText('On Demand Refactoring')).toBeNull();
+    expect(screen.getByText('設定カテゴリ:')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Enter API Key')).toBeInTheDocument();
+  });
 });
 
 describe('MirrorEditor & ProposalPopup Components', () => {

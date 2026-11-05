@@ -74,6 +74,7 @@ export class SideEditorProvider implements vscode.Disposable {
     private readonly historyStore: InterventionHistoryStore;
     private readonly onDemandIpcHandler: OnDemandIpcHandler;
     private pendingInterventionDetail?: InterventionDetail;
+    private pendingTab?: 'code' | 'settings';
 
     private constructor(
         private readonly context: vscode.ExtensionContext,
@@ -247,8 +248,35 @@ export class SideEditorProvider implements vscode.Disposable {
         }
     }
 
+    /**
+     * [Why/Intent] 保留中の遷移先タブ種別を取得する（テスト・内部検証用）。
+     */
+    public getPendingTab(): 'code' | 'settings' | undefined {
+        return this.pendingTab;
+    }
+
+    /**
+     * [Why/Intent] 設定パネルをWebview右側（Beside）に直接表示する。
+     * パネル未作成時は作成後に ready ハンドシェイクで NAVIGATE_TO_SETTINGS を送信し、
+     * 既に存在する場合は reveal の上で即座に最新設定を同期し NAVIGATE_TO_SETTINGS をディスパッチする。
+     * マウント前連続実行によるフラグ消失レースコンディションを完全防止する。
+     */
+    public async openSettings(): Promise<void> {
+        this.pendingInterventionDetail = undefined;
+        this.pendingTab = 'settings';
+        if (!this.panel) {
+            await this.openSideEditor();
+        } else {
+            this.panel.reveal(vscode.ViewColumn.Beside);
+            void this.sendSettingsSync();
+            void this.panel.webview.postMessage({ type: 'NAVIGATE_TO_SETTINGS' });
+        }
+    }
+
     private handlePanelDispose(): void {
         this.panel = undefined;
+        this.pendingTab = undefined;
+        this.pendingInterventionDetail = undefined;
         while (this.panelDisposables.length) {
             this.panelDisposables.pop()?.dispose();
         }
@@ -356,15 +384,21 @@ export class SideEditorProvider implements vscode.Disposable {
 
         if ('command' in message && typeof (message as { command: string }).command === 'string') {
             const cmd = (message as { command: string }).command;
-            if (cmd === 'ready' && this.pendingInterventionDetail && this.panel) {
-                this.panel.webview.postMessage({
-                    type: 'EXPAND_INTERVENTION_DETAIL',
-                    payload: {
-                        interventionId: this.pendingInterventionDetail.id,
-                        persona: this.pendingInterventionDetail.personaId,
-                        detail: this.pendingInterventionDetail,
-                    },
-                });
+            if (cmd === 'ready') {
+                if (this.pendingTab === 'settings' && this.panel) {
+                    // [Why/Intent] Webviewマウント完了前に openSettings が呼ばれていた場合、ready ハンドシェイクをトリガーに NAVIGATE_TO_SETTINGS を遅延送信し、フラグを消費・初期化する
+                    this.panel.webview.postMessage({ type: 'NAVIGATE_TO_SETTINGS' });
+                    this.pendingTab = undefined;
+                } else if (this.pendingInterventionDetail && this.panel) {
+                    this.panel.webview.postMessage({
+                        type: 'EXPAND_INTERVENTION_DETAIL',
+                        payload: {
+                            interventionId: this.pendingInterventionDetail.id,
+                            persona: this.pendingInterventionDetail.personaId,
+                            detail: this.pendingInterventionDetail,
+                        },
+                    });
+                }
             }
 
             await dispatchLegacyCommand(message as WebviewToExtensionMessage, {

@@ -1,4 +1,4 @@
-﻿# vibeCodeEase Project-Specific Rules
+# vibeCodeEase Project-Specific Rules
 
 本ファイルは、`vibeCodeEase` プロジェクトに特有の設計方針、アーキテクチャ制約、および運用ルールを定義します。
 
@@ -50,3 +50,16 @@
   `page.addInitScript` や `page.evaluate` 内で `window` オブジェクトを拡張・参照する際、`(window as any)` による型の揉み消しを禁止する。必ず `interface MockWindow` を定義し、`window as unknown as MockWindow` で型安全にキャストすること。
 - **UI仕様変更時におけるE2Eテストのアトミック同期**:
   コンポーネントや画面の仕様変更・要素刷新（インライン差分化、ボタン文言変更等）を行う際は、単体テスト（Vitest）のみならずPlaywright E2Eテストのセレクタ・検証ロジックを同時に改修し、旧UIセレクタ依存によるタイムアウトを防ぐこと。
+
+
+## 7. Windows環境におけるテスト実行とファイル整合性 (Windows Test Hygiene & File Integrity)
+- **VS Codeバックグラウンド更新Mutex競合の検知と復帰**:
+  Windows環境において `vscode-test`（`npm test`）を実行する際、VS Codeのバックグラウンド自動更新（Inno Setup）によって `CodeSetup-stable-*.tmp` プロセスが起動し、Mutex `vscode-updating` がロックされてテストが30秒タイムアウトで失敗することがある。この場合、PowerShellで `*CodeSetup*` プロセスを検知・安全に停止（`Stop-Process -Name "*CodeSetup*" -Force`）してMutexを解放した上でテストを再実行すること。
+- **PowerShellテキストリダイレクトによる文字化け防止**:
+  Windows PowerShell 5.1 の `Set-Content` やリダイレクト演算子（`>`）は既定で UTF-16 / Shift-JIS となり、UTF-8 ソースコードに文字化け（Mojibake）やBOM混入を引き起こす。ファイル作成・編集には常に安全なファイル編集ツール（`write_file` / `edit_file`）を用い、シェルによる直接のテキスト出力を禁止すること。
+
+## 8. リソースライフサイクルとテスト形骸化防止 (Resource Lifecycle & Test Verification Integrity)
+- **`dispose()` テストにおけるスパイ検証の必須化**:
+  `StatusBarItem` やイベントリスナー等のリソース解放（`dispose()`）をテストする際、`assert.doesNotThrow(() => target.dispose())` のような単なる例外非発生アサーションは、内部の解放処理が実際に呼ばれていなくてもパスしてしまう（テスト形骸化・偽陽性）。必ずスパイ関数（ラップ関数等）を配備し、内部の子要素・リスナーの `dispose()` が確実に実行されたことを明示的にアサートすること。
+- **オンデマンドUIと設定画面の表示競合調停**:
+  Webview側でオンデマンド2カラム詳細表示（`onDemandDetail`）中に設定画面オープン指示（`NAVIGATE_TO_SETTINGS`）を受信した際は、表示の競合やレイアウト崩れを防ぐため、必ず `setOnDemandDetail(null)` により詳細選択を安全に解除した上で設定タブへ遷移すること。
