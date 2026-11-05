@@ -9,6 +9,7 @@ import type {
     ShadowPredictionResult,
 } from '../../types/learningScaffolding';
 import type { UserLearningConfig } from '../../types/learningSettings';
+import { LlmError } from '../llm/llmErrors';
 import { isSensitiveDocument, type LlmInterventionService } from '../llmInterventionService';
 import { LEARNING_CONFIG } from './defaultLearningConfig';
 import { buildShadowPredictionPrompt, SHADOW_PREDICTION_SCHEMA } from './learningPromptBuilder';
@@ -29,8 +30,22 @@ function collectErrorDiagnostics(
         }));
 }
 
-/** [Why/Intent] エラー文字列からLearningSessionStateのエラーコード分類を導出する */
-function classifyLearningError(message: string): LearningSessionState['errorCode'] {
+/** [Why/Intent] LlmErrorCode から LearningSessionState のエラーコードへ変換する（複雑度抑制） */
+function classifyLlmErrorCode(code: string): LearningSessionState['errorCode'] {
+    if (code === 'AUTH_MISSING') {
+        return 'AUTH_MISSING';
+    }
+    if (code === 'RATE_LIMIT' || code === 'QUOTA_EXCEEDED') {
+        return 'RATE_LIMIT';
+    }
+    if (code === 'NETWORK' || code === 'TIMEOUT') {
+        return 'NETWORK';
+    }
+    return 'UNKNOWN';
+}
+
+/** [Why/Intent] レガシーエラー文字列からエラーコードを判定する（複雑度抑制） */
+function classifyLegacyErrorMessage(message: string): LearningSessionState['errorCode'] {
     const lower = message.toLowerCase();
     if (lower.includes('api key') || lower.includes('auth')) {
         return 'AUTH_MISSING';
@@ -42,6 +57,15 @@ function classifyLearningError(message: string): LearningSessionState['errorCode
         return 'NETWORK';
     }
     return 'UNKNOWN';
+}
+
+/** [Why/Intent] LlmError または任意例外から LearningSessionState のエラーコードを導出する */
+function classifyLearningError(error: unknown): LearningSessionState['errorCode'] {
+    if (error instanceof LlmError) {
+        return classifyLlmErrorCode(error.code);
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return classifyLegacyErrorMessage(message);
 }
 
 /** [Why/Intent] updateSessionWithPrediction に渡す引数オブジェクト型 */
@@ -208,13 +232,21 @@ export class LearningBackgroundService implements vscode.Disposable {
                 diagnostics: diags,
             });
 
-            const rawJson = await this.llmService.requestStructuredOutput({
-                systemInstruction,
-                userPrompt,
-                responseSchema: SHADOW_PREDICTION_SCHEMA,
-            });
+            // 型安全なオブジェクトを直接受け取り、未定義時はレガシーメソッドへフォールバック
+            const parsed = this.llmService.requestStructured
+                ? await this.llmService.requestStructured<ShadowPredictionLlmResponse>({
+                      systemInstruction,
+                      userPrompt,
+                      responseSchema: SHADOW_PREDICTION_SCHEMA,
+                  })
+                : (JSON.parse(
+                      await this.llmService.requestStructuredOutput({
+                          systemInstruction,
+                          userPrompt,
+                          responseSchema: SHADOW_PREDICTION_SCHEMA,
+                      }),
+                  ) as ShadowPredictionLlmResponse);
 
-            const parsed = JSON.parse(rawJson) as ShadowPredictionLlmResponse;
             this.updateSessionWithPrediction({
                 parsed,
                 diagsCount: diags.length,
@@ -223,7 +255,7 @@ export class LearningBackgroundService implements vscode.Disposable {
             });
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : String(error);
-            this.sessionStore.setError(message, classifyLearningError(message));
+            this.sessionStore.setError(message, classifyLearningError(error));
         }
     }
 

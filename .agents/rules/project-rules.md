@@ -22,6 +22,10 @@
   Gemini API キーはプレーンテキストの設定ファイルではなく、VS Code の `context.secrets` (SecretStorage) を最優先で利用すること。
 - **同期間隔のクランプ**:
   LLMのバックグラウンド自動解析間隔は、APIレート制限保護およびトークン消費抑制のため、5秒〜3600秒（1時間）の範囲に必ずクランプすること。
+- **統一ゲートウェイ（ILlmGateway）経由の通信徹底とアーキテクチャ境界テスト**:
+  サービスクラスから直接低レベル通信クライアント（`GeminiClient`, `VscodeLmClient`, `fetch`, `node:https` 等）を直接インスタンス化・呼び出しすることを禁止し、必ず `ILlmGateway` をDI注入すること。境界防御テスト `llmArchitectureBoundary.test.ts` を常時パスすること。
+- **生レスポンスの無欠損ログ出力とロガーDI**:
+  可観測性向上のため、LLMからの生の返答文字列（`rawResponseText`）は1文字も欠落させず丸ごとコンソール出力（`console.info`）すること。テスト容易性のため、ロガー関数はOptionsパターンでDI注入可能とすること。
 
 ## 4. 学習支援と自動推敲の協調一時停止制御 (Service Coordination & Rate Limit Protection)
 - **APIレートリミット保護のための協調一時停止**:
@@ -41,3 +45,7 @@
 - **VS Code API 疎結合ブラウザテストの必須運用**:
   Webviewサイドバーの画面遷移、UI 4状態（Empty, Loading, Error, Content）、設定フォーム、および双方向IPCメッセージの検証は、VS Code本体を起動せず、Playwrightの `page.addInitScript` による `acquireVsCodeApi` モック注入を活用した `npm run test:e2e`（`sidebar-uiux.spec.ts`）で自動検証すること。
 
+- **型安全な MockWindow の定義必須化**:
+  `page.addInitScript` や `page.evaluate` 内で `window` オブジェクトを拡張・参照する際、`(window as any)` による型の揉み消しを禁止する。必ず `interface MockWindow` を定義し、`window as unknown as MockWindow` で型安全にキャストすること。
+- **UI仕様変更時におけるE2Eテストのアトミック同期**:
+  コンポーネントや画面の仕様変更・要素刷新（インライン差分化、ボタン文言変更等）を行う際は、単体テスト（Vitest）のみならずPlaywright E2Eテストのセレクタ・検証ロジックを同時に改修し、旧UIセレクタ依存によるタイムアウトを防ぐこと。

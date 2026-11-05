@@ -1,8 +1,9 @@
 /**
  * [Why/Intent] VS Code API と疎結合なサイドバー Webview UI/UX 専用の Playwright E2E テストスイート。
  * VS Code 本体（Electron）を起動することなく、Web 開発サーバー（Vite）と Playwright のモック注入を活用し、
- * 高速かつ安定して全タブの画面遷移、UI 4 状態（Empty, Loading, Error, Content）、設定フォームの操作、
+ * 高速かつ安定して全タブの画面遷移、設定フォームの操作、
  * および双方向メッセージング（IPC）を実機ブラウザ（Chromium）上で検証する。
+ * 学習支援・ダッシュボード・AI推論デバッグの3タブ破壊後のナビゲーション状態を厳格に保証する。
  */
 import { test, expect } from '@playwright/test';
 
@@ -38,127 +39,22 @@ test.describe('vibeCodeEase サイドバー UI/UX ブラウザ連携テスト', 
     await page.goto('/');
   });
 
-  test('全タブのナビゲーション切り替えと対応パネルの描画検証', async ({ page }) => {
+  test('存続タブ（Code, Settings）のナビゲーション切り替えと破壊タブ（学習支援, Dashboard, AI推論）の完全非存在検証', async ({ page }) => {
     // 1. 初期状態: [💻 Code] タブがアクティブ
     await expect(page.getByText('Waiting for document sync...')).toBeVisible();
 
-    // 2. [🎓 学習支援] タブをクリック
-    await page.getByRole('button', { name: '[🎓 学習支援]' }).click();
-    await expect(page.getByRole('heading', { name: '🎯 学習セッションの開始' })).toBeVisible();
+    // 2. 破壊された3タブがナビゲーション上に一切存在しないことを検証 (RULE-005)
+    await expect(page.getByRole('button', { name: '[🎓 学習支援]' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '[📊 Dashboard]' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '[🐞 AI推論デバッグ]' })).toHaveCount(0);
 
-    // 3. [📊 Dashboard] タブをクリック
-    await page.getByRole('button', { name: '[📊 Dashboard]' }).click();
-    await expect(page.getByRole('button', { name: 'Response' })).toBeVisible();
-
-    // 4. [⚙️ Settings] タブをクリック
+    // 3. [⚙️ Settings] タブをクリックして設定画面が表示されること
     await page.getByRole('button', { name: '[⚙️ Settings]' }).click();
     await expect(page.getByRole('button', { name: '🔧 全般・自動推敲' })).toBeVisible();
 
-    // 5. [🐞 AI推論デバッグ] タブをクリック
-    await page.getByRole('button', { name: '[🐞 AI推論デバッグ]' }).click();
-    await expect(page.getByText('🐞 AI推論デバッグインスペクタ')).toBeVisible();
-  });
-
-  test('学習支援タブにおける UI 4 状態（Empty, Loading, Error, Content）の網羅検証', async ({ page }) => {
-    // 学習支援タブへ切り替え
-    await page.getByRole('button', { name: '[🎓 学習支援]' }).click();
-
-    // --- State A: Empty 状態（初期表示） ---
-    await expect(page.getByRole('heading', { name: '🎯 学習セッションの開始' })).toBeVisible();
-    await expect(page.getByRole('button', { name: '🚀 見守り学習を開始する' })).toBeVisible();
-
-    // --- State B: Loading 状態 ---
-    await page.evaluate(() => {
-      window.dispatchEvent(new MessageEvent('message', {
-        data: {
-          type: 'SYNC_SESSION_STATE',
-          payload: {
-            status: 'loading',
-            taskId: 'task-test-1',
-            taskDescription: 'TypeScript演習',
-            learningGoal: '型安全性の理解',
-            disclosureMode: 'stepByStep',
-            unlockedLevel: 1,
-            latestPrediction: null,
-            assessment: { isStagnated: false, consecutiveStagnantCount: 0, reason: 'NONE', confidence: 0 },
-            snoozeUntilTimestamp: null,
-            isDismissed: false,
-            lastUpdatedTimestamp: Date.now(),
-            history: []
-          }
-        }
-      }));
-    });
-    await expect(page.getByText('⏳ AIがあなたのコードから完成形の予想図を準備しています...')).toBeVisible();
-
-    // --- State C: Error 状態 ---
-    await page.evaluate(() => {
-      window.dispatchEvent(new MessageEvent('message', {
-        data: {
-          type: 'SYNC_SESSION_STATE',
-          payload: {
-            status: 'error',
-            taskId: 'task-test-1',
-            taskDescription: 'TypeScript演習',
-            learningGoal: '型安全性の理解',
-            disclosureMode: 'stepByStep',
-            unlockedLevel: 1,
-            latestPrediction: null,
-            assessment: { isStagnated: false, consecutiveStagnantCount: 0, reason: 'NONE', confidence: 0 },
-            snoozeUntilTimestamp: null,
-            isDismissed: false,
-            lastUpdatedTimestamp: Date.now(),
-            history: [],
-            errorMessage: 'セッション情報の同期に失敗しました'
-          }
-        }
-      }));
-    });
-    await expect(page.getByText('⚠️ AI見守りサービス エラー')).toBeVisible();
-    await expect(page.getByText('セッション情報の同期に失敗しました')).toBeVisible();
-    await expect(page.getByRole('button', { name: '🔄 再試行' })).toBeVisible();
-
-    // --- State D: Content 状態（正常アクティブセッション） ---
-    await page.evaluate(() => {
-      window.dispatchEvent(new MessageEvent('message', {
-        data: {
-          type: 'SYNC_SESSION_STATE',
-          payload: {
-            status: 'success',
-            taskId: 'task-test-1',
-            taskDescription: 'TypeScript基礎演習',
-            learningGoal: '関数の型定義',
-            disclosureMode: 'stepByStep',
-            unlockedLevel: 1,
-            latestPrediction: {
-              predictedGoal: '関数の型定義',
-              scaffoldingLevels: {
-                level1Perspective: '引数の型定義を見直してみましょう',
-                level2Concept: '',
-                level3SkeletonCode: '',
-                level4CompleteDiff: ''
-              },
-              milestones: [],
-              estimatedProgress: 30
-            },
-            assessment: {
-              isStagnated: true,
-              consecutiveStagnantCount: 3,
-              reason: 'NO_PROGRESS_SCORE',
-              confidence: 1.0
-            },
-            snoozeUntilTimestamp: null,
-            isDismissed: false,
-            lastUpdatedTimestamp: Date.now(),
-            history: []
-          }
-        }
-      }));
-    });
-    await expect(page.locator('[data-testid="learning-scaffolding-panel"]')).toBeVisible();
-    await expect(page.getByText('🎯 課題: TypeScript基礎演習')).toBeVisible();
-    await expect(page.getByText('引数の型定義を見直してみましょう')).toBeVisible();
-    await expect(page.getByText('💡 少し手が止まっているようです。ヒントを活用してみませんか？')).toBeVisible();
+    // 4. 再び [💻 Code] タブをクリックしてエディタ画面に戻れること
+    await page.getByRole('button', { name: '[💻 Code]' }).click();
+    await expect(page.getByText('Waiting for document sync...')).toBeVisible();
   });
 
   test('設定タブのサブタブ切替・設定変更・保存メッセージ送信検証', async ({ page }) => {

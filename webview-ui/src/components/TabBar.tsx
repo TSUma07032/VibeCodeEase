@@ -4,8 +4,8 @@
  */
 import React from 'react';
 
-/** [Why/Intent] Webview内で切り替え可能なタブ種別のユニオン型定義 */
-export type TabType = 'code' | 'settings' | 'dashboard' | 'learning' | 'learning-debug';
+/** [Why/Intent] Webview内で切り替え可能なタブ種別のユニオン型定義。CodeとSettingsの2種を提供する。 */
+export type TabType = 'code' | 'settings';
 
 /**
  * [Why/Intent] TabBarが受け取るプロパティ。
@@ -35,7 +35,8 @@ function getTabStyle(isActive: boolean): React.CSSProperties {
 }
 
 /**
- * [Why/Intent] Code、Settings、Dashboard、学習支援、AI推論デバッグを切り替えるためのUIを提供する。
+ * [Why/Intent] Code、Settingsを切り替えるためのUIを提供する。
+ * 学習支援、ダッシュボード、AI推論デバッグの3タブは破壊（撤去）され、シンプルな2タブ構成を提供する。
  */
 export const TabBar: React.FC<TabBarProps> = ({ activeTab, onTabChange }) => {
   return (
@@ -50,20 +51,8 @@ export const TabBar: React.FC<TabBarProps> = ({ activeTab, onTabChange }) => {
       <button onClick={() => onTabChange('code')} style={getTabStyle(activeTab === 'code')}>
         [💻 Code]
       </button>
-      <button onClick={() => onTabChange('learning')} style={getTabStyle(activeTab === 'learning')}>
-        [🎓 学習支援]
-      </button>
-      <button onClick={() => onTabChange('dashboard')} style={getTabStyle(activeTab === 'dashboard')}>
-        [📊 Dashboard]
-      </button>
       <button onClick={() => onTabChange('settings')} style={getTabStyle(activeTab === 'settings')}>
         [⚙️ Settings]
-      </button>
-      <button
-        onClick={() => onTabChange('learning-debug')}
-        style={getTabStyle(activeTab === 'learning-debug')}
-      >
-        [🐞 AI推論デバッグ]
       </button>
     </div>
   );

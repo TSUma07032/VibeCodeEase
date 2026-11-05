@@ -1,39 +1,41 @@
+/**
+ * [Why/Intent] コードレビュー・AI介入計画の生成および構造化LLM出力を提供するサービス。
+ * 通信はすべて ILlmGateway を経由し、機密ファイルガード（assertNotSensitiveDocument）により保護される。
+ */
 import * as vscode from 'vscode';
 import { GlobalState } from '../state/globalState';
 import type { LlmInterventionPlan } from '../types';
 import type { PresetMode } from '../types/preset';
-import { GeminiClient } from './llm/geminiClient';
+import { LlmConfigRepository } from './llm/llmConfigRepository';
+import { GEMINI_SUPPORTED_MODELS } from './llm/llmConstants';
+import { type GenerateStructuredOptions, type ILlmGateway, LlmGateway } from './llm/llmGateway';
 import { validatePlan } from './llm/planValidator';
-import { buildInterventionPrompt } from './llm/promptBuilder';
-import { VscodeLmClient } from './llm/vscodeLmClient';
+import { buildInterventionPrompt, INTERVENTION_RESPONSE_SCHEMA } from './llm/promptBuilder';
+import { assertNotSensitiveDocument, isSensitiveDocument } from './utils/sensitiveDocumentGuard';
+
+export { isSensitiveDocument };
 
 /**
- * [Why/Intent] Gemini APIのStructured Outputs(JSON Schema)を利用し、完成予想や4段階ヒントを型安全に抽出するためのOptions型。
+ * [Why/Intent] 構造化出力生成のリクエストパラメータ
  */
 export interface RequestStructuredOutputOptions {
-    /** [Why/Intent] モデルの振る舞い・教育的ペルソナを定義するシステムプロンプト */
+    /** [Why/Intent] モデルの振る舞い・教育的ペルソナを定義するシステム指示文 */
     systemInstruction: string;
     /** [Why/Intent] ユーザーコードや学習目標を含むユーザー入力プロンプト */
     userPrompt: string;
     /** [Why/Intent] レスポンスのJSON構造を強制するJSON Schemaオブジェクト */
     responseSchema: unknown;
-    /** [Why/Intent] 明示的に渡すAPIキー (未指定時はSecretStorageから取得) */
+    /** [Why/Intent] 明示的に渡すAPIキー (未指定時はGateway側で自動解決) */
     apiKey?: string;
-    /** [Why/Intent] ユーザー操作等による処理中断を受け付けるキャンセレーショントークン */
+    /** [Why/Intent] 処理中断を受け付けるキャンセレーショントークン */
     token?: vscode.CancellationToken;
     /** [Why/Intent] 使用するLLMモデル名 (未指定時は設定ストアの値を使用) */
     modelName?: string;
 }
 
-export interface CreateGeminiPlanOptions {
-    document: vscode.TextDocument;
-    token: vscode.CancellationToken;
-    apiKey: string;
-    modelName?: string;
-    preferenceSummary?: string;
-    presetMode?: PresetMode;
-}
-
+/**
+ * [Why/Intent] 介入計画生成のオプション
+ */
 export interface CreatePlanOptions {
     document: vscode.TextDocument;
     token: vscode.CancellationToken;
@@ -42,55 +44,81 @@ export interface CreatePlanOptions {
     presetMode?: PresetMode;
 }
 
-const SENSITIVE_FILE_PATTERNS = [
-    /\.env/i,
-    /\.pem/i,
-    /\.key/i,
-    /\.git/i,
-    /secrets/i,
-    /credentials/i,
-];
-
-export function isSensitiveDocument(document: vscode.TextDocument): boolean {
-    if (document.languageId === 'secrets') {
-        return true;
-    }
-    const fileName = document.fileName.toLowerCase();
-    return SENSITIVE_FILE_PATTERNS.some((pattern) => pattern.test(fileName));
+/**
+ * [Why/Intent] 後方互換性のためのGemini計画生成オプション型
+ */
+export interface CreateGeminiPlanOptions extends CreatePlanOptions {
+    apiKey?: string;
+    modelName?: string;
 }
 
+/**
+ * [Why/Intent] ILlmGatewayを通じたコード推敲・AI介入生成の統括サービス。
+ * 機密ファイルの検査、プロンプト生成、構造化出力取得、および後方互換性アダプタを提供する。
+ */
 export class LlmInterventionService {
-    constructor(
-        private readonly geminiClient = new GeminiClient(),
-        private readonly vscodeLmClient = new VscodeLmClient(),
-        private readonly secrets?: vscode.SecretStorage,
-    ) {}
+    private readonly gateway: ILlmGateway;
 
     /**
-     * 🛡️ Sentinel: 機密ファイル（.env, .pem, .key, credentials等）がLLMに送信されるのを防ぐ
+     * [Why/Intent] 統一ゲートウェイまたは後方互換クライアントを注入してサービスを初期化する
      */
-    private validateDocument(document: vscode.TextDocument): void {
-        if (isSensitiveDocument(document)) {
-            const fileNameOnly = document.uri.path.split('/').pop() ?? document.fileName;
-            throw new Error(
-                `セキュリティ違反: 機密ファイル (${fileNameOnly}) はLLMに送信できません。`,
-            );
+    constructor(
+        gatewayOrClient?: ILlmGateway | { generate: (opts: unknown) => Promise<unknown> },
+        _vscodeLmClient?: unknown,
+        secrets?: vscode.SecretStorage,
+    ) {
+        if (gatewayOrClient && 'generateStructured' in gatewayOrClient) {
+            this.gateway = gatewayOrClient;
+        } else if (gatewayOrClient && 'generate' in gatewayOrClient) {
+            this.gateway = {
+                generateStructured: async <T>(opts: GenerateStructuredOptions<T>) => {
+                    let key: string | undefined;
+                    if (secrets) {
+                        key = await secrets.get('vibecodeease.geminiApiKey');
+                    }
+                    return gatewayOrClient.generate({ ...opts, apiKey: key }) as Promise<T>;
+                },
+                embedBatch: () => Promise.resolve([]),
+                getAvailableModels: () => Promise.resolve([...GEMINI_SUPPORTED_MODELS]),
+            };
+        } else {
+            const configRepo = new LlmConfigRepository(secrets ?? ({} as vscode.SecretStorage));
+            this.gateway = new LlmGateway(configRepo);
         }
     }
 
     /**
-     * Gemini REST API を使用してファイルの介入プラン（修正案）を作成する
+     * [Why/Intent] 統一ゲートウェイ経由でファイルの介入プラン（修正案）を作成する
      */
-    public async createGeminiPlan(options: CreateGeminiPlanOptions): Promise<LlmInterventionPlan> {
-        this.validateDocument(options.document);
+    public async createPlan(options: CreatePlanOptions): Promise<LlmInterventionPlan> {
+        assertNotSensitiveDocument(options.document);
         const prompt = buildInterventionPrompt(
             options.document,
             options.preferenceSummary,
             options.presetMode,
         );
-        const rawResult = await this.geminiClient.generate({
+        const rawResult = await this.gateway.generateStructured<unknown>({
             prompt,
-            apiKey: options.apiKey,
+            responseSchema: INTERVENTION_RESPONSE_SCHEMA,
+            token: options.token,
+            modelName: options.modelSelector,
+        });
+        return validatePlan(rawResult, options.document);
+    }
+
+    /**
+     * [Why/Intent] 後方互換性のためのGemini計画生成メソッド。
+     */
+    public async createGeminiPlan(options: CreateGeminiPlanOptions): Promise<LlmInterventionPlan> {
+        assertNotSensitiveDocument(options.document);
+        const prompt = buildInterventionPrompt(
+            options.document,
+            options.preferenceSummary,
+            options.presetMode,
+        );
+        const rawResult = await this.gateway.generateStructured<unknown>({
+            prompt,
+            responseSchema: INTERVENTION_RESPONSE_SCHEMA,
             token: options.token,
             modelName: options.modelName,
         });
@@ -98,54 +126,38 @@ export class LlmInterventionService {
     }
 
     /**
-     * VS Code Language Model API を使用してファイルの介入プラン（修正案）を作成する
+     * [Why/Intent] 構造化出力（JSON Schema）を指定してLLMにプロンプトを送信し、型付けされたオブジェクトを直接取得する。
+     * 二重シリアライズ/デシリアライズを完全に解消する。
      */
-    public async createPlan(options: CreatePlanOptions): Promise<LlmInterventionPlan> {
-        this.validateDocument(options.document);
-        const prompt = buildInterventionPrompt(
-            options.document,
-            options.preferenceSummary,
-            options.presetMode,
-        );
-        const rawResult = await this.vscodeLmClient.generate(
-            prompt,
-            options.token,
-            options.modelSelector,
-        );
-        return validatePlan(rawResult, options.document);
-    }
-
-    /**
-     * [Why/Intent] 構造化出力（JSON Schema）を指定してLLMにプロンプトを送信し、JSON文字列を返す
-     */
-    public async requestStructuredOutput(options: RequestStructuredOutputOptions): Promise<string> {
-        let apiKey = options.apiKey;
-        if (!apiKey && this.secrets) {
-            apiKey = await this.secrets.get('vibecodeease.geminiApiKey');
-        }
-        apiKey ??= vscode.workspace.getConfiguration('vibecodeease').get<string>('geminiApiKey');
-        if (!apiKey) {
-            throw new Error('API Key is missing');
-        }
-
-        const prompt = `${options.systemInstruction}\n\n${options.userPrompt}`;
+    public async requestStructured<T>(
+        options: RequestStructuredOutputOptions,
+        responseValidator?: (data: unknown) => T,
+    ): Promise<T> {
         const fallbackCts = options.token ? undefined : new vscode.CancellationTokenSource();
         const token = options.token ?? (fallbackCts as vscode.CancellationTokenSource).token;
+
         try {
-            const rawResult = await this.geminiClient.generate({
-                prompt,
-                apiKey,
+            return await this.gateway.generateStructured<T>({
+                systemInstruction: options.systemInstruction,
+                userPrompt: options.userPrompt,
+                responseSchema: options.responseSchema,
                 token,
                 modelName: options.modelName ?? GlobalState.getInstance().llmModel,
-                responseSchema: options.responseSchema,
+                responseValidator,
             });
-
-            if (typeof rawResult === 'string') {
-                return rawResult;
-            }
-            return JSON.stringify(rawResult);
         } finally {
             fallbackCts?.dispose();
         }
+    }
+
+    /**
+     * [Why/Intent] 後方互換性のためのメソッド。requestStructured で取得したオブジェクトをJSON文字列化して返却する。
+     */
+    public async requestStructuredOutput(options: RequestStructuredOutputOptions): Promise<string> {
+        const result = await this.requestStructured<unknown>(options);
+        if (typeof result === 'string') {
+            return result;
+        }
+        return JSON.stringify(result);
     }
 }

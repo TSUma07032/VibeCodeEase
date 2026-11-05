@@ -114,8 +114,8 @@
         },
         "vibecodeease.llm.syncIntervalSeconds": {
           "type": "number",
-          "default": 10,
-          "description": "Communication interval in seconds (5-3600)"
+          "default": 30,
+          "description": "Communication interval in seconds (30-3600)"
         }
       }
     }

@@ -1,9 +1,19 @@
+/**
+ * @deprecated [Why/Intent] GithubDiffView に完全移行したため非推奨。後方互換性のため残置するがプロダクションコードからの参照はゼロとする。
+ */
 import React from 'react';
 import type { WebviewIntervention } from '../types';
 
-interface ProposalPopupProps {
+/**
+ * [Why/Intent] ProposalPopup へ親コンポーネントから渡されるProps。
+ * 対象介入オブジェクトの変更内容・推敲理由の表示および採用・破棄アクションの通知を担当する。
+ */
+export interface ProposalPopupProps {
+    /** [Why/Intent] 変更前後のテキスト、置換範囲、推敲理由を含むAI介入オブジェクト */
     intervention: WebviewIntervention;
+    /** [Why/Intent] 提案を採用し、Extensionへコード適用を要求するコールバック */
     onApply: (intervention: WebviewIntervention) => void;
+    /** [Why/Intent] 提案を破棄し、Extensionへ除外を要求するコールバック */
     onDiscard: (id: string) => void;
 }
 

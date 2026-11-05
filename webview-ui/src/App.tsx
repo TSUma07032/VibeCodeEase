@@ -1,19 +1,20 @@
 /**
  * [Why/Intent] Side-by-SideエディタのReact側ルートコンポーネントであり、
- * Extensionからのイベントを購読して状態（ドキュメント内容・提案一覧）を管理・分配する責務を持つ。
+ * Extensionからのイベントを購読して状態（ドキュメント内容・提案一覧・各種設定）を管理・分配する責務を持つ。
+ * 学習支援、ダッシュボード、AI推論デバッグの各タブは破壊（撤去）され、CodeとSettingsの2タブ構成で動作する。
  */
 import { useEffect, useState } from 'react';
-import type { ExtensionToWebviewMessage, WebviewIntervention, AiInterventionLevel, LearningSessionState } from './types';
+import type { ExtensionToWebviewMessage, WebviewIntervention, AiInterventionLevel } from './types';
 import { TabBar, type TabType } from './components/TabBar';
 import { MirrorEditor } from './components/MirrorEditor';
 import { SettingsPanel } from './components/SettingsPanel';
-import { DashboardPanel } from './components/DashboardPanel';
-import { LearningScaffoldingPanel } from './components/LearningScaffoldingPanel';
-import { LearningDebugPanel } from './components/scaffolding/LearningDebugPanel';
 
 import { vscode } from './utils/vscode';
 
-// [AI-WARNING] DO NOT REMOVE THIS OPTIMIZATION: Extending state for Dashboard and new llm config without disrupting existing logic.
+/**
+ * [Why/Intent] メインアプリケーションコンポーネント。
+ * エディタ同期、提案反映・破棄、設定更新の各イベントを管理する。
+ */
 function App() {
     /**
      * [Why/Intent] Extensionから受信したドキュメント名・テキスト内容・提案一覧を保持・描画するため。
@@ -23,18 +24,16 @@ function App() {
     const [interventions, setInterventions] = useState<WebviewIntervention[]>([]);
     
     /**
-     * [Why/Intent] ユーザーが閲覧している現在のタブ状態。
+     * [Why/Intent] ユーザーが閲覧している現在のタブ状態（'code' または 'settings'）。
      */
     const [activeTab, setActiveTab] = useState<TabType>('code');
-    /**
-     * [Why/Intent] 学習支援セッションの最新状態を保持し、ScaffoldingパネルおよびDebugインスペクタへ分配するため。
-     */
-    const [learningState, setLearningState] = useState<LearningSessionState | null>(null);
+
     /**
      * [Why/Intent] APIキーはセキュリティ上Webviewには送信せず、設定の有無（boolean）のみを保持してUIを切り替えるため。
      */
     const [hasApiKey, setHasApiKey] = useState<boolean>(false);
     const [apiKeyLength, setApiKeyLength] = useState<number>(0);
+
     /**
      * [Why/Intent] ユーザーが選択中のAI推敲レベル。
      */
@@ -44,22 +43,18 @@ function App() {
     const [llmIntervalSeconds, setLlmIntervalSeconds] = useState<number>(10);
     const [llmModel, setLlmModel] = useState<string>('gemini-3.5-flash-lite');
 
-    const [llmStatus, setLlmStatus] = useState<'idle' | 'loading' | 'error'>('idle');
-    const [llmResponse, setLlmResponse] = useState<{ text: string; timestamp: number } | null>(null);
-    const [llmErrorLogs, setLlmErrorLogs] = useState<Array<{ message: string; timestamp: number }>>([]);
-
     /**
      * [Why/Intent] コンポーネントマウント時にメッセージリスナーを登録し、
      * アンマウント時に解除することでメモリリークを防ぎ、Extensionとの通信を維持する。
      */
     useEffect(() => {
-        const handleMessage = (event: MessageEvent<ExtensionToWebviewMessage | { type: 'SYNC_SESSION_STATE'; payload: LearningSessionState }>) => {
+        const handleMessage = (event: MessageEvent<ExtensionToWebviewMessage | { type: 'SYNC_SESSION_STATE' }>) => {
             const message = event.data;
             if (!message || typeof message !== 'object') {
                 return;
             }
             if ('type' in message && message.type === 'SYNC_SESSION_STATE') {
-                setLearningState(message.payload);
+                // 学習支援タブが破壊されたため、セッション状態の描画は行わない
                 return;
             }
             switch (message.type) {
@@ -72,7 +67,7 @@ function App() {
                     break;
                 case 'SYNC_SETTINGS':
                     setHasApiKey(message.hasApiKey);
-                    setApiKeyLength(message.apiKeyLength || 0);
+                    setApiKeyLength(message.apiKeyLength ?? 0);
                     setAiInterventionLevel(message.interventionLevel);
                     if ('frequency' in message) {
                         setLlmFrequency(message.frequency);
@@ -81,18 +76,10 @@ function App() {
                     }
                     break;
                 case 'LLM_STATUS_UPDATE':
-                    setLlmStatus(message.status);
-                    break;
                 case 'LLM_RESPONSE_UPDATE':
-                    setLlmResponse({ text: message.text, timestamp: message.timestamp });
-                    break;
                 case 'LLM_ERROR_LOG':
-                    setLlmErrorLogs(prev => [...prev, { message: message.message, timestamp: message.timestamp }].slice(-50));
-                    break;
                 case 'LLM_DASHBOARD_INIT':
-                    setLlmResponse(message.response);
-                    setLlmErrorLogs(message.logs);
-                    setLlmStatus(message.status);
+                    // ダッシュボードおよび推論タブが破壊されたため、UIへの描画は行わない
                     break;
             }
         };
@@ -198,19 +185,6 @@ function App() {
                         onUpdateLevel={handleUpdateLevel}
                         onForceAnalyze={handleForceAnalyze}
                     />
-                )}
-                {activeTab === 'dashboard' && (
-                    <DashboardPanel
-                        status={llmStatus}
-                        response={llmResponse}
-                        logs={llmErrorLogs}
-                    />
-                )}
-                {activeTab === 'learning' && (
-                    <LearningScaffoldingPanel vscode={vscode} isActive={activeTab === 'learning'} initialState={learningState} />
-                )}
-                {activeTab === 'learning-debug' && (
-                    <LearningDebugPanel state={learningState} vscode={vscode} />
                 )}
             </div>
         </div>

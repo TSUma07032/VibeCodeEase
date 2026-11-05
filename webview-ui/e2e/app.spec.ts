@@ -26,7 +26,7 @@ test.describe('vibeCodeEase Webview UI (実画面 E2E テスト)', () => {
     await page.goto('/');
   });
 
-  test('初期起動時に ready コマンドが送信され、ドキュメント同期後にミラーエディタが表示されること', async ({ page }) => {
+  test('初期起動時に ready コマンドが送信され、ドキュメント同期後にGitHub風差分ビューが表示されインライン採用できること', async ({ page }) => {
     await expect(page.getByText('Waiting for document sync...')).toBeVisible();
 
     const messages = await page.evaluate(() => (window as unknown as MockWindow).__messagesToVsCode);
@@ -61,12 +61,13 @@ test.describe('vibeCodeEase Webview UI (実画面 E2E テスト)', () => {
     });
 
     await expect(page.getByText('index.ts')).toBeVisible();
-    await expect(page.getByTitle('View AI Proposal')).toBeVisible();
 
-    await page.getByTitle('View AI Proposal').click();
-    await expect(page.getByText('予約語 function のタイポを修正します')).toBeVisible();
+    // GitHub風差分ビューの採用ボタン（インライン）を直接クリック
+    const acceptBtn = page.getByTestId('diff-accept-btn');
+    await expect(acceptBtn).toBeVisible();
+    await expect(acceptBtn).toHaveText('[採用]');
+    await acceptBtn.click();
 
-    await page.getByRole('button', { name: '[反映 (Accept)]' }).click();
     const updatedMessages = await page.evaluate(() => (window as unknown as MockWindow).__messagesToVsCode);
     expect(updatedMessages).toEqual(
       expect.arrayContaining([
@@ -111,4 +112,3 @@ test.describe('vibeCodeEase Webview UI (実画面 E2E テスト)', () => {
     expect(apiKeyCommands).toHaveLength(0);
   });
 });
-

@@ -1,3 +1,7 @@
+/**
+ * [Why/Intent] ユーザーのフィードバックと状況に応じたペルソナ推薦、
+ * 回答候補の生成・リランキング、および埋め込みプロバイダ切り替えを統括するパーソナライゼーションサービス。
+ */
 import * as vscode from 'vscode';
 import { GlobalState } from '../../state/globalState';
 import type {
@@ -8,6 +12,7 @@ import type {
     SituationId,
 } from '../../types/personalization';
 import type { GeminiClient } from '../llm/geminiClient';
+import type { ILlmGateway } from '../llm/llmGateway';
 import type { VscodeLmClient } from '../llm/vscodeLmClient';
 import { CandidateGenerator } from './candidateGenerator';
 import type { EmbeddingProvider } from './embedding/embeddingProvider';
@@ -23,11 +28,15 @@ import { determinePersonaWeights } from './situationPersonaSelector';
  */
 export interface PersonalizationServiceParams {
     globalStorageUri: vscode.Uri;
-    geminiClient: GeminiClient;
-    vscodeLmClient: VscodeLmClient;
+    gateway?: ILlmGateway;
+    geminiClient?: GeminiClient;
+    vscodeLmClient?: VscodeLmClient;
     getApiKey: () => Promise<string | undefined>;
 }
 
+/**
+ * [Why/Intent] パーソナライズプロファイル・嗜好ベクトル・回答候補の生成と再順位付けを統括するサービスクラス
+ */
 export class PersonalizationService {
     private store: PreferenceStore;
     private generator: CandidateGenerator;
@@ -48,16 +57,23 @@ export class PersonalizationService {
     constructor(params: PersonalizationServiceParams) {
         const getLlmConfig = () => GlobalState.getInstance().llmConfig;
 
-        this.proxyProvider = new ProxyEmbeddingProvider(params.geminiClient, params.getApiKey);
+        const clientOrGateway = params.gateway ?? params.geminiClient;
+        if (!clientOrGateway) {
+            throw new Error('Either gateway or geminiClient must be provided.');
+        }
+
+        this.proxyProvider = new ProxyEmbeddingProvider(clientOrGateway, params.getApiKey);
 
         this.store = new PreferenceStore(params.globalStorageUri, this.proxyProvider);
         this.generator = new CandidateGenerator({
+            gateway: params.gateway,
             geminiClient: params.geminiClient,
             vscodeLmClient: params.vscodeLmClient,
             getLlmConfig,
             getApiKey: params.getApiKey,
         });
         this.summarizer = new PreferenceSummarizer({
+            gateway: params.gateway,
             geminiClient: params.geminiClient,
             vscodeLmClient: params.vscodeLmClient,
             getLlmConfig,
@@ -65,6 +81,9 @@ export class PersonalizationService {
         });
     }
 
+    /**
+     * [Why/Intent] プロバイダIDの確定と永続化プロファイルの読み込みを行い、サービスを実行可能状態にする
+     */
     public async initialize(): Promise<void> {
         await this.proxyProvider.refreshProviderId();
         await this.store.load();
@@ -110,6 +129,9 @@ export class PersonalizationService {
         await this.store.save();
     }
 
+    /**
+     * [Why/Intent] クエリと現在コードからペルソナ重みを計算し、回答候補の生成と嗜好ベクトルに基づくリランキングを行う
+     */
     public async ask(
         query: string,
         contextCode: string | undefined,
@@ -184,6 +206,9 @@ export class PersonalizationService {
         }
     }
 
+    /**
+     * [Why/Intent] 候補に対するユーザー評価を記録し、一定回数ごとに嗜好要約の自動更新をトリガーする
+     */
     public async provideFeedback(
         candidateId: string,
         action: 'accept' | 'good' | 'bad' | 'regenerate',
@@ -226,6 +251,9 @@ export class PersonalizationService {
         this.store.enforceLimits();
     }
 
+    /**
+     * [Why/Intent] 評価履歴からペルソナおよび嗜好要約を再生成し、プロファイルへ永続化する
+     */
     public async updateSummaries(token: vscode.CancellationToken): Promise<void> {
         const profile = this.store.getProfile();
         const { personaSummary, preferenceSummary } = await this.summarizer.summarize(
@@ -238,6 +266,9 @@ export class PersonalizationService {
         await this.store.save();
     }
 
+    /**
+     * [Why/Intent] 嗜好ストア、メトリクス、保持候補をすべて初期状態にリセットする
+     */
     public async reset(): Promise<void> {
         await this.store.reset();
         this.metrics = {
@@ -251,7 +282,7 @@ export class PersonalizationService {
 }
 
 /**
- * Proxy that tries Gemini embedding, falls back to Local Hash if no API key
+ * [Why/Intent] APIキー有無に応じてGemini EmbeddingとLocal Hash Embeddingを動的に切り替えるプロバイダ
  */
 class ProxyEmbeddingProvider implements EmbeddingProvider {
     private readonly gemini: GeminiEmbeddingProvider;
@@ -259,10 +290,10 @@ class ProxyEmbeddingProvider implements EmbeddingProvider {
     private _activeProviderId = 'proxy-auto';
 
     constructor(
-        geminiClient: GeminiClient,
+        clientOrGateway: ILlmGateway | GeminiClient,
         private readonly getApiKey: () => Promise<string | undefined>,
     ) {
-        this.gemini = new GeminiEmbeddingProvider(geminiClient, getApiKey);
+        this.gemini = new GeminiEmbeddingProvider(clientOrGateway, getApiKey);
         this.local = new LocalHashEmbeddingProvider();
     }
 

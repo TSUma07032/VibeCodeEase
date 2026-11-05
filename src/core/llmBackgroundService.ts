@@ -1,13 +1,27 @@
+/**
+ * [Why/Intent] ファイル保存や定期インターバルを契機としたLLM自動推敲、
+ * ダッシュボード状態管理（idle/loading/error）、および構造化エラー・具体的推奨アクション通知を統括するバックグラウンドサービス。
+ */
 import * as vscode from 'vscode';
 import { GlobalState } from '../state/globalState';
 import type { AnalysisResult, LlmInterventionPlan } from '../types';
 import { SharedAnalysisCache } from './analyzer';
-import { isSensitiveDocument, LlmInterventionService } from './llmInterventionService';
+import {
+    DEFAULT_SYNC_INTERVAL_SECONDS,
+    MAX_AUTO_ANALYSIS_LINES,
+    MAX_SYNC_INTERVAL_SECONDS,
+    MIN_SYNC_INTERVAL_SECONDS,
+} from './llm/llmConstants';
+import { LlmError } from './llm/llmErrors';
+import { isSensitiveDocument, type LlmInterventionService } from './llmInterventionService';
 
+/**
+ * [Why/Intent] エディタイベントやタイマーに連動してLLM推敲を実行し、UI状態同期とエラー通知を管理するサービス
+ */
 // [AI-WARNING] DO NOT REMOVE THIS OPTIMIZATION: Extending LlmBackgroundService to handle Dashboard states (idle, loading, error, logs, response) and timer intervals.
 export class LlmBackgroundService implements vscode.Disposable {
     private readonly _disposables: vscode.Disposable[] = [];
-    private readonly _llmService: LlmInterventionService;
+    private readonly _llmService?: LlmInterventionService;
     private _cancellationTokenSource?: vscode.CancellationTokenSource;
 
     private readonly _onDidStartAnalysis = new vscode.EventEmitter<void>();
@@ -49,11 +63,10 @@ export class LlmBackgroundService implements vscode.Disposable {
     }
 
     constructor(
-        private readonly secrets: vscode.SecretStorage,
+        readonly _secrets: vscode.SecretStorage,
         llmService?: LlmInterventionService,
     ) {
-        this._llmService =
-            llmService ?? new LlmInterventionService(undefined, undefined, this.secrets);
+        this._llmService = llmService;
         this._disposables.push(
             vscode.workspace.onDidSaveTextDocument((document) => {
                 const config = vscode.workspace.getConfiguration('vibecodeease');
@@ -71,6 +84,9 @@ export class LlmBackgroundService implements vscode.Disposable {
         this.startTimerIfConfigured();
     }
 
+    /**
+     * [Why/Intent] ユーザー設定に基づきインターバルタイマーを開始または破棄する
+     */
     // [AI-WARNING] DO NOT REMOVE THIS OPTIMIZATION: Start interval timer for LLM sync if configured.
     public startTimerIfConfigured(): void {
         if (this._timerId) {
@@ -85,8 +101,12 @@ export class LlmBackgroundService implements vscode.Disposable {
             config.get<string>('llm.syncFrequency') ??
             (config.get<boolean>('analyzeOnSave') ? 'onSave' : 'manual');
         if (syncFreq === 'interval') {
-            const rawSecs = config.get<number>('llm.syncIntervalSeconds') ?? 10;
-            const intervalSecs = Math.min(3600, Math.max(5, rawSecs));
+            const rawSecs =
+                config.get<number>('llm.syncIntervalSeconds') ?? DEFAULT_SYNC_INTERVAL_SECONDS;
+            const intervalSecs = Math.min(
+                MAX_SYNC_INTERVAL_SECONDS,
+                Math.max(MIN_SYNC_INTERVAL_SECONDS, rawSecs),
+            );
             this._timerId = setInterval(() => this.runAnalysisOnInterval(), intervalSecs * 1000);
         }
     }
@@ -104,6 +124,9 @@ export class LlmBackgroundService implements vscode.Disposable {
         }
     }
 
+    /**
+     * [Why/Intent] Webviewダッシュボード初期表示用の最新状態（ステータス・生返答・エラーログ）を取得する
+     */
     // [AI-WARNING] DO NOT REMOVE THIS OPTIMIZATION: Retrieve current dashboard state for UI initialization.
     public getDashboardState(): {
         status: 'idle' | 'loading' | 'error';
@@ -117,40 +140,27 @@ export class LlmBackgroundService implements vscode.Disposable {
         };
     }
 
+    /**
+     * [Why/Intent] 蓄積されたエラーログを初期化し、ダッシュボードへ変更を通知する
+     */
     // [AI-WARNING] DO NOT REMOVE THIS OPTIMIZATION: Clear error logs and notify UI.
     public clearErrorLogs(): void {
         this._errorLogs = [];
         this.onDidUpdateDashboard.fire({ type: 'LLM_DASHBOARD_INIT', ...this.getDashboardState() });
     }
 
-    /** [Why/Intent] Geminiプロバイダ利用時に必要なAPIキーをSecretStorageおよび設定からフォールバック取得する */
-    private async prepareApiKey(provider: string): Promise<string | undefined> {
-        if (provider !== 'gemini') {
-            return undefined;
-        }
-        const secretKey = await this.secrets.get('vibecodeease.geminiApiKey');
-        return (
-            secretKey ??
-            vscode.workspace.getConfiguration('vibecodeease').get<string>('geminiApiKey')
-        );
-    }
-
     /** [Why/Intent] ユーザー設定のプロバイダに応じたプラン作成処理へ委譲する */
     private async executeLlmPlan(
         document: vscode.TextDocument,
         token: vscode.CancellationToken,
-        apiKey?: string,
     ): Promise<LlmInterventionPlan> {
-        const state = GlobalState.getInstance();
-        if (state.llmProvider === 'gemini' && apiKey) {
-            return this._llmService.createGeminiPlan({
-                document,
-                token,
-                apiKey,
-                modelName: state.llmModel,
-                presetMode: state.presetMode,
+        if (!this._llmService) {
+            throw new LlmError({
+                code: 'UNKNOWN',
+                message: 'LlmInterventionService が初期化されていません。',
             });
         }
+        const state = GlobalState.getInstance();
         return this._llmService.createPlan({
             document,
             token,
@@ -205,38 +215,25 @@ export class LlmBackgroundService implements vscode.Disposable {
         this.onDidUpdateDashboard.fire({ type: 'LLM_STATUS_UPDATE', status: 'idle' });
     }
 
-    /** [Why/Intent] エラーメッセージの内容を分類し識別タグを付与する */
-    private formatErrorLog(errorMessage: string, error: unknown): string {
-        const lowerMsg = errorMessage.toLowerCase();
-        if (/(quota|429|503|fetch|network)/.test(lowerMsg)) {
-            return `[API Error] ${errorMessage}`;
+    /** [Why/Intent] LlmError から構造化された識別タグと具体的推奨アクションを含むログメッセージを生成する */
+    private formatErrorLog(error: unknown): string {
+        if (error instanceof LlmError) {
+            return `[${error.code}] ${error.message} (推奨対処: ${error.suggestedAction})`;
         }
-        if (
-            lowerMsg.includes('json') ||
-            lowerMsg.includes('parse') ||
-            error instanceof SyntaxError
-        ) {
-            return `[Parse Error] ${errorMessage}`;
-        }
-        return `[Unknown Error] ${errorMessage}`;
+        const message = error instanceof Error ? error.message : String(error);
+        return `[UNKNOWN] ${message}`;
     }
 
-    /** [Why/Intent] エラー重要度に応じたステータスバー通知を表示する */
-    private showErrorMessage(errorMessage: string): void {
-        if (errorMessage.toLowerCase().includes('quota')) {
+    /** [Why/Intent] LlmError の種別に応じた具体的アクション付きステータスバー通知を表示する */
+    private showErrorMessage(error: unknown): void {
+        if (error instanceof LlmError) {
             vscode.window.setStatusBarMessage(
-                '$(error) AI API Quota 超過: プランまたは課金情報を確認してください',
+                `$(error) AIエラー (${error.code}): ${error.suggestedAction}`,
                 10000,
             );
-        } else if (errorMessage.includes('503') || errorMessage.includes('429')) {
-            const code = errorMessage.includes('503') ? '503' : '429';
-            vscode.window.setStatusBarMessage(
-                `$(error) AI通信エラー: サーバーが混雑しています (${code})`,
-                10000,
-            );
-        } else {
-            vscode.window.setStatusBarMessage('$(error) AI通信エラー: 解析に失敗しました', 5000);
+            return;
         }
+        vscode.window.setStatusBarMessage('$(error) AI通信エラー: 解析に失敗しました', 5000);
     }
 
     /** [Why/Intent] 解析中の例外発生時、イベント発火・UI通知・最大50件のログ履歴保存を行う */
@@ -247,9 +244,9 @@ export class LlmBackgroundService implements vscode.Disposable {
         console.error('[LlmBackgroundService] Analysis failed:', error);
         const errorMessage = error instanceof Error ? error.message : String(error);
         this._onDidError.fire(errorMessage);
-        this.showErrorMessage(errorMessage);
+        this.showErrorMessage(error);
 
-        const logMsg = this.formatErrorLog(errorMessage, error);
+        const logMsg = this.formatErrorLog(error);
         const timestamp = Date.now();
         this._errorLogs.push({ message: logMsg, timestamp });
         if (this._errorLogs.length > 50) {
@@ -264,6 +261,9 @@ export class LlmBackgroundService implements vscode.Disposable {
     /** [Why/Intent] 機密ファイル除外とURI単位の未変更バージョン除外を判定する */
     private shouldSkipDocument(document: vscode.TextDocument, isAuto: boolean): boolean {
         if (isSensitiveDocument(document)) {
+            return true;
+        }
+        if (isAuto && document.lineCount > MAX_AUTO_ANALYSIS_LINES) {
             return true;
         }
         const lastVersion = this._lastAnalyzedVersions.get(document.uri.toString());
@@ -284,7 +284,6 @@ export class LlmBackgroundService implements vscode.Disposable {
     private async performAnalysis(
         document: vscode.TextDocument,
         token: vscode.CancellationToken,
-        apiKey?: string,
     ): Promise<void> {
         this._onDidStartAnalysis.fire();
         const statusBarDisposable = vscode.window.setStatusBarMessage(
@@ -292,7 +291,7 @@ export class LlmBackgroundService implements vscode.Disposable {
         );
 
         try {
-            const plan = await this.executeLlmPlan(document, token, apiKey);
+            const plan = await this.executeLlmPlan(document, token);
             if (token.isCancellationRequested) {
                 this._status = 'idle';
                 this.onDidUpdateDashboard.fire({ type: 'LLM_STATUS_UPDATE', status: 'idle' });
@@ -307,6 +306,9 @@ export class LlmBackgroundService implements vscode.Disposable {
         }
     }
 
+    /**
+     * [Why/Intent] 対象ドキュメントに対してLLM推敲を実行し、ステータスバー更新および結果/エラー通知を行う
+     */
     // [AI-WARNING] DO NOT REMOVE THIS OPTIMIZATION: Main analysis logic with UI status updates and error logging.
     public async runAnalysis(
         document: vscode.TextDocument,
@@ -319,16 +321,8 @@ export class LlmBackgroundService implements vscode.Disposable {
         this._status = 'loading';
         this.onDidUpdateDashboard.fire({ type: 'LLM_STATUS_UPDATE', status: 'loading' });
 
-        const state = GlobalState.getInstance();
-        const apiKey = await this.prepareApiKey(state.llmProvider);
-        if (state.llmProvider === 'gemini' && !apiKey) {
-            this._status = 'error';
-            this.onDidUpdateDashboard.fire({ type: 'LLM_STATUS_UPDATE', status: 'error' });
-            return;
-        }
-
         const token = this.createAnalysisCancellationToken();
-        await this.performAnalysis(document, token, apiKey);
+        await this.performAnalysis(document, token);
     }
 
     public dispose(): void {

@@ -3,7 +3,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import App from './App';
 import { MirrorEditor } from './components/MirrorEditor';
 import { ProposalPopup } from './components/ProposalPopup';
-import type { LearningSessionState, WebviewIntervention } from './types';
+import type { WebviewIntervention } from './types';
 import { mockPostMessage } from './test/setup';
 
 describe('App Component', () => {
@@ -13,7 +13,7 @@ describe('App Component', () => {
     expect(mockPostMessage).toHaveBeenCalledWith({ command: 'ready' });
   });
 
-  it('syncs document and interventions via IPC and handles apply/discard', () => {
+  it('syncs document and interventions via IPC and handles apply and discard actions', () => {
     render(<App />);
     act(() => {
       window.dispatchEvent(
@@ -44,52 +44,53 @@ describe('App Component', () => {
     });
 
     expect(screen.getByText('demo.ts')).toBeInTheDocument();
-    expect(screen.getByText('functon test() {}')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTitle('View AI Proposal'));
-    expect(screen.getByText('Fix typo')).toBeInTheDocument();
+    // 採用ボタンのクリック検証
+    const acceptBtn = screen.getByTestId('diff-accept-btn');
+    expect(acceptBtn).toHaveTextContent('[採用]');
+    fireEvent.click(acceptBtn);
 
-    fireEvent.click(screen.getByText('[反映 (Accept)]'));
     expect(mockPostMessage).toHaveBeenCalledWith({
       command: 'apply_intervention',
       id: 'int-1',
       newText: 'function',
       range: { start: { line: 0, character: 0 }, end: { line: 0, character: 7 } },
     });
+
+    // 破棄ボタンのクリック検証 (Test Auditor指摘5)
+    const discardBtn = screen.getByTestId('diff-discard-btn');
+    expect(discardBtn).toHaveTextContent('[破棄]');
+    fireEvent.click(discardBtn);
+
+    expect(mockPostMessage).toHaveBeenCalledWith({
+      command: 'discard_intervention',
+      id: 'int-1',
+    });
   });
 
-  it('retains learning session state when switching to Learning tab after SYNC_SESSION_STATE', () => {
+  it('does not render destroyed tabs (Learning, Dashboard, AI Inference Debug) in TabBar', () => {
     render(<App />);
-    const sessionState: LearningSessionState = {
-      taskId: 't-1',
-      taskDescription: 'React Hooks課題',
-      learningGoal: 'useEffect理解',
-      status: 'loading',
-      disclosureMode: 'stepByStep',
-      unlockedLevel: 1,
-      latestPrediction: null,
-      assessment: { isStagnated: false, consecutiveStagnantCount: 0, reason: 'NONE', confidence: 0 },
-      snoozeUntilTimestamp: null,
-      isDismissed: false,
-      lastUpdatedTimestamp: Date.now(),
-      history: [],
-    };
+    // 破壊された3タブの非存在検証 (RULE-005)
+    expect(screen.queryByText('[🎓 学習支援]')).toBeNull();
+    expect(screen.queryByText('[📊 Dashboard]')).toBeNull();
+    expect(screen.queryByText('[🐞 AI推論デバッグ]')).toBeNull();
 
+    // 存続している2タブの存在確認
+    expect(screen.getByText('[💻 Code]')).toBeInTheDocument();
+    expect(screen.getByText('[⚙️ Settings]')).toBeInTheDocument();
+  });
+
+  it('safely handles destroyed tab IPC messages (SYNC_SESSION_STATE, LLM_DASHBOARD_INIT, etc.) without crashing', () => {
+    render(<App />);
     act(() => {
       window.dispatchEvent(
         new MessageEvent('message', {
-          data: { type: 'SYNC_SESSION_STATE', payload: sessionState },
+          data: {
+            type: 'SYNC_SESSION_STATE',
+            payload: { status: 'loading' },
+          },
         })
       );
-    });
-
-    fireEvent.click(screen.getByText('[🎓 学習支援]'));
-    expect(screen.getByText(/AIがあなたのコードから完成形の予想図を準備しています/)).toBeInTheDocument();
-  });
-
-  it('handles Dashboard IPC messages (LLM_DASHBOARD_INIT, LLM_STATUS_UPDATE, LLM_RESPONSE_UPDATE, LLM_ERROR_LOG)', () => {
-    render(<App />);
-    act(() => {
       window.dispatchEvent(
         new MessageEvent('message', {
           data: {
@@ -105,21 +106,10 @@ describe('App Component', () => {
           data: { type: 'LLM_STATUS_UPDATE', status: 'error' },
         })
       );
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: { type: 'LLM_RESPONSE_UPDATE', text: 'Updated Generic<T>', timestamp: 2000 },
-        })
-      );
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: { type: 'LLM_ERROR_LOG', message: 'Quota exceeded', timestamp: 3000 },
-        })
-      );
     });
 
-    fireEvent.click(screen.getByText('[📊 Dashboard]'));
-    expect(screen.getByText('❌ エラー')).toBeInTheDocument();
-    expect(screen.getByText('Updated Generic<T>')).toBeInTheDocument();
+    // クラッシュせず、Codeタブの内容が維持されること
+    expect(screen.getByText('Waiting for document sync...')).toBeInTheDocument();
   });
 
   it('renders SettingsPanel when Settings tab is clicked and sends settings commands', () => {
@@ -164,7 +154,7 @@ describe('MirrorEditor & ProposalPopup Components', () => {
     message: 'Use let',
   };
 
-  it('renders text with line numbers and toggles popup on bulb click and discard', () => {
+  it('renders text with line numbers and handles diff discard inline', () => {
     const onDiscard = vi.fn();
     render(
       <MirrorEditor
@@ -174,16 +164,12 @@ describe('MirrorEditor & ProposalPopup Components', () => {
         onDiscard={onDiscard}
       />
     );
-    expect(screen.getByText('const x = 1;')).toBeDefined();
     expect(screen.getByText('line 2')).toBeDefined();
 
-    const bulb = screen.getByTitle('View AI Proposal');
-    fireEvent.click(bulb);
-    expect(screen.getByText('Use let')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByText('[破棄 (Discard)]'));
+    const discardBtn = screen.getByTestId('diff-discard-btn');
+    expect(discardBtn).toHaveTextContent('[破棄]');
+    fireEvent.click(discardBtn);
     expect(onDiscard).toHaveBeenCalledWith('123');
-    expect(screen.queryByText('Use let')).not.toBeInTheDocument();
   });
 
   it('renders ProposalPopup diff texts and buttons', () => {
@@ -198,4 +184,3 @@ describe('MirrorEditor & ProposalPopup Components', () => {
     expect(onDiscard).toHaveBeenCalledWith('123');
   });
 });
-

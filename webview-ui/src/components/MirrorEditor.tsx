@@ -1,75 +1,99 @@
 /**
  * [Why/Intent] 仕様上の要件であり、エディタとしての過剰な依存を排除して軽量かつ安定したミラー表示を実現するため、
  * シンタックスハイライトを行わずプレーンテキストで行番号付きで描画するコンポーネント。
+ * AI推敲提案が存在する行範囲をスキップし、GitHub風Diffビュー（GithubDiffView）をインライン置換描画する。
  */
-import React, { useState, useMemo } from 'react';
+import React from 'react';
 import type { WebviewIntervention } from '../types';
-import { ProposalPopup } from './ProposalPopup';
+import { GithubDiffView } from './GithubDiffView';
 
-interface MirrorEditorProps {
+/**
+ * [Why/Intent] MirrorEditor へ親（App）から渡されるProps。
+ * アクティブエディタのテキストおよび最新の推敲提案群を受け取り、
+ * インライン差分置換描画とユーザー操作（採用・破棄）のExtension伝搬を仲介する。
+ */
+export interface MirrorEditorProps {
+    /** [Why/Intent] アクティブエディタの最新状態をミラー表示し、行ごとの差分置換走査を行うための全文ソースコード */
     text: string;
+    /** [Why/Intent] 通常行描画をスキップしてGithubDiffViewをインライン置換描画するためのAI推敲提案リスト */
     interventions: WebviewIntervention[];
+    /** [Why/Intent] ユーザーが推敲提案を採用した際に、親（App/Extension）へコード反映を要求するコールバック */
     onApply: (intervention: WebviewIntervention) => void;
+    /** [Why/Intent] ユーザーが推敲提案を破棄した際に、親（App/Extension）へ提案除外を要求するコールバック */
     onDiscard: (id: string) => void;
 }
 
+/**
+ * [Why/Intent] 提案が存在しない通常の行をプレーンテキストで行番号付きで描画するヘルパー。
+ * 差分ビューの行番号幅（45px）と同一に揃えて視覚的なズレを防ぐ。
+ */
+const renderNormalLine = (lineContent: string, lineIndex: number): React.ReactNode => (
+    <div key={`line-${lineIndex}`} style={{ display: 'flex', alignItems: 'center', minHeight: '21px' }}>
+        <div style={{
+            width: '45px',
+            textAlign: 'right',
+            paddingRight: '10px',
+            color: 'var(--vscode-editorLineNumber-foreground, #858585)',
+            userSelect: 'none',
+            flexShrink: 0
+        }}>
+            {lineIndex + 1}
+        </div>
+        <div style={{
+            flexGrow: 1,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-all',
+            color: 'var(--vscode-editor-foreground)'
+        }}>
+            {lineContent === '' ? ' ' : lineContent}
+        </div>
+    </div>
+);
+
+/**
+ * [Why/Intent] MirrorEditor 本体コンポーネント。通常行の描画と介入行のインライン差分置換描画を統合制御する。
+ */
 export const MirrorEditor: React.FC<MirrorEditorProps> = ({ text, interventions, onApply, onDiscard }) => {
     const lines = text.split(/\r?\n/);
-    
-    /**
-     * [Why/Intent] 行ごとに複数の提案が存在したり、ユーザーが個別に開閉状態を維持できるようにするため、
-     * 単一のIDではなく Set<string> で管理する。
-     */
-    const [openPopupIds, setOpenPopupIds] = useState<Set<string>>(new Set());
 
-    const interventionsByLine = useMemo(() => {
-        const map = new Map<number, WebviewIntervention[]>();
-        for (const intervention of interventions) {
-            const line = intervention.range.start.line;
-            if (!map.has(line)) map.set(line, []);
-            map.get(line)!.push(intervention);
+    // 1. interventions を range.start.line 昇順にソート
+    const sortedInterventions = [...interventions].sort((a, b) => a.range.start.line - b.range.start.line);
+
+    // 2. start.line をキーとする Map を作成
+    const interventionsByStartLine = new Map<number, WebviewIntervention[]>();
+    for (const intervention of sortedInterventions) {
+        const startLine = intervention.range.start.line;
+        if (!interventionsByStartLine.has(startLine)) {
+            interventionsByStartLine.set(startLine, []);
         }
-        return map;
-    }, [interventions]);
+        interventionsByStartLine.get(startLine)!.push(intervention);
+    }
 
-    /**
-     * [Why/Intent] ポップアップを開閉し、提案の詳細を確認できるようにする。
-     */
-    const togglePopup = (id: string) => {
-        setOpenPopupIds(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(id)) {
-                newSet.delete(id);
-            } else {
-                newSet.add(id);
+    // 3. 行を走査し、介入開始行の場合は差分ビューを描画して該当行範囲をスキップ
+    const renderedElements: React.ReactNode[] = [];
+    let i = 0;
+    while (i < lines.length) {
+        if (interventionsByStartLine.has(i)) {
+            const lineInterventions = interventionsByStartLine.get(i)!;
+            for (const intervention of lineInterventions) {
+                renderedElements.push(
+                    <GithubDiffView
+                        key={`diff-${intervention.id}`}
+                        intervention={intervention}
+                        onApply={onApply}
+                        onDiscard={onDiscard}
+                    />
+                );
             }
-            return newSet;
-        });
-    };
-
-    /**
-     * [Why/Intent] コード適用をExtensionに要求し、完了を見越してポップアップを閉じることでスムーズなUXを提供する。
-     */
-    const handleApply = (intervention: WebviewIntervention) => {
-        onApply(intervention);
-        setOpenPopupIds(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(intervention.id);
-            return newSet;
-        });
-    };
-
-    /**
-     * [Why/Intent] 提案を破棄する要求をExtensionへ送り、不要になったポップアップを閉じる。
-     */
-    const handleDiscard = (id: string) => {
-        onDiscard(id);
-        setOpenPopupIds(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(id);
-            return newSet;
-        });
-    };
+            // 該当介入の最大終了行を算出して通常行のレンダリングをスキップ
+            const maxEndLine = Math.max(...lineInterventions.map(intv => intv.range.end.line));
+            i = Math.max(i + 1, maxEndLine + 1);
+        } else {
+            // 通常のエディタ行を描画
+            renderedElements.push(renderNormalLine(lines[i], i));
+            i++;
+        }
+    }
 
     return (
         <div style={{
@@ -80,78 +104,7 @@ export const MirrorEditor: React.FC<MirrorEditorProps> = ({ text, interventions,
             color: 'var(--vscode-editor-foreground)',
             padding: '10px'
         }}>
-            {lines.map((lineContent, index) => {
-                const lineNumber = index; // 0-indexed internally, display as 1-indexed
-                
-                // [Why/Intent] その行に関連する提案が存在する場合にのみ電球アイコンを描画し、ユーザーが提案に気づけるようにする。
-                const lineInterventions = interventionsByLine.get(lineNumber) || [];
-                const hasIntervention = lineInterventions.length > 0;
-
-                return (
-                    <div key={index} style={{ display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ 
-                            display: 'flex', 
-                            alignItems: 'center',
-                            minHeight: '21px',
-                            backgroundColor: hasIntervention ? 'rgba(255, 255, 0, 0.05)' : 'transparent'
-                        }}>
-                            <div style={{
-                                width: '40px',
-                                textAlign: 'right',
-                                paddingRight: '10px',
-                                color: '#858585',
-                                userSelect: 'none',
-                                flexShrink: 0
-                            }}>
-                                {lineNumber + 1}
-                            </div>
-                            <div style={{
-                                flexGrow: 1,
-                                whiteSpace: 'pre-wrap',
-                                wordBreak: 'break-all'
-                            }}>
-                                {lineContent === '' ? ' ' : lineContent}
-                            </div>
-                            {hasIntervention && (
-                                <div style={{ flexShrink: 0, paddingLeft: '8px' }}>
-                                    {lineInterventions.map(intervention => (
-                                        <button
-                                            key={intervention.id}
-                                            onClick={() => togglePopup(intervention.id)}
-                                            style={{
-                                                background: 'none',
-                                                border: 'none',
-                                                cursor: 'pointer',
-                                                fontSize: '16px',
-                                                padding: '0 4px',
-                                                lineHeight: '1'
-                                            }}
-                                            title="View AI Proposal"
-                                        >
-                                            💡
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                        
-                        {/* Inline Proposal Popup */}
-                        {lineInterventions.map(intervention => {
-                            if (openPopupIds.has(intervention.id)) {
-                                return (
-                                    <ProposalPopup
-                                        key={`popup-${intervention.id}`}
-                                        intervention={intervention}
-                                        onApply={handleApply}
-                                        onDiscard={handleDiscard}
-                                    />
-                                );
-                            }
-                            return null;
-                        })}
-                    </div>
-                );
-            })}
+            {renderedElements}
         </div>
     );
 };

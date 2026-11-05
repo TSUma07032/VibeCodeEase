@@ -1,10 +1,15 @@
+/**
+ * [Why/Intent] 拡張機能のエントリポイント。ライフサイクル管理（activate/deactivate）、
+ * 各種サービス初期化、LlmGatewayと依存性のDI配線、およびコマンド登録を統括する。
+ */
 import * as vscode from 'vscode';
 import { registerCommands } from './commands';
 import { ActionLogService } from './core/actionLogService';
 import { DiagnosticsService } from './core/diagnosticsService';
-import { GeminiClient } from './core/llm/geminiClient';
-import { VscodeLmClient } from './core/llm/vscodeLmClient';
+import { LlmConfigRepository } from './core/llm/llmConfigRepository';
+import { LlmGateway } from './core/llm/llmGateway';
 import { LlmBackgroundService } from './core/llmBackgroundService';
+import { LlmInterventionService } from './core/llmInterventionService';
 // Import personalization services statically
 import { PersonalizationService } from './core/personalization/personalizationService';
 import { SilentFixService } from './core/silentFixService';
@@ -15,6 +20,7 @@ import { VibeStatusBar } from './vscode-utils/StatusBar';
 /**
  * [Why/Intent] 拡張機能の初期化。以前の CodeActionProvider や editorDecorator 等を撤廃し、
  * 左エディタ介入を完全排除して SideEditorProvider への登録のみに集約する（Side-by-Side構成へ刷新する設計方針）。
+ * LLM通信はすべて LlmGateway を経由し、直接の低レベルクライアント生成を排除する。
  */
 export function activate(context: vscode.ExtensionContext): void {
     GlobalState.getInstance().initialize(context);
@@ -22,26 +28,27 @@ export function activate(context: vscode.ExtensionContext): void {
     // ワークスペースパスの解決
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 
-    // Phase 2 & 3: サービスの初期化
+    // LLM統一インフラストラクチャの初期化
+    const llmConfigRepo = new LlmConfigRepository(context.secrets);
+    const llmGateway = new LlmGateway(llmConfigRepo);
+    const llmInterventionService = new LlmInterventionService(llmGateway);
+
+    // Phase 2 & 3: コアサービスの初期化
     const actionLogService = new ActionLogService(workspaceRoot);
     const diagnosticsService = new DiagnosticsService();
-    const llmBackgroundService = new LlmBackgroundService(context.secrets);
+    const llmBackgroundService = new LlmBackgroundService(context.secrets, llmInterventionService);
 
-    const getApiKey = async (): Promise<string | undefined> => {
-        let key = await context.secrets.get('vibecodeease.geminiApiKey');
-        key ??= vscode.workspace.getConfiguration('vibecodeease').get<string>('geminiApiKey');
-        return key;
-    };
     const personalizationService = new PersonalizationService({
         globalStorageUri: context.globalStorageUri,
-        geminiClient: new GeminiClient(),
-        vscodeLmClient: new VscodeLmClient(),
-        getApiKey,
+        gateway: llmGateway,
+        getApiKey: () => llmConfigRepo.getApiKey(),
     });
     void personalizationService.initialize();
 
     const silentFixService = new SilentFixService(personalizationService);
-    const sideEditorProvider = SideEditorProvider.getInstance(context, llmBackgroundService);
+    const sideEditorProvider = SideEditorProvider.getInstance(context, llmBackgroundService, {
+        llmInterventionService,
+    });
 
     // [Why/Intent] コアのバックグラウンド解析サービス完了時に、ObserverパターンでUI更新をトリガーし、密結合を防ぐ
     context.subscriptions.push(
@@ -80,6 +87,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     context.subscriptions.push(
+        llmConfigRepo,
         diagnosticsService,
         silentFixService,
         llmBackgroundService,
@@ -98,6 +106,7 @@ export function activate(context: vscode.ExtensionContext): void {
     });
 }
 
+/** [Why/Intent] 拡張機能の各種VS Codeコマンドを登録するヘルパー */
 function registerExtensionCommands(
     context: vscode.ExtensionContext,
     sideEditorProvider: SideEditorProvider,

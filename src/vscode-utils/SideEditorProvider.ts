@@ -1,6 +1,12 @@
+/**
+ * [Why/Intent] VS CodeのSide Editor Webviewパネルのライフサイクル、
+ * アクティブエディタとの双方向同期、設定・介入プラン・学習状態のIPCメッセージ中継を管理するプロバイダモジュール。
+ */
 import * as vscode from 'vscode';
 import { SharedAnalysisCache } from '../core/analyzer';
 import { InterventionManager } from '../core/interventionManager';
+import { LlmConfigRepository } from '../core/llm/llmConfigRepository';
+import { LlmGateway } from '../core/llm/llmGateway';
 import type { LlmBackgroundService } from '../core/llmBackgroundService';
 import { LlmInterventionService } from '../core/llmInterventionService';
 import { LearningBackgroundService } from '../core/scaffolding/learningBackgroundService';
@@ -19,12 +25,19 @@ import {
     type LearningHandlerContext,
 } from './sideEditorLearningHandler';
 
+/**
+ * [Why/Intent] SideEditorProviderの依存性（学習セッション・推敲サービス等）をテストおよび本番でDI注入するためのオプション
+ */
 export interface SideEditorProviderOptions {
     learningSessionStore?: LearningSessionStore;
     learningBackgroundService?: LearningBackgroundService;
     learningConfigStore?: LearningConfigStore;
+    llmInterventionService?: LlmInterventionService;
 }
 
+/**
+ * [Why/Intent] Side-by-Side Webviewエディタの生成、表示管理、およびエディタとWebview間のIPC通信を統括するプロバイダ
+ */
 // [AI-WARNING] DO NOT REMOVE THIS OPTIMIZATION: Updated SideEditorProvider to sync dashboard states and LLM config seamlessly.
 export class SideEditorProvider implements vscode.Disposable {
     private static instance: SideEditorProvider | undefined;
@@ -45,12 +58,12 @@ export class SideEditorProvider implements vscode.Disposable {
     ) {
         this.learningSessionStore =
             options?.learningSessionStore ?? new LearningSessionStore(context.workspaceState);
+        const interventionService =
+            options?.llmInterventionService ??
+            new LlmInterventionService(new LlmGateway(new LlmConfigRepository(context.secrets)));
         this.learningBackgroundService =
             options?.learningBackgroundService ??
-            new LearningBackgroundService(
-                this.learningSessionStore,
-                new LlmInterventionService(undefined, undefined, context.secrets),
-            );
+            new LearningBackgroundService(this.learningSessionStore, interventionService);
         this.learningConfigStore =
             options?.learningConfigStore ?? new LearningConfigStore(context.globalState);
 
@@ -95,6 +108,9 @@ export class SideEditorProvider implements vscode.Disposable {
         SideEditorProvider.instance = undefined;
     }
 
+    /**
+     * [Why/Intent] Webviewパネルを右側（ViewColumn.Beside）に開くか、既存パネルを最前面に表示する
+     */
     public async openSideEditor(): Promise<void> {
         if (this.panel) {
             this.panel.reveal(vscode.ViewColumn.Beside);
@@ -239,6 +255,9 @@ export class SideEditorProvider implements vscode.Disposable {
         }
     }
 
+    /**
+     * [Why/Intent] 現在の学習セッション状態をWebview UIへ同期送信する
+     */
     public sendLearningStateSync(): void {
         this.panel?.webview.postMessage({
             type: 'SYNC_SESSION_STATE',
@@ -286,6 +305,9 @@ export class SideEditorProvider implements vscode.Disposable {
         this.panel?.webview.postMessage(message);
     }
 
+    /**
+     * [Why/Intent] 対象ドキュメントの最新解析結果（介入プラン）を取得し、Webview UIへ更新メッセージを送信する
+     */
     public sendUpdateInterventions(document: vscode.TextDocument): void {
         if (!this.panel) {
             return;

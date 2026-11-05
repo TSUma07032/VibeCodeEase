@@ -1,7 +1,13 @@
+/**
+ * [Why/Intent] Gemini REST API通信の低レベル制御、モデル動的検出・10分間キャッシュ、
+ * Embeddingバッチ処理、およびHTTP/ネットワーク例外のマッピングを担当するクライアントモジュール。
+ */
 import * as https from 'node:https';
 import { URL } from 'node:url';
 import type * as vscode from 'vscode';
-import { INTERVENTION_RESPONSE_SCHEMA } from './promptBuilder';
+import { MODEL_CACHE_TTL_MS } from './llmConstants';
+import { LlmError, mapHttpErrorToLlmError, mapNetworkErrorToLlmError } from './llmErrors';
+import type { RawLlmResponse } from './llmGateway';
 
 interface GeminiModel {
     name: string;
@@ -43,7 +49,12 @@ interface RequestOptionsParam {
     body?: string;
 }
 
+/**
+ * [Why/Intent] Gemini REST APIとの直接通信をカプセル化する低レベルクライアント。
+ * モデル自動検出とTTLキャッシュ、batchEmbedContents対応、構造化レスポンス取得を提供する。
+ */
 export class GeminiClient {
+    /** [Why/Intent] 推奨・安定稼働するGeminiモデルの優先順序リスト。ユーザー指定モデルが利用不可の場合に順次フォールバックを試みる */
     private readonly preferredNames = [
         'gemini-3.8-flash',
         'gemini-3.7-flash',
@@ -61,13 +72,28 @@ export class GeminiClient {
     ];
 
     /**
+     * [Why/Intent] GET /v1beta/models で取得した素のモデルリストをAPIキー単位でキャッシュし、
+     * 毎リクエストごとの重複通信を削減する（TTL: 10分）。
+     */
+    private readonly _rawModelCache = new Map<
+        string,
+        { models: GeminiModel[]; expiresAt: number }
+    >();
+
+    /**
      * [Why/Intent] 指定モデルのエンドポイントへ generateContent リクエストを発行するヘルパー
      */
     private async callGenerateEndpoint(
         modelName: string,
         params: GeminiGenerateOptions,
     ): Promise<{ statusCode: number; body: string }> {
-        const schema = params.responseSchema ?? INTERVENTION_RESPONSE_SCHEMA;
+        const generationConfig: Record<string, unknown> = {
+            responseMimeType: 'application/json',
+        };
+        if (params.responseSchema) {
+            generationConfig.responseSchema = params.responseSchema;
+        }
+
         return this.request({
             urlString: `https://generativelanguage.googleapis.com/v1beta/${modelName}:generateContent?key=${encodeURIComponent(params.apiKey)}`,
             options: {
@@ -77,39 +103,44 @@ export class GeminiClient {
             token: params.token,
             body: JSON.stringify({
                 contents: [{ parts: [{ text: params.prompt }] }],
-                generationConfig: {
-                    responseMimeType: 'application/json',
-                    responseSchema: schema,
-                },
+                generationConfig,
             }),
         });
     }
 
     /**
-     * [Why/Intent] APIレスポンスを検証し、candidate から生成JSON文字列を取り出してオブジェクトとしてパースする
+     * [Why/Intent] レスポンス本文からCandidateテキストを取り出し、型安全にJSONパースするヘルパー
      */
-    private parseGenerateResponse(response: { statusCode: number; body: string }): unknown {
-        if (response.statusCode < 200 || response.statusCode >= 300) {
-            const details = response.body.slice(0, 160);
-            throw new Error(
-                `Gemini APIリクエストに失敗しました（HTTP ${response.statusCode}）。${details}`,
-            );
-        }
-
-        const data = JSON.parse(response.body) as {
+    private parseRawResponseBody<T>(responseBody: string): RawLlmResponse<T> {
+        const data = JSON.parse(responseBody) as {
             candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
         };
         const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!raw) {
-            throw new Error('Geminiから介入プランが返されませんでした。');
+            throw new LlmError({
+                code: 'PARSE_ERROR',
+                message: 'Geminiから生成テキストが返されませんでした。',
+            });
         }
-        return JSON.parse(raw);
+
+        try {
+            const parsed = JSON.parse(raw) as T;
+            return { rawText: raw, parsed };
+        } catch (e) {
+            throw new LlmError({
+                code: 'PARSE_ERROR',
+                message: `GeminiレスポンスのJSONパースに失敗しました: ${raw.slice(0, 100)}`,
+                cause: e,
+            });
+        }
     }
 
     /**
-     * Gemini APIへリクエストを送信し、生成された未検証のJSONレスポンスオブジェクトを返す
+     * [Why/Intent] Gemini APIへリクエストを送信し、生の返答文字列と型検証されたパース済みオブジェクトを返す
      */
-    public async generate(params: GeminiGenerateOptions): Promise<unknown> {
+    public async generateContentWithRaw<T>(
+        params: GeminiGenerateOptions,
+    ): Promise<RawLlmResponse<T>> {
         const candidateModels = await this.discoverModels(
             params.apiKey,
             params.token,
@@ -122,16 +153,30 @@ export class GeminiClient {
             if (response.statusCode === 404) {
                 continue;
             }
-            return this.parseGenerateResponse(response);
+            if (response.statusCode < 200 || response.statusCode >= 300) {
+                throw mapHttpErrorToLlmError(response.statusCode, response.body);
+            }
+
+            return this.parseRawResponseBody<T>(response.body);
         }
 
-        throw new Error(
-            '利用可能なGeminiモデルが見つかりません。APIキーが新規ユーザー向けモデルを利用できるか確認してください。',
-        );
+        throw new LlmError({
+            code: 'MODEL_NOT_FOUND',
+            message:
+                '利用可能なGeminiモデルが見つかりません。APIキーが利用できるモデルか確認してください。',
+        });
     }
 
     /**
-     * Gemini REST APIを使用してテキストのバッチをEmbeddingに変換する
+     * [Why/Intent] 後方互換性のためのメソッド。generateContentWithRaw を呼び出しパース結果のみを返す。
+     */
+    public async generate(params: GeminiGenerateOptions): Promise<unknown> {
+        const result = await this.generateContentWithRaw(params);
+        return result.parsed;
+    }
+
+    /**
+     * [Why/Intent] Gemini REST API (batchEmbedContents) を使用してテキスト配列を一括してベクトル埋め込みに変換する
      */
     public async embedBatch(params: GeminiEmbedBatchOptions): Promise<number[][]> {
         const texts = params.texts;
@@ -156,10 +201,7 @@ export class GeminiClient {
         });
 
         if (response.statusCode < 200 || response.statusCode >= 300) {
-            const details = response.body.slice(0, 160);
-            throw new Error(
-                `Gemini Embedding APIリクエストに失敗しました（HTTP ${response.statusCode}）。${details}`,
-            );
+            throw mapHttpErrorToLlmError(response.statusCode, response.body);
         }
 
         const data = JSON.parse(response.body) as {
@@ -167,31 +209,54 @@ export class GeminiClient {
         };
 
         if (data.embeddings?.length !== texts.length) {
-            throw new Error('Geminiから期待される数のEmbeddingが返されませんでした。');
+            throw new LlmError({
+                code: 'PARSE_ERROR',
+                message: 'Geminiから期待される数のEmbeddingが返されませんでした。',
+            });
         }
 
         return data.embeddings.map((e) => e.values);
     }
 
-    private async discoverModels(
+    /**
+     * [Why/Intent] APIからモデル一覧を取得しキャッシュに格納するヘルパー
+     */
+    private async fetchAndCacheModels(
         apiKey: string,
         token: vscode.CancellationToken,
-        targetModelName?: string,
     ): Promise<GeminiModel[]> {
         const modelsResponse = await this.request({
             urlString: `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
             token,
         });
         if (modelsResponse.statusCode < 200 || modelsResponse.statusCode >= 300) {
-            throw new Error(
-                `Geminiのモデル一覧取得に失敗しました（HTTP ${modelsResponse.statusCode}）。APIキーとGenerative Language APIの有効化を確認してください。`,
-            );
+            throw mapHttpErrorToLlmError(modelsResponse.statusCode, modelsResponse.body);
         }
 
         const models = (JSON.parse(modelsResponse.body) as GeminiModelsResponse).models ?? [];
-        const availableModels = models.filter((model) =>
-            model.supportedGenerationMethods?.includes('generateContent'),
+        const available = models.filter((m) =>
+            m.supportedGenerationMethods?.includes('generateContent'),
         );
+        this._rawModelCache.set(apiKey, {
+            models: available,
+            expiresAt: Date.now() + MODEL_CACHE_TTL_MS,
+        });
+        return available;
+    }
+
+    /**
+     * [Why/Intent] APIキーに紐づく利用可能モデルを動的に取得し、10分間キャッシュを活用しながら優先モデル候補リストを構築する
+     */
+    private async discoverModels(
+        apiKey: string,
+        token: vscode.CancellationToken,
+        targetModelName?: string,
+    ): Promise<GeminiModel[]> {
+        const cached = this._rawModelCache.get(apiKey);
+        const availableModels =
+            cached && cached.expiresAt > Date.now()
+                ? cached.models
+                : await this.fetchAndCacheModels(apiKey, token);
 
         const prefs = [...this.preferredNames];
         if (targetModelName && targetModelName !== 'auto') {
@@ -204,17 +269,26 @@ export class GeminiClient {
             )
             .filter((model): model is GeminiModel => model !== undefined);
 
-        // ⚡ Bolt: $O(n^2)$ の Array.includes を $O(n)$ の Set.has ルックアップに置き換え
-        // Benchmark: モデル探索におけるフィルタリングの計算量を削減し、APIクライアントの初期化を高速化
         const preferredModelsSet = new Set(preferredModels);
         const candidateModels = [
             ...preferredModels,
             ...availableModels.filter((model) => !preferredModelsSet.has(model)),
         ];
         if (candidateModels.length === 0) {
-            throw new Error('Gemini APIでgenerateContentに対応するモデルが見つかりません。');
+            throw new LlmError({
+                code: 'MODEL_NOT_FOUND',
+                message: 'Gemini APIでgenerateContentに対応するモデルが見つかりません。',
+            });
         }
         return candidateModels;
+    }
+
+    /**
+     * [Why/Intent] リトライ可能なステータスコードか否かを判定する
+     */
+    private isRetryableResponse(statusCode: number, body: string): boolean {
+        const isStatusMatch = statusCode === 503 || statusCode === 429;
+        return isStatusMatch && !body.toLowerCase().includes('quota');
     }
 
     private async request(
@@ -224,25 +298,27 @@ export class GeminiClient {
         let attempt = 0;
 
         while (true) {
-            const response = await this.doRequest(params);
+            try {
+                const response = await this.doRequest(params);
+                const canRetry =
+                    this.isRetryableResponse(response.statusCode, response.body) &&
+                    attempt < maxRetries &&
+                    !params.token.isCancellationRequested;
 
-            if (
-                (response.statusCode === 503 || response.statusCode === 429) &&
-                attempt < maxRetries &&
-                !params.token.isCancellationRequested
-            ) {
-                // Quota exceeded の場合はリトライしない
-                if (response.body.toLowerCase().includes('quota')) {
-                    return response;
+                if (canRetry) {
+                    attempt++;
+                    await new Promise((resolve) => setTimeout(resolve, 1000));
+                    continue;
                 }
-                attempt++;
-                // 待機時間を短縮（UIのフリーズ感を軽減）
-                const delayMs = 1000;
-                await new Promise((resolve) => setTimeout(resolve, delayMs));
-                continue;
+                return response;
+            } catch (err) {
+                if (attempt < maxRetries && !params.token.isCancellationRequested) {
+                    attempt++;
+                    await new Promise((resolve) => setTimeout(resolve, 1000));
+                    continue;
+                }
+                throw mapNetworkErrorToLlmError(err);
             }
-
-            return response;
         }
     }
 

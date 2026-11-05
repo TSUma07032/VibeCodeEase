@@ -1,7 +1,15 @@
+/**
+ * [Why/Intent] コードレビューおよびAI介入生成用のプロンプト構築およびJSONスキーマ定義。
+ * 機密ファイルの送信防止ガード（assertNotSensitiveDocument）を一元的に適用する。
+ */
 import type * as vscode from 'vscode';
 import { PAIN_CATEGORIES } from '../../types';
 import type { PresetMode } from '../../types/preset';
+import { assertNotSensitiveDocument } from '../utils/sensitiveDocumentGuard';
 
+/**
+ * [Why/Intent] Gemini API 等に渡す構造化介入出力の JSON Schema 定義
+ */
 export const INTERVENTION_RESPONSE_SCHEMA = {
     type: 'OBJECT',
     required: ['summary', 'edits'],
@@ -37,45 +45,36 @@ export const INTERVENTION_RESPONSE_SCHEMA = {
 };
 
 /**
- * コードレビュー・介入生成用のプロンプト文字列を構築する
+ * [Why/Intent] プリセットモードに応じたレビュー指示文を解決するヘルパー（複雑度抑制）
+ */
+function resolveModeInstruction(presetMode?: PresetMode): string {
+    if (presetMode === 'HINT') {
+        return 'Analyze the file below and avoid writing the exact solution code. Instead, insert comments or hint texts suggesting how the user can fix/improve the code. Do not write the final implementation.';
+    }
+    if (presetMode === 'ARCHITECTURE') {
+        return 'Analyze the file below and heavily focus on refactoring for better architecture, separation of concerns, scalability, and design patterns. Propose robust architectural improvements.';
+    }
+    if (presetMode === 'BUG_TYPO') {
+        return 'Analyze the file below and strictly focus on fixing typos, null exceptions, vulnerabilities, and simple bugs. Leave the overall logic and architecture completely untouched.';
+    }
+    return 'Analyze the file below and propose ALL concrete, minimal edits that improve correctness, readability, or remove obvious friction. Please propose MULTIPLE edits across the file if applicable.';
+}
+
+/**
+ * [Why/Intent] コードレビュー・介入生成用のプロンプト文字列を構築する。
+ * 機密ファイルは共通ガード（assertNotSensitiveDocument）により確実に弾く。
  */
 export function buildInterventionPrompt(
     document: vscode.TextDocument,
     preferenceSummary?: string,
     presetMode?: PresetMode,
 ): string {
-    const sensitivePatterns = [
-        /\.env/i,
-        /\.git/i,
-        /secrets/i,
-        /credentials/i,
-        /\.pem$/i,
-        /\.key$/i,
-    ];
-    if (sensitivePatterns.some((pattern) => pattern.test(document.fileName))) {
-        const fileNameOnly = document.uri?.path
-            ? document.uri.path.split('/').pop()
-            : document.fileName;
-        throw new Error(
-            `セキュリティエラー: 機密ファイル(${fileNameOnly})へのアクセスは禁止されています。`,
-        );
-    }
+    // 共通機密ファイルガードを適用
+    assertNotSensitiveDocument(document);
 
     const rawCode = document.getText();
     const sanitizedCode = rawCode.replace(/```/g, '\\`\\`\\`');
-
-    let modeInstruction =
-        'Analyze the file below and propose ALL concrete, minimal edits that improve correctness, readability, or remove obvious friction. Please propose MULTIPLE edits across the file if applicable.';
-    if (presetMode === 'HINT') {
-        modeInstruction =
-            'Analyze the file below and avoid writing the exact solution code. Instead, insert comments or hint texts suggesting how the user can fix/improve the code. Do not write the final implementation.';
-    } else if (presetMode === 'ARCHITECTURE') {
-        modeInstruction =
-            'Analyze the file below and heavily focus on refactoring for better architecture, separation of concerns, scalability, and design patterns. Propose robust architectural improvements.';
-    } else if (presetMode === 'BUG_TYPO') {
-        modeInstruction =
-            'Analyze the file below and strictly focus on fixing typos, null exceptions, vulnerabilities, and simple bugs. Leave the overall logic and architecture completely untouched.';
-    }
+    const modeInstruction = resolveModeInstruction(presetMode);
 
     return [
         'You are a code review assistant.',

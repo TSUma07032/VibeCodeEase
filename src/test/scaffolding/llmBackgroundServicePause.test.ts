@@ -127,4 +127,85 @@ suite('LlmBackgroundService Pause/Resume Test Suite', () => {
 
         service.dispose();
     });
+    test('300行を超えるドキュメントの場合、isAuto が true の自動推敲はスキップされること', async () => {
+        const service = new LlmBackgroundService(new MockSecretStorage());
+        let dashboardUpdated = false;
+        service.onDidUpdateDashboard.event(() => {
+            dashboardUpdated = true;
+        });
+
+        const doc = {
+            uri: vscode.Uri.file('/test/large_file.ts'),
+            fileName: '/test/large_file.ts',
+            languageId: 'typescript',
+            getText: () => 'const x = 1;',
+            version: 1,
+            lineCount: 301,
+        } as unknown as vscode.TextDocument;
+
+        // isAuto = true
+        await service.runAnalysis(doc, true);
+
+        // 300行超えの自動実行はスキップされるため、ダッシュボードステータス更新は呼ばれない
+        assert.strictEqual(dashboardUpdated, false);
+        assert.strictEqual(service.getDashboardState().status, 'idle');
+
+        service.dispose();
+    });
+
+    test('300行を超えるドキュメントであっても、isAuto が false (手動推敲) の場合はスキップされないこと', async () => {
+        const service = new LlmBackgroundService(new MockSecretStorage());
+        let dashboardStatus: string | undefined;
+        service.onDidUpdateDashboard.event((msg: unknown) => {
+            const update = msg as { type?: string; status?: string };
+            if (update.type === 'LLM_STATUS_UPDATE') {
+                dashboardStatus = update.status;
+            }
+        });
+
+        const doc = {
+            uri: vscode.Uri.file('/test/large_file_manual.ts'),
+            fileName: '/test/large_file_manual.ts',
+            languageId: 'typescript',
+            getText: () => 'const x = 1;',
+            version: 1,
+            lineCount: 301,
+        } as unknown as vscode.TextDocument;
+
+        // isAuto = false (手動実行)
+        await service.runAnalysis(doc, false);
+
+        // 手動実行はスキップされず処理に進むこと
+        assert.notStrictEqual(dashboardStatus, undefined);
+
+        service.dispose();
+    });
+
+    test('300行以下のドキュメントの場合、isAuto が true の自動推敲はスキップされず実行されること', async () => {
+        const service = new LlmBackgroundService(new MockSecretStorage());
+        let dashboardStatus: string | undefined;
+        service.onDidUpdateDashboard.event((msg: unknown) => {
+            const update = msg as { type?: string; status?: string };
+            if (update.type === 'LLM_STATUS_UPDATE') {
+                dashboardStatus = update.status;
+            }
+        });
+
+        const doc = {
+            uri: vscode.Uri.file('/test/normal_file.ts'),
+            fileName: '/test/normal_file.ts',
+            languageId: 'typescript',
+            getText: () => 'const x = 1;',
+            version: 1,
+            lineCount: 300,
+        } as unknown as vscode.TextDocument;
+
+        // isAuto = true
+        await service.runAnalysis(doc, true);
+
+        // 300行以下は通常通りスキップされず実行される
+        assert.notStrictEqual(dashboardStatus, undefined);
+
+        service.dispose();
+    });
 });

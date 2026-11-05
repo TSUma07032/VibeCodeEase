@@ -1,13 +1,21 @@
 /**
  * [Why/Intent] 既存の全般・推敲設定（APIキー・モデル・推敲レベル・頻度・手動実行）のUIを提供するセクションコンポーネント。
+ * 一元化された推奨6モデル（詳細仕様書3.1準拠）を表示し、廃止された旧モデルを完全排除する。
  */
 import React, { useState } from 'react';
 import type { AiInterventionLevel } from '../../types';
 import { vscode } from '../../utils/vscode';
 
+/**
+ * [Why/Intent] 詳細仕様書 3.1 に規定された推奨モデル一覧と推奨表示ラベル
+ */
 const GEMINI_MODELS = [
-  'gemini-3.8-flash', 'gemini-3.8-live', 'gemini-3.8-live-extended-thinking',
-  'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'
+  { value: 'gemini-3.5-flash-lite', label: 'gemini-3.5-flash-lite (デフォルト・推奨・高速)' },
+  { value: 'gemini-3.8-flash', label: 'gemini-3.8-flash (最新・高品質)' },
+  { value: 'gemini-3.6-flash', label: 'gemini-3.6-flash' },
+  { value: 'gemini-3.1-flash-lite', label: 'gemini-3.1-flash-lite' },
+  { value: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
+  { value: 'gemini-2.5-flash-lite', label: 'gemini-2.5-flash-lite' },
 ];
 
 /**
@@ -91,7 +99,7 @@ export const LlmGeneralSettingsSection: React.FC<LlmGeneralSettingsSectionProps>
       <div>
         <h4 style={{ margin: '0 0 4px 0' }}>Model</h4>
         <select value={localModel} onChange={(e) => { setEditedModel(e.target.value); send(frequency, localInterval, e.target.value); }} style={{ width: '100%', padding: '6px' }}>
-          {GEMINI_MODELS.map((m) => (<option key={m} value={m}>{m}</option>))}
+          {GEMINI_MODELS.map((m) => (<option key={m.value} value={m.value}>{m.label}</option>))}
         </select>
       </div>
 
