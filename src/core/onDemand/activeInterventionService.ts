@@ -32,11 +32,15 @@ export class ActiveInterventionService {
      */
     public async requestActiveIntervention(editor: vscode.TextEditor): Promise<string | undefined> {
         if (!editor.selection || editor.selection.isEmpty) {
-            void vscode.window.showWarningMessage('コード範囲を選択してから実行してください。');
+            vscode.window.setStatusBarMessage(
+                '$(warning) コード範囲を選択してから実行してください。',
+                3000,
+            );
             return undefined;
         }
 
         const instruction = await vscode.window.showInputBox({
+            title: 'vibeCodeEase: AIへの指示',
             prompt: 'AIへの指示・推敲内容を入力してください（例: パフォーマンスを改善して）',
             placeHolder: '指示内容...',
         });

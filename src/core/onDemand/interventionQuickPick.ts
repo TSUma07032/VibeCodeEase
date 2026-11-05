@@ -31,7 +31,7 @@ export class InterventionQuickPick {
             .filter((item) => item.status !== 'dismissed');
 
         if (interventions.length === 0) {
-            void vscode.window.showInformationMessage('有効なAI介入提案はありません。');
+            vscode.window.setStatusBarMessage('$(info) 有効なAI介入提案はありません。', 3000);
             return undefined;
         }
 
@@ -49,6 +49,7 @@ export class InterventionQuickPick {
         });
 
         const selected = await vscode.window.showQuickPick(items, {
+            title: 'vibeCodeEase: AI介入提案の選択',
             placeHolder: 'AI介入提案を選択して詳細と対話を開く',
         });
 
