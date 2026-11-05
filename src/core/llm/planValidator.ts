@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { type LlmEdit, type LlmInterventionPlan, PAIN_CATEGORIES } from '../../types';
+import { type LlmEdit, type LlmInterventionPlan, LlmInterventionPlanSchema } from '../../types';
 
 /**
  * 渡された文字列の改行コード（CRLF / LF）を考慮して正規化後オフセットから元の文字列オフセットへ変換する
@@ -28,54 +28,11 @@ export interface FindOriginalTextRangeParams {
     hintCharacter: number;
 }
 
-interface RawEditFields {
-    startLine: number;
-    startCharacter: number;
-    endLine: number;
-    endCharacter: number;
-    oldText: string;
-    newText: string;
-    category: LlmEdit['category'];
-    reason: string;
-}
-
-/**
- * [Why/Intent] LLMが出力した生の変更案オブジェクトを防御的に型検証する。
- * 不正なカテゴリ名や欠損フィールド、負の座標値などのハルシネーションを早期検知して例外を送出する。
- */
-function parseRawEditFields(item: Record<string, unknown>): RawEditFields {
-    const positions = ['startLine', 'startCharacter', 'endLine', 'endCharacter'];
-    if (
-        !positions.every((key) => Number.isInteger(item[key]) && (item[key] as number) >= 0) ||
-        typeof item.newText !== 'string' ||
-        typeof item.category !== 'string' ||
-        !PAIN_CATEGORIES.includes(item.category as LlmEdit['category']) ||
-        typeof item.reason !== 'string'
-    ) {
-        throw new Error('LLMの変更案に不正な値があります。');
-    }
-
-    if (typeof item.oldText !== 'string' || !item.oldText) {
-        throw new Error('LLMの変更案にoldTextがありません。');
-    }
-
-    return {
-        startLine: item.startLine as number,
-        startCharacter: item.startCharacter as number,
-        endLine: item.endLine as number,
-        endCharacter: item.endCharacter as number,
-        oldText: item.oldText,
-        newText: item.newText,
-        category: item.category as LlmEdit['category'],
-        reason: item.reason,
-    };
-}
-
 /**
  * [Why/Intent] LLMが推定した行・文字位置とドキュメント実テキストを突き合わせ、
  * ズレ（行ずれやCRLF差分）を近傍探索で補正した確定Rangeを持つLlmEditを生成する。
  */
-function resolveSingleEdit(raw: RawEditFields, document: vscode.TextDocument): LlmEdit {
+function resolveSingleEdit(raw: LlmEdit, document: vscode.TextDocument): LlmEdit {
     if (raw.startLine >= document.lineCount || raw.endLine >= document.lineCount) {
         throw new Error(
             `LLMの変更範囲がファイル外を指しています。要求範囲: ${raw.startLine}:${raw.startCharacter}-${raw.endLine}:${raw.endCharacter}、ファイル: ${document.lineCount}行です。`,
@@ -115,18 +72,32 @@ export function validatePlan(value: unknown, document: vscode.TextDocument): Llm
         throw new Error('LLMの介入プラン形式が不正です。');
     }
 
-    const candidate = value as { summary?: unknown; edits?: unknown };
-    if (typeof candidate.summary !== 'string' || !Array.isArray(candidate.edits)) {
-        throw new Error('LLMの介入プランに必要な項目がありません。');
+    const result = LlmInterventionPlanSchema.safeParse(value);
+    if (!result.success) {
+        const hasMissingKeys = result.error.errors.some((e) => e.message === 'Required');
+        if (
+            hasMissingKeys &&
+            !(value !== null && typeof value === 'object' && 'summary' in value && 'edits' in value)
+        ) {
+            throw new Error('LLMの介入プランに必要な項目がありません。');
+        }
+        if (
+            result.error.errors.some(
+                (e) =>
+                    e.path.includes('oldText') &&
+                    e.message === 'String must contain at least 1 character(s)',
+            )
+        ) {
+            throw new Error('LLMの変更案にoldTextがありません。');
+        }
+        throw new Error('LLMの変更案に不正な値があります。');
     }
+
+    const candidate = result.data;
 
     const edits: LlmEdit[] = [];
     for (const edit of candidate.edits) {
-        if (!edit || typeof edit !== 'object') {
-            throw new Error('LLMの変更案形式が不正です。');
-        }
-        const parsed = parseRawEditFields(edit as Record<string, unknown>);
-        const resolved = resolveSingleEdit(parsed, document);
+        const resolved = resolveSingleEdit(edit, document);
         edits.push(resolved);
     }
 

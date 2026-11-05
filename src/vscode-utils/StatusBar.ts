@@ -23,6 +23,15 @@ export class VibeStatusBar {
         this.disposables.push(sub);
     }
 
+    private createTooltip(modeName: string, desc: string): vscode.MarkdownString {
+        const md = new vscode.MarkdownString();
+        md.supportThemeIcons = true;
+        md.appendMarkdown(
+            `**vibeCodeEase: ${modeName}**\n\n${desc}\n\n---\n*$(mouse-left) クリックで変更*`,
+        );
+        return md;
+    }
+
     public updateState(): void {
         const state = GlobalState.getInstance();
         const preset = state.presetMode;
@@ -30,26 +39,26 @@ export class VibeStatusBar {
         switch (preset) {
             case 'HINT':
                 this.statusBarItem.text = '$(lightbulb) Vibe: Hint';
-                this.statusBarItem.tooltip =
-                    'vibeCodeEase: ヒントモード (解説ヒント中心) - クリックで変更';
+                this.statusBarItem.tooltip = this.createTooltip('ヒントモード', '解説ヒント中心');
                 break;
             case 'ARCHITECTURE':
                 this.statusBarItem.text = '$(versions) Vibe: Architecture';
-                this.statusBarItem.tooltip =
-                    'vibeCodeEase: アーキテクチャモード (リファクタ中心) - クリックで変更';
+                this.statusBarItem.tooltip = this.createTooltip(
+                    'アーキテクチャモード',
+                    'リファクタ中心',
+                );
                 break;
             case 'BUG_TYPO':
                 this.statusBarItem.text = '$(bug) Vibe: Bug/Typo';
-                this.statusBarItem.tooltip =
-                    'vibeCodeEase: バグ・タイポ修正 (最小限の修正) - クリックで変更';
+                this.statusBarItem.tooltip = this.createTooltip('バグ・タイポ修正', '最小限の修正');
                 break;
             case 'CUSTOM': {
                 const prefs = state.preferences.preferences;
                 const details = Object.entries(prefs)
-                    .map(([k, v]) => `${k}: ${v.toFixed(2)}`)
-                    .join(', ');
+                    .map(([k, v]) => `- **${k}**: ${v.toFixed(2)}`)
+                    .join('\n');
                 this.statusBarItem.text = '$(settings) Vibe: Custom';
-                this.statusBarItem.tooltip = `vibeCodeEase: カスタム設定 ( ${details} ) - クリックで変更`;
+                this.statusBarItem.tooltip = this.createTooltip('カスタム設定', details);
                 break;
             }
         }

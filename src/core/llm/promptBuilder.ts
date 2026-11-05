@@ -3,46 +3,15 @@
  * 機密ファイルの送信防止ガード（assertNotSensitiveDocument）を一元的に適用する。
  */
 import type * as vscode from 'vscode';
-import { PAIN_CATEGORIES } from '../../types';
+import { zodToJsonSchema } from 'zod-to-json-schema';
+import { LlmInterventionPlanSchema } from '../../types/llmIntervention';
 import type { PresetMode } from '../../types/preset';
 import { assertNotSensitiveDocument } from '../utils/sensitiveDocumentGuard';
 
 /**
- * [Why/Intent] Gemini API 等に渡す構造化介入出力の JSON Schema 定義
+ * [Why/Intent] Gemini API 等に渡す構造化介入出力の JSON Schema 定義 (Zodスキーマから自動生成)
  */
-export const INTERVENTION_RESPONSE_SCHEMA = {
-    type: 'OBJECT',
-    required: ['summary', 'edits'],
-    properties: {
-        summary: { type: 'string' },
-        edits: {
-            type: 'ARRAY',
-            items: {
-                type: 'OBJECT',
-                required: [
-                    'startLine',
-                    'startCharacter',
-                    'endLine',
-                    'endCharacter',
-                    'oldText',
-                    'newText',
-                    'category',
-                    'reason',
-                ],
-                properties: {
-                    startLine: { type: 'INTEGER', minimum: 0 },
-                    startCharacter: { type: 'INTEGER', minimum: 0 },
-                    endLine: { type: 'INTEGER', minimum: 0 },
-                    endCharacter: { type: 'INTEGER', minimum: 0 },
-                    oldText: { type: 'STRING' },
-                    newText: { type: 'STRING' },
-                    category: { type: 'STRING', enum: PAIN_CATEGORIES },
-                    reason: { type: 'STRING' },
-                },
-            },
-        },
-    },
-};
+export const INTERVENTION_RESPONSE_SCHEMA = zodToJsonSchema(LlmInterventionPlanSchema);
 
 /**
  * [Why/Intent] プリセットモードに応じたレビュー指示文を解決するヘルパー（複雑度抑制）
