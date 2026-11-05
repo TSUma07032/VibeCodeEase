@@ -5,6 +5,7 @@
 import * as vscode from 'vscode';
 import type { InterventionDetail } from '../../types/onDemandIntervention';
 import type { ILlmGateway } from '../llm/llmGateway';
+import { ACTIVE_INTERVENTION_RESPONSE_SCHEMA } from '../llm/promptBuilder';
 import type { InterventionHistoryStore } from './interventionHistoryStore';
 
 /**
@@ -99,7 +100,7 @@ export class ActiveInterventionService {
 
         const response = await this._gateway.generateStructured<ActiveInterventionResponse>({
             prompt,
-            responseSchema: {},
+            responseSchema: ACTIVE_INTERVENTION_RESPONSE_SCHEMA,
             token: new vscode.CancellationTokenSource().token,
         });
 

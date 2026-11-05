@@ -13,6 +13,9 @@ suite('PromptBuilder Test Suite', () => {
         const schema = INTERVENTION_RESPONSE_SCHEMA;
         assert.strictEqual((schema as { type?: string }).type, 'object');
         assert.deepStrictEqual((schema as { required?: string[] }).required, ['summary', 'edits']);
+        const serialized = JSON.stringify(schema);
+        assert.strictEqual(serialized.includes('additionalProperties'), false);
+        assert.strictEqual(serialized.includes('$schema'), false);
     });
 
     test('ドキュメント情報とコンテンツを含むプロンプトが生成されること', () => {

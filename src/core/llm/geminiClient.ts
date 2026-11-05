@@ -8,6 +8,7 @@ import type * as vscode from 'vscode';
 import { MODEL_CACHE_TTL_MS } from './llmConstants';
 import { LlmError, mapHttpErrorToLlmError, mapNetworkErrorToLlmError } from './llmErrors';
 import type { RawLlmResponse } from './llmGateway';
+import { sanitizeSchemaForGemini } from './promptBuilder';
 
 interface GeminiModel {
     name: string;
@@ -91,7 +92,10 @@ export class GeminiClient {
             responseMimeType: 'application/json',
         };
         if (params.responseSchema) {
-            generationConfig.responseSchema = params.responseSchema;
+            const sanitizedSchema = sanitizeSchemaForGemini(params.responseSchema);
+            if (Object.keys(sanitizedSchema).length > 0) {
+                generationConfig.responseSchema = sanitizedSchema;
+            }
         }
 
         return this.request({

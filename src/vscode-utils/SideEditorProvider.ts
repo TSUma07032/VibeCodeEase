@@ -315,6 +315,7 @@ export class SideEditorProvider implements vscode.Disposable {
                             InterventionManager.handleDocumentChange(pendingEvent);
                         }
                         pendingEvents = [];
+
                         this.sendUpdateInterventions(doc);
                         this.sendSyncDocument(doc.fileName, doc.getText());
                     }, 300);
@@ -351,6 +352,13 @@ export class SideEditorProvider implements vscode.Disposable {
     }
 
     private async handleTypeMessage(type: string, message: unknown): Promise<void> {
+        if (type === 'REQUEST_EXPAND_DETAIL') {
+            const payload = (message as { payload?: { interventionId?: string } }).payload;
+            if (payload?.interventionId) {
+                await this.expandIntervention(payload.interventionId);
+            }
+            return;
+        }
         if (ON_DEMAND_IPC_TYPES.has(type)) {
             const docUri = this._currentDocumentUri?.toString() ?? '';
             await this.onDemandIpcHandler.handleMessage(
@@ -464,6 +472,7 @@ export class SideEditorProvider implements vscode.Disposable {
                 newText: message.newText,
                 range,
             });
+            await this.historyStore.updateStatus(doc.uri.toString(), message.id, 'applied');
             this.sendUpdateInterventions(doc);
             this.sendSyncDocument(doc.fileName, doc.getText());
         } finally {
@@ -488,11 +497,65 @@ export class SideEditorProvider implements vscode.Disposable {
     /**
      * [Why/Intent] 対象ドキュメントの最新解析結果（介入プラン）を取得し、Webview UIへ更新メッセージを送信する
      */
+    private syncResultsToHistoryStore(
+        document: vscode.TextDocument,
+        results: ReturnType<typeof SharedAnalysisCache.prototype.getResults>,
+    ): void {
+        const docUri = document.uri.toString();
+        const existingIds = new Set(
+            this.historyStore.getInterventions(docUri).map((item) => item.id),
+        );
+        const now = new Date().toISOString();
+
+        for (const r of results) {
+            const first = r.interventions[0];
+            if (!first) {
+                continue;
+            }
+            const id = InterventionManager.generateIssueId(docUri, r);
+            if (existingIds.has(id)) {
+                continue;
+            }
+            const cleanReason = (first.message ?? '')
+                .replace(/^🤖\s*\*\*AI\s*提案\*\*:\s*/, '')
+                .trim();
+            const firstLine = cleanReason.split(/\r?\n/)[0] || 'AI改善提案';
+            const title = firstLine.length > 45 ? `${firstLine.slice(0, 45)}...` : firstLine;
+
+            const detail: InterventionDetail = {
+                id,
+                title: `[${r.category}] ${title}`,
+                summary: cleanReason,
+                range: r.range,
+                status: 'pending',
+                personaId: 'concise',
+                originalCode: first.originalText,
+                proposedCode: first.replacementText,
+                createdAt: now,
+                updatedAt: now,
+                chatHistory: [],
+            };
+            void this.historyStore.saveIntervention(docUri, detail);
+        }
+    }
+
     public sendUpdateInterventions(document: vscode.TextDocument): void {
+        const results = SharedAnalysisCache.getInstance().getResults(document);
+        this.syncResultsToHistoryStore(document, results);
+        void vscode.commands
+            .executeCommand('vibecodeease.refreshDecorations')
+            .then(undefined, () => {});
         if (!this.panel) {
             return;
         }
-        const results = SharedAnalysisCache.getInstance().getResults(document);
+        const docUri = document.uri.toString();
+        this.panel.webview.postMessage({
+            type: 'SYNC_HISTORY_STATE',
+            payload: {
+                documentUri: docUri,
+                interventions: this.historyStore.getInterventions(docUri),
+            },
+        });
         this.panel.webview.postMessage(
             buildUpdateInterventionsMessage(document, results, (uri, r) =>
                 InterventionManager.generateIssueId(uri, r),

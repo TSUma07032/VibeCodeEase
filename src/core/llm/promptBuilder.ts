@@ -1,6 +1,7 @@
 /**
  * [Why/Intent] コードレビューおよびAI介入生成用のプロンプト構築およびJSONスキーマ定義。
- * 機密ファイルの送信防止ガード（assertNotSensitiveDocument）を一元的に適用する。
+ * 機密ファイルの送信防止ガード（assertNotSensitiveDocument）を一元的に適用し、
+ * Gemini APIが拒絶する additionalProperties / $schema を完全除去したスキーマを提供する。
  */
 import type * as vscode from 'vscode';
 import { zodToJsonSchema } from 'zod-to-json-schema';
@@ -10,10 +11,64 @@ import type { PresetMode } from '../../types/preset';
 import { assertNotSensitiveDocument } from '../utils/sensitiveDocumentGuard';
 
 /**
- * [Why/Intent] Gemini API 等に渡す構造化介入出力の JSON Schema 定義 (Zodスキーマから自動生成)
+ * [Why/Intent] Google Gemini API (v1beta response_schema) は OpenAPI 3.0 サブセット仕様であり、
+ * JSON Schema Draft-07 の `additionalProperties` や `$schema` が含まれると HTTP 400 エラーとなるため、
+ * 再帰的にこれらの非対応キーを除去して安全なスキーマオブジェクトへ変換する。
  */
-export const INTERVENTION_RESPONSE_SCHEMA: Record<string, unknown> =
-    zodToJsonSchema(LlmInterventionPlanSchema);
+export function sanitizeSchemaForGemini(schema: unknown): Record<string, unknown> {
+    if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+        return {};
+    }
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(schema as Record<string, unknown>)) {
+        if (key === 'additionalProperties' || key === '$schema') {
+            continue;
+        }
+        if (Array.isArray(value)) {
+            result[key] = (value as unknown[]).map((item: unknown) =>
+                item && typeof item === 'object' && !Array.isArray(item)
+                    ? sanitizeSchemaForGemini(item)
+                    : item,
+            );
+        } else if (value && typeof value === 'object') {
+            result[key] = sanitizeSchemaForGemini(value);
+        } else {
+            result[key] = value;
+        }
+    }
+    return result;
+}
+
+/**
+ * [Why/Intent] Gemini API 等に渡す構造化介入出力の JSON Schema 定義 (Zodスキーマから自動生成・サニタイズ済)
+ */
+export const INTERVENTION_RESPONSE_SCHEMA: Record<string, unknown> = sanitizeSchemaForGemini(
+    zodToJsonSchema(LlmInterventionPlanSchema),
+);
+
+/**
+ * [Why/Intent] 逆指名（Active Intervention）リクエスト時にGemini APIへ渡す構造化レスポンススキーマ。
+ */
+export const ACTIVE_INTERVENTION_RESPONSE_SCHEMA: Record<string, unknown> = {
+    type: 'object',
+    properties: {
+        title: { type: 'string' },
+        summary: { type: 'string' },
+        proposedCode: { type: 'string' },
+    },
+    required: ['title', 'summary', 'proposedCode'],
+};
+
+/**
+ * [Why/Intent] オンデマンドAIチャット対話時にGemini APIへ渡す構造化レスポンススキーマ。
+ */
+export const CHAT_RESPONSE_SCHEMA: Record<string, unknown> = {
+    type: 'object',
+    properties: {
+        text: { type: 'string' },
+    },
+    required: ['text'],
+};
 
 /**
  * [Why/Intent] プリセットモードに応じたレビュー指示文を解決するヘルパー（複雑度抑制）
@@ -123,6 +178,7 @@ export const PromptBuilder = {
             `元のコード:\n${detail.originalCode}`,
             `提案コード:\n${detail.proposedCode}`,
             `ユーザーの質問・指示: ${userMessage}`,
+            '回答は日本語で作成し、JSON形式 {"text": "あなたの返答内容"} で出力してください。',
         ].join('\n');
     },
 };

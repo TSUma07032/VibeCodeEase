@@ -53,9 +53,10 @@ export const OnDemandSidePanel: React.FC<OnDemandSidePanelProps> = ({
             style={{
                 display: 'flex',
                 flexDirection: 'row',
-                height: '100vh',
-                width: '100vw',
-                overflow: 'hidden',
+                flexWrap: 'wrap',
+                height: '100%',
+                width: '100%',
+                overflowY: 'auto',
                 backgroundColor: 'var(--vscode-editor-background)',
                 color: 'var(--vscode-foreground)',
             }}

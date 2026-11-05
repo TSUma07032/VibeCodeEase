@@ -9,7 +9,7 @@ import type {
     WebviewToExtensionInterventionMessage,
 } from '../../types/onDemandIpcMessages';
 import type { ILlmGateway } from '../llm/llmGateway';
-import { PromptBuilder } from '../llm/promptBuilder';
+import { CHAT_RESPONSE_SCHEMA, PromptBuilder } from '../llm/promptBuilder';
 import type { InterventionHistoryStore } from './interventionHistoryStore';
 
 /**
@@ -61,6 +61,9 @@ export class OnDemandIpcHandler {
     }
 
     private sendSyncHistory(documentUri: string): void {
+        void vscode.commands
+            .executeCommand('vibecodeease.refreshDecorations')
+            .then(undefined, () => {});
         const interventions = this._ctx.historyStore.getInterventions(documentUri);
         this._ctx.postMessage({
             type: 'SYNC_HISTORY_STATE',
@@ -119,7 +122,7 @@ export class OnDemandIpcHandler {
                 message?: string;
             }>({
                 prompt,
-                responseSchema: {},
+                responseSchema: CHAT_RESPONSE_SCHEMA,
                 token: new vscode.CancellationTokenSource().token,
             });
 
