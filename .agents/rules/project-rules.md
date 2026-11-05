@@ -1,4 +1,4 @@
-# vibeCodeEase Project-Specific Rules
+﻿# vibeCodeEase Project-Specific Rules
 
 本ファイルは、`vibeCodeEase` プロジェクトに特有の設計方針、アーキテクチャ制約、および運用ルールを定義します。
 
@@ -7,8 +7,10 @@
 ## 1. エディタ同期と循環介入防止 (Side-by-Side Editor Protection)
 - **フラグ保護の必須化**:
   `SideEditorProvider` において介入適用（`handleApplyIntervention`）を実行する際は、ドキュメント変更イベントによる再同期ループや競合状態を防ぐため、必ず `this._isApplyingIntervention = true` による排他フラグ保護を行い、`finally` 節で解除すること。
-- **左エディタ介入の完全排除**:
-  本拡張機能は Side-by-Side 構成（右側の Webview SideEditor への集約）を設計方針とするため、左エディタへの直接的な CodeAction やインラインデコレーションの追加は行わない。
+- **左エディタ介入の適正化（非侵襲オンデマンド方式）**:
+  ユーザーのコーディングを妨害する無断コード書き換えや侵襲的UIは排除する。ただし、非侵襲な薄いヒートマップ装飾および控えめなアイコンによるオンデマンド示唆（`InlineInterventionDecorator`）は許可する。詳細展開（Diff/Chat）は要求時のみ右側Webviewで行う。
+- **ドキュメント編集時の範囲オフセット補正とゴースト防止**:
+  エディタ装飾や行範囲（Range）を内部保持するサービスは、ユーザー編集イベント（onDidChangeTextDocument）の contentChanges に応じて行オフセットを自動補正すること。介入対象行が完全に削除された場合は自動的に dismissed へ遷移させ、ゴースト装飾の残留を防止すること。
 
 ## 2. ビルド成果物とテスト環境 (Build & Test Hygiene)
 - **TypeScript ビルド出力のクリーンアップ**:
@@ -44,7 +46,6 @@
 ## 6. サイドバーUI/UXブラウザ連携テスト (Playwright Standalone E2E)
 - **VS Code API 疎結合ブラウザテストの必須運用**:
   Webviewサイドバーの画面遷移、UI 4状態（Empty, Loading, Error, Content）、設定フォーム、および双方向IPCメッセージの検証は、VS Code本体を起動せず、Playwrightの `page.addInitScript` による `acquireVsCodeApi` モック注入を活用した `npm run test:e2e`（`sidebar-uiux.spec.ts`）で自動検証すること。
-
 - **型安全な MockWindow の定義必須化**:
   `page.addInitScript` や `page.evaluate` 内で `window` オブジェクトを拡張・参照する際、`(window as any)` による型の揉み消しを禁止する。必ず `interface MockWindow` を定義し、`window as unknown as MockWindow` で型安全にキャストすること。
 - **UI仕様変更時におけるE2Eテストのアトミック同期**:

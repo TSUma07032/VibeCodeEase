@@ -35,8 +35,41 @@
       {
         "command": "vibecodeease.openSideEditor",
         "title": "vibeCodeEase: Open AI Side Editor"
+      },
+      {
+        "command": "vibecodeease.showInterventionSummary",
+        "title": "vibeCodeEase: Show Intervention Summary"
+      },
+      {
+        "command": "vibecodeease.expandIntervention",
+        "title": "vibeCodeEase: Expand Intervention Detail"
+      },
+      {
+        "command": "vibecodeease.discardIntervention",
+        "title": "vibeCodeEase: Discard Intervention"
+      },
+      {
+        "command": "vibecodeease.requestActiveIntervention",
+        "title": "vibeCodeEase: ここを作業してコメント作成"
       }
     ],
+    "keybindings": [
+      {
+        "command": "vibecodeease.showInterventionSummary",
+        "key": "alt+i",
+        "mac": "cmd+i",
+        "when": "editorTextFocus"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "vibecodeease.requestActiveIntervention",
+          "when": "editorHasSelection",
+          "group": "vibecodeease@1"
+        }
+      ]
+    },
     "configuration": {
       "title": "vibeCodeEase",
       "properties": {
