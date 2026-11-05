@@ -12,7 +12,8 @@ import { assertNotSensitiveDocument } from '../utils/sensitiveDocumentGuard';
 /**
  * [Why/Intent] Gemini API 等に渡す構造化介入出力の JSON Schema 定義 (Zodスキーマから自動生成)
  */
-export const INTERVENTION_RESPONSE_SCHEMA = zodToJsonSchema(LlmInterventionPlanSchema);
+export const INTERVENTION_RESPONSE_SCHEMA: Record<string, unknown> =
+    zodToJsonSchema(LlmInterventionPlanSchema);
 
 /**
  * [Why/Intent] プリセットモードに応じたレビュー指示文を解決するヘルパー（複雑度抑制）
