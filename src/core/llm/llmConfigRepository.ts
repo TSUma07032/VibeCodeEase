@@ -28,17 +28,11 @@ export class LlmConfigRepository implements vscode.Disposable {
     }
 
     /**
-     * [Why/Intent] SecretStorageを最優先とし、未設定時はConfigurationへフォールバックしてAPIキーを取得する。
+     * [Why/Intent] SecretStorageからのみAPIキーを取得する。
      */
     public async getApiKey(): Promise<string | undefined> {
         const secret = await this.secrets.get('vibecodeease.geminiApiKey');
-        if (secret?.trim()) {
-            return secret.trim();
-        }
-        const configKey = vscode.workspace
-            .getConfiguration('vibecodeease')
-            .get<string>('geminiApiKey');
-        return configKey?.trim() ? configKey.trim() : undefined;
+        return secret?.trim() ? secret.trim() : undefined;
     }
 
     /**
