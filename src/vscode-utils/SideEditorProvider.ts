@@ -1,6 +1,7 @@
 /**
  * [Why/Intent] VS CodeのSide Editor Webviewパネルのライフサイクル、
- * アクティブエディタとの双方向同期、設定・介入プラン・学習状態のIPCメッセージ中継を管理するプロバイダモジュール。
+ * アクティブエディタとの双方向同期、設定・介入プラン・学習状態、
+ * およびオンデマンドインラインAI機能（Diff/Chat/状態遷移）のIPCメッセージ中継を管理するプロバイダモジュール。
  */
 import * as vscode from 'vscode';
 import { SharedAnalysisCache } from '../core/analyzer';
@@ -9,11 +10,15 @@ import { LlmConfigRepository } from '../core/llm/llmConfigRepository';
 import { LlmGateway } from '../core/llm/llmGateway';
 import type { LlmBackgroundService } from '../core/llmBackgroundService';
 import { LlmInterventionService } from '../core/llmInterventionService';
+import { InterventionHistoryStore } from '../core/onDemand/interventionHistoryStore';
+import { OnDemandIpcHandler } from '../core/onDemand/onDemandIpcHandler';
 import { LearningBackgroundService } from '../core/scaffolding/learningBackgroundService';
 import { LearningConfigStore } from '../core/scaffolding/learningConfigStore';
 import { LearningSessionStore } from '../core/scaffolding/learningSessionStore';
 import type { LearningWebviewMessage } from '../types/learningScaffolding';
 import type { LearningSettingsWebviewMessage } from '../types/learningSettings';
+import type { InterventionDetail } from '../types/onDemandIntervention';
+import type { WebviewToExtensionInterventionMessage } from '../types/onDemandIpcMessages';
 import type { ExtensionToWebviewMessage, WebviewToExtensionMessage } from '../types/webviewMessage';
 import { dispatchLegacyCommand, fetchSideEditorSettings } from './sideEditorConfig';
 import { getSideEditorHtml } from './sideEditorHtml';
@@ -26,6 +31,19 @@ import {
 } from './sideEditorLearningHandler';
 
 /**
+ * [Why/Intent] Webviewから受信したメッセージのうち、OnDemandIpcHandlerへ委譲すべきオンデマンド機能メッセージ種別一覧。
+ */
+const ON_DEMAND_IPC_TYPES = new Set([
+    'APPLY_INTERVENTION',
+    'UNDO_INTERVENTION',
+    'DISCARD_INTERVENTION',
+    'SEND_CHAT_MESSAGE',
+    'SWITCH_PERSONA',
+    'CLOSE_SIDE_PANEL',
+    'REQUEST_ACTIVE_INTERVENTION',
+]);
+
+/**
  * [Why/Intent] SideEditorProviderの依存性（学習セッション・推敲サービス等）をテストおよび本番でDI注入するためのオプション
  */
 export interface SideEditorProviderOptions {
@@ -33,6 +51,8 @@ export interface SideEditorProviderOptions {
     learningBackgroundService?: LearningBackgroundService;
     learningConfigStore?: LearningConfigStore;
     llmInterventionService?: LlmInterventionService;
+    historyStore?: InterventionHistoryStore;
+    onDemandIpcHandler?: OnDemandIpcHandler;
 }
 
 /**
@@ -51,6 +71,9 @@ export class SideEditorProvider implements vscode.Disposable {
     private readonly learningSessionStore: LearningSessionStore;
     private readonly learningBackgroundService: LearningBackgroundService;
     private readonly learningConfigStore: LearningConfigStore;
+    private readonly historyStore: InterventionHistoryStore;
+    private readonly onDemandIpcHandler: OnDemandIpcHandler;
+    private pendingInterventionDetail?: InterventionDetail;
 
     private constructor(
         private readonly context: vscode.ExtensionContext,
@@ -67,7 +90,46 @@ export class SideEditorProvider implements vscode.Disposable {
             new LearningBackgroundService(this.learningSessionStore, interventionService);
         this.learningConfigStore =
             options?.learningConfigStore ?? new LearningConfigStore(context.globalState);
+        this.historyStore = options?.historyStore ?? new InterventionHistoryStore();
 
+        this.onDemandIpcHandler =
+            options?.onDemandIpcHandler ?? this.createDefaultOnDemandHandler();
+
+        this.initSubscriptions();
+        this.learningBackgroundService.updateConfig(this.learningConfigStore.getConfig());
+    }
+
+    private createDefaultOnDemandHandler(): OnDemandIpcHandler {
+        const gateway = new LlmGateway(new LlmConfigRepository(this.context.secrets));
+        return new OnDemandIpcHandler({
+            historyStore: this.historyStore,
+            gateway,
+            postMessage: (msg) => {
+                void this.panel?.webview.postMessage(msg);
+            },
+            applyEditorEdit: async (uri, originalCode, newCode) => {
+                const doc = findTargetDocument(vscode.Uri.parse(uri));
+                if (!doc) {
+                    return false;
+                }
+                const text = doc.getText();
+                const index = text.indexOf(originalCode);
+                if (index === -1) {
+                    return false;
+                }
+                const startPos = doc.positionAt(index);
+                const endPos = doc.positionAt(index + originalCode.length);
+                const edit = new vscode.WorkspaceEdit();
+                edit.replace(doc.uri, new vscode.Range(startPos, endPos), newCode);
+                return vscode.workspace.applyEdit(edit);
+            },
+            closePanel: () => {
+                this.panel?.dispose();
+            },
+        });
+    }
+
+    private initSubscriptions(): void {
         this.serviceDisposables.push(
             this.llmService.onDidUpdateDashboard.event((msg) =>
                 this.panel?.webview.postMessage(msg),
@@ -90,7 +152,6 @@ export class SideEditorProvider implements vscode.Disposable {
             this.learningBackgroundService,
             this.learningConfigStore,
         );
-        this.learningBackgroundService.updateConfig(this.learningConfigStore.getConfig());
     }
 
     public static getInstance(
@@ -107,6 +168,20 @@ export class SideEditorProvider implements vscode.Disposable {
     public static resetInstanceForTesting(): void {
         SideEditorProvider.instance?.dispose();
         SideEditorProvider.instance = undefined;
+    }
+
+    /**
+     * [Why/Intent] 共有InterventionHistoryStoreインスタンスを取得し、DecoratorやQuickPickなどの各機能へDI共有する。
+     */
+    public getHistoryStore(): InterventionHistoryStore {
+        return this.historyStore;
+    }
+
+    /**
+     * [Why/Intent] オンデマンドIPCハンドラインスタンスを取得する。
+     */
+    public getOnDemandIpcHandler(): OnDemandIpcHandler {
+        return this.onDemandIpcHandler;
     }
 
     /**
@@ -143,6 +218,35 @@ export class SideEditorProvider implements vscode.Disposable {
         this.syncWithActiveEditor();
     }
 
+    /**
+     * [Why/Intent] 指定された介入IDの詳細情報を履歴ストアから解決し、
+     * Beside Webviewパネルを展開してEXPAND_INTERVENTION_DETAILメッセージを送信する。
+     */
+    public async expandIntervention(interventionId: string): Promise<void> {
+        await this.openSideEditor();
+        const docUri = this._currentDocumentUri?.toString() ?? '';
+        const history = await this.historyStore.getHistory(docUri);
+        let detail = history.interventions.find((item) => item.id === interventionId);
+        if (!detail) {
+            const allItems = this.historyStore.getInterventions(docUri);
+            detail = allItems.find((item) => item.id === interventionId) as
+                | InterventionDetail
+                | undefined;
+        }
+
+        if (detail) {
+            this.pendingInterventionDetail = detail;
+            this.panel?.webview.postMessage({
+                type: 'EXPAND_INTERVENTION_DETAIL',
+                payload: {
+                    interventionId: detail.id,
+                    persona: detail.personaId,
+                    detail,
+                },
+            });
+        }
+    }
+
     private handlePanelDispose(): void {
         this.panel = undefined;
         while (this.panelDisposables.length) {
@@ -162,12 +266,14 @@ export class SideEditorProvider implements vscode.Disposable {
             this.panelDisposables,
         );
 
-        // 関数の実行時間を ~208ms から ~303ms(非同期解決による遅延含む) に削減。UIスレッドのブロック時間を大幅に削減。
         let pendingEvents: vscode.TextDocumentChangeEvent[] = [];
 
         vscode.workspace.onDidChangeTextDocument(
             (event) => {
-                if (this._isApplyingIntervention) {
+                if (
+                    this._isApplyingIntervention ||
+                    this.onDemandIpcHandler.isApplyingIntervention
+                ) {
                     return;
                 }
                 const doc = event.document;
@@ -216,25 +322,51 @@ export class SideEditorProvider implements vscode.Disposable {
         };
     }
 
+    private async handleTypeMessage(type: string, message: unknown): Promise<void> {
+        if (ON_DEMAND_IPC_TYPES.has(type)) {
+            const docUri = this._currentDocumentUri?.toString() ?? '';
+            await this.onDemandIpcHandler.handleMessage(
+                message as WebviewToExtensionInterventionMessage,
+                docUri,
+            );
+            return;
+        }
+
+        const ctx = this.createLearningHandlerContext();
+        if (
+            type === 'REQUEST_LEARNING_CONFIG' ||
+            type === 'UPDATE_LEARNING_CONFIG' ||
+            type === 'RESET_LEARNING_CONFIG'
+        ) {
+            await handleLearningSettingsMessage(message as LearningSettingsWebviewMessage, ctx);
+            return;
+        }
+        await dispatchLearningMessage(message as LearningWebviewMessage, ctx);
+    }
+
     private async handleMessage(message: unknown): Promise<void> {
         if (!message || typeof message !== 'object') {
             return;
         }
+
         if ('type' in message && typeof (message as { type: string }).type === 'string') {
-            const type = (message as { type: string }).type;
-            const ctx = this.createLearningHandlerContext();
-            if (
-                type === 'REQUEST_LEARNING_CONFIG' ||
-                type === 'UPDATE_LEARNING_CONFIG' ||
-                type === 'RESET_LEARNING_CONFIG'
-            ) {
-                await handleLearningSettingsMessage(message as LearningSettingsWebviewMessage, ctx);
-                return;
-            }
-            await dispatchLearningMessage(message as LearningWebviewMessage, ctx);
+            await this.handleTypeMessage((message as { type: string }).type, message);
             return;
         }
+
         if ('command' in message && typeof (message as { command: string }).command === 'string') {
+            const cmd = (message as { command: string }).command;
+            if (cmd === 'ready' && this.pendingInterventionDetail && this.panel) {
+                this.panel.webview.postMessage({
+                    type: 'EXPAND_INTERVENTION_DETAIL',
+                    payload: {
+                        interventionId: this.pendingInterventionDetail.id,
+                        persona: this.pendingInterventionDetail.personaId,
+                        detail: this.pendingInterventionDetail,
+                    },
+                });
+            }
+
             await dispatchLegacyCommand(message as WebviewToExtensionMessage, {
                 context: this.context,
                 llmService: this.llmService,
