@@ -37,6 +37,10 @@
         "title": "vibeCodeEase: Open AI Side Editor"
       },
       {
+        "command": "vibecodeease.openSettings",
+        "title": "vibeCodeEase: 設定を開く"
+      },
+      {
         "command": "vibecodeease.showInterventionSummary",
         "title": "vibeCodeEase: Show Intervention Summary"
       },

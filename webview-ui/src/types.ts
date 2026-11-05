@@ -33,11 +33,13 @@ export type WebviewToExtensionMessage =
  * - SYNC_DOCUMENT: ドキュメント内容の同期
  * - UPDATE_INTERVENTIONS: 推敲提案一覧の同期
  * - SYNC_SETTINGS: ユーザー設定（APIキーの有無・推敲レベル）の初期同期および変更反映のため
+ * - NAVIGATE_TO_SETTINGS: 設定画面（SettingsPanel）への直接遷移要求
  */
 // Extension -> Webview
 export type ExtensionToWebviewMessage = 
   | { type: 'SYNC_DOCUMENT', fileName: string, text: string }
   | { type: 'UPDATE_INTERVENTIONS', interventions: WebviewIntervention[] }
+  | { type: 'NAVIGATE_TO_SETTINGS' }
   | { type: 'SYNC_SETTINGS', hasApiKey: boolean, apiKeyLength?: number, interventionLevel: AiInterventionLevel, frequency: 'manual' | 'onSave' | 'interval', intervalSeconds: number, model: string }
   | { type: 'LLM_STATUS_UPDATE', status: 'idle' | 'loading' | 'error' }
   | { type: 'LLM_RESPONSE_UPDATE', text: string, timestamp: number }
