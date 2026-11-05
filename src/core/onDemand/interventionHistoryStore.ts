@@ -1,6 +1,6 @@
 /**
  * [Why/Intent] 介入履歴のJSON永続化（.vscode/vibecodeease/history.json）および
- * CRUD操作、ステータス遷移（Applied/Reverted/Dismissed）、チャット履歴追記を管理するストア。
+ * CRUD操作、ステータス遷移（Applied/Reverted/Dismissed）、チャット履歴追記、方針修正（Refine）永続化を管理するストア。
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -11,6 +11,7 @@ import type {
     InterventionDetail,
     InterventionItem,
     InterventionStatus,
+    PersonaId,
 } from '../../types/onDemandIntervention';
 
 /**
@@ -31,6 +32,10 @@ export class InterventionHistoryStore {
 
     public constructor(readonly _storageRoot?: string) {}
 
+    /**
+     * [Why/Intent] 履歴永続化JSONファイルの絶対パスを取得する。
+     * 明示的なストレージルート、ワークスペースフォルダ、またはカレントプロセスの順でフォールバック解決する。
+     */
     private getStorageFilePath(): string {
         const root =
             this._storageRoot ??
@@ -39,6 +44,10 @@ export class InterventionHistoryStore {
         return path.join(root, '.vscode', 'vibecodeease', 'history.json');
     }
 
+    /**
+     * [Why/Intent] ストレージファイルから履歴データを同期的にメモリキャッシュへ遅延ロードする。
+     * ファイルが存在しない場合やパースエラー時は安全に空状態を維持する。
+     */
     private ensureLoadedSync(): void {
         if (this.isLoaded) {
             return;
@@ -67,6 +76,10 @@ export class InterventionHistoryStore {
         }
     }
 
+    /**
+     * [Why/Intent] メモリキャッシュ内の全履歴データをディスク上のJSONファイルへ非同期永続化する。
+     * ディレクトリ未作成時は再帰的に作成し、フォーマット整形して保存する。
+     */
     private async saveToDisk(): Promise<void> {
         const filePath = this.getStorageFilePath();
         const dir = path.dirname(filePath);
@@ -165,12 +178,50 @@ export class InterventionHistoryStore {
     }
 
     /**
+     * [Why/Intent] 変更方針修正（Refine Intervention）により再生成された
+     * 提案コードおよび変更理由を更新・永続化する。
+     */
+    public async updateProposal(
+        documentUri: string,
+        interventionId: string,
+        patch: { proposedCode: string; summary: string },
+    ): Promise<InterventionDetail | undefined> {
+        this.ensureLoadedSync();
+
+        let targetItem: InterventionDetail | undefined;
+        const doc = this.cache.get(documentUri);
+        if (doc) {
+            targetItem = doc.interventions.find((item) => item.id === interventionId);
+        }
+
+        if (!targetItem) {
+            for (const d of this.cache.values()) {
+                targetItem = d.interventions.find((item) => item.id === interventionId);
+                if (targetItem) {
+                    break;
+                }
+            }
+        }
+
+        if (!targetItem) {
+            return undefined;
+        }
+
+        targetItem.proposedCode = patch.proposedCode;
+        targetItem.summary = patch.summary;
+        targetItem.updatedAt = new Date().toISOString();
+        await this.saveToDisk();
+        return targetItem;
+    }
+
+    /**
      * [Why/Intent] 提案単位のチャットスレッドにユーザーまたはAIのメッセージを追記し、永続化する。
+     * 発言時点のペルソナ（personaId）を保持してペルソナ履歴を永続化する。
      */
     public async addChatMessage(
         documentUri: string,
         interventionId: string,
-        message: { sender: 'user' | 'ai'; message: string },
+        message: { sender: 'user' | 'ai'; message: string; personaId?: PersonaId },
     ): Promise<InterventionDetail | undefined> {
         this.ensureLoadedSync();
 
@@ -198,6 +249,7 @@ export class InterventionHistoryStore {
             sender: message.sender,
             message: message.message,
             timestamp: new Date().toISOString(),
+            personaId: message.personaId,
         };
 
         if (!targetItem.chatHistory) {
@@ -219,6 +271,11 @@ export class InterventionHistoryStore {
         return doc ? [...doc.interventions] : [];
     }
 
+    /**
+     * [Why/Intent] エディタ編集イベントに伴う行オフセット補正計算を行い、対象行が完全削除された場合は
+     * ステータスを 'dismissed' へ自動遷移させる。これによりエディタ装飾のゴースト残留を防止し、
+     * 挿入・削除行数に基づく lineDelta を前後の介入範囲へ正しく伝播させる。
+     */
     private adjustItemForChange(
         item: InterventionDetail,
         change: vscode.TextDocumentContentChangeEvent,

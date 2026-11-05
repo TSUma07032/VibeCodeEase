@@ -1,6 +1,6 @@
 /**
  * [Why/Intent] Webviewと拡張機能ホスト間のオンデマンドIPCメッセージディスパッチおよび
- * エディタ置換・排他制御（循環介入防止フラグ）・チャット往復を統括するハンドラ。
+ * エディタ置換・排他制御（循環介入防止フラグ）・チャット往復・方針修正（Refine）を統括するハンドラ。
  */
 import * as vscode from 'vscode';
 import type { ChatMessage, InterventionDetail, PersonaId } from '../../types/onDemandIntervention';
@@ -9,7 +9,11 @@ import type {
     WebviewToExtensionInterventionMessage,
 } from '../../types/onDemandIpcMessages';
 import type { ILlmGateway } from '../llm/llmGateway';
-import { CHAT_RESPONSE_SCHEMA, PromptBuilder } from '../llm/promptBuilder';
+import {
+    CHAT_RESPONSE_SCHEMA,
+    PromptBuilder,
+    REFINE_INTERVENTION_RESPONSE_SCHEMA,
+} from '../llm/promptBuilder';
 import type { InterventionHistoryStore } from './interventionHistoryStore';
 
 /**
@@ -22,6 +26,14 @@ export interface OnDemandIpcHandlerContext {
     postMessage: (msg: ExtensionToWebviewInterventionMessage) => void;
     applyEditorEdit: (uri: string, originalCode: string, newCode: string) => Promise<boolean>;
     closePanel?: () => void;
+    updateQuickSettings?: (settings: {
+        personaId?: PersonaId;
+        frequency?: 'manual' | 'onSave' | 'interval';
+        intervalSeconds?: number;
+        model?: string;
+    }) => Promise<void>;
+    updateApiKey?: (apiKey: string) => Promise<void>;
+    expandDetail?: (interventionId: string) => Promise<void>;
 }
 
 interface ChatParams {
@@ -36,7 +48,7 @@ interface ChatQueryParams extends ChatParams {
 }
 
 /**
- * [Why/Intent] Webviewサイドパネルから届く各種アクション（適用/アンドゥ/却下/チャット/クパルソナ切替）をディスパッチし、
+ * [Why/Intent] Webviewサイドパネルから届く各種アクション（適用/アンドゥ/却下/チャット/方針修正/簡易設定）をディスパッチし、
  * エディタへのコード置換と循環解析抑止フラグの排他制御、およびLLM対話往復を統括するIPCハンドラクラス。
  */
 export class OnDemandIpcHandler {
@@ -74,6 +86,11 @@ export class OnDemandIpcHandler {
         });
     }
 
+    /**
+     * [Why/Intent] 提案されたコードをエディタへ適用し、履歴ステータスを 'applied' へ更新する。
+     * 置換処理中は `_isApplyingIntervention` 排他フラグを true に設定することで、
+     * ドキュメント変更リスナーからの二重検知や不要な循環推敲ループの誘発を確実に防止する。
+     */
     private async handleApply(documentUri: string, interventionId: string): Promise<void> {
         const detail = await this.findDetail(documentUri, interventionId);
         if (!detail) {
@@ -91,6 +108,10 @@ export class OnDemandIpcHandler {
         this.sendSyncHistory(documentUri);
     }
 
+    /**
+     * [Why/Intent] 適用済みの提案コードを変更前（originalCode）へ復元し、履歴ステータスを 'reverted' へ更新する。
+     * 置換処理中は `_isApplyingIntervention` 排他フラグを保護し、ドキュメント変更リスナーによる循環ループを防ぐ。
+     */
     private async handleUndo(documentUri: string, interventionId: string): Promise<void> {
         const detail = await this.findDetail(documentUri, interventionId);
         if (!detail) {
@@ -108,11 +129,19 @@ export class OnDemandIpcHandler {
         this.sendSyncHistory(documentUri);
     }
 
+    /**
+     * [Why/Intent] 提案を却下し、履歴ストア内のステータスを 'dismissed' へ更新する。
+     * 更新後はWebviewおよびエディタ装飾へ最新状態を同期伝播させる。
+     */
     private async handleDiscard(documentUri: string, interventionId: string): Promise<void> {
         await this._ctx.historyStore.updateStatus(documentUri, interventionId, 'dismissed');
         this.sendSyncHistory(documentUri);
     }
 
+    /**
+     * [Why/Intent] ペルソナと提案コンテキストを付与したプロンプトを構築してLLMへ問い合わせ、AI回答を履歴へ永続化してWebviewへ通知する。
+     * 通信エラー発生時はフォールバック応答メッセージを履歴に記録してUIへ伝達し、finally 節で `SET_CHAT_LOADING` (false) を送信してスピナー表示を安全に解除する。
+     */
     private async executeChatQuery(params: ChatQueryParams): Promise<void> {
         const { documentUri, interventionId, personaId, text, detail } = params;
         try {
@@ -134,6 +163,7 @@ export class OnDemandIpcHandler {
                 {
                     sender: 'ai',
                     message: replyText,
+                    personaId,
                 },
             );
 
@@ -144,6 +174,7 @@ export class OnDemandIpcHandler {
                 sender: 'ai',
                 message: replyText,
                 timestamp: new Date().toISOString(),
+                personaId,
             };
 
             this._ctx.postMessage({
@@ -160,6 +191,7 @@ export class OnDemandIpcHandler {
                 {
                     sender: 'ai',
                     message: '⚠️ エラーが発生しました。再試行してください。',
+                    personaId,
                 },
             );
 
@@ -170,6 +202,7 @@ export class OnDemandIpcHandler {
                 sender: 'ai',
                 message: '⚠️ エラーが発生しました。再試行してください。',
                 timestamp: new Date().toISOString(),
+                personaId,
             };
 
             this._ctx.postMessage({
@@ -187,6 +220,10 @@ export class OnDemandIpcHandler {
         }
     }
 
+    /**
+     * [Why/Intent] チャット要求を受信した際、Webviewへローディング開始を通知し、ユーザーメッセージを履歴ストアへ先行永続化する。
+     * 該当詳細の存在確認後にLLM対話クエリ（executeChatQuery）を実行し、対象が存在しない場合は安全にローディングを解除する。
+     */
     private async handleChat(params: ChatParams): Promise<void> {
         const { documentUri, interventionId, text } = params;
         this._ctx.postMessage({
@@ -212,7 +249,73 @@ export class OnDemandIpcHandler {
     }
 
     /**
-     * [Why/Intent] Webviewから受信したメッセージの種別に応じ、各処理（適用、アンドゥ、破棄、対話、パネル破棄）へ分岐ディスパッチする。
+     * [Why/Intent] ユーザーからの方針修正指示に基づき、LLMに修正コードと理由を再推敲させ、
+     * 履歴ストアを更新してWebviewへ最新レコードを通知する。
+     */
+    public async handleRefine(
+        documentUri: string,
+        payload: { interventionId: string; userInstruction: string; personaId: PersonaId },
+    ): Promise<void> {
+        const { interventionId, userInstruction, personaId } = payload;
+        this._ctx.postMessage({
+            type: 'SET_REFINE_LOADING',
+            payload: { interventionId, isLoading: true },
+        });
+
+        try {
+            const detail = await this.findDetail(documentUri, interventionId);
+            if (!detail) {
+                return;
+            }
+
+            const prompt = PromptBuilder.buildRefinePrompt(personaId, detail, userInstruction);
+            const response = await this._ctx.gateway.generateStructured<{
+                proposedCode?: string;
+                summary?: string;
+            }>({
+                prompt,
+                responseSchema: REFINE_INTERVENTION_RESPONSE_SCHEMA,
+                token: new vscode.CancellationTokenSource().token,
+            });
+
+            const newCode = response?.proposedCode ?? detail.proposedCode;
+            const newSummary = response?.summary ?? detail.summary;
+
+            const updated = await this._ctx.historyStore.updateProposal(
+                documentUri,
+                interventionId,
+                {
+                    proposedCode: newCode,
+                    summary: newSummary,
+                },
+            );
+
+            if (updated) {
+                this._ctx.postMessage({
+                    type: 'UPDATE_INTERVENTION_DETAIL',
+                    payload: { interventionId, detail: updated },
+                });
+                this.sendSyncHistory(documentUri);
+            }
+        } catch {
+            this._ctx.postMessage({
+                type: 'SET_REFINE_LOADING',
+                payload: {
+                    interventionId,
+                    isLoading: false,
+                    error: 'AIによる再推敲に失敗しました',
+                },
+            });
+        } finally {
+            this._ctx.postMessage({
+                type: 'SET_REFINE_LOADING',
+                payload: { interventionId, isLoading: false },
+            });
+        }
+    }
+
+    /**
+     * [Why/Intent] Webviewから受信したメッセージの種別に応じ、各処理へ分岐ディスパッチする。
      */
     public async handleMessage(
         message: WebviewToExtensionInterventionMessage,
@@ -227,6 +330,18 @@ export class OnDemandIpcHandler {
                 break;
             case 'DISCARD_INTERVENTION':
                 await this.handleDiscard(documentUri, message.payload.interventionId);
+                break;
+            case 'REFINE_INTERVENTION':
+                await this.handleRefine(documentUri, message.payload);
+                break;
+            case 'UPDATE_QUICK_SETTINGS':
+                await this._ctx.updateQuickSettings?.(message.payload);
+                break;
+            case 'UPDATE_API_KEY':
+                await this._ctx.updateApiKey?.(message.payload.apiKey);
+                break;
+            case 'REQUEST_EXPAND_DETAIL':
+                await this._ctx.expandDetail?.(message.payload.interventionId);
                 break;
             case 'SEND_CHAT_MESSAGE': {
                 const { interventionId, personaId, text } = message.payload;

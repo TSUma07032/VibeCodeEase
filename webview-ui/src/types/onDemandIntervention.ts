@@ -32,12 +32,14 @@ export interface Range {
 
 /**
  * [Why/Intent] Webviewサイドパネル内で送受信されるチャットメッセージの型定義。
+ * 発言時のペルソナ属性（personaId）を保持し、ペルソナ切替後の履歴でも誰の発言かを維持する。
  */
 export interface ChatMessage {
     id: string;
     sender: 'user' | 'ai';
     message: string;
     timestamp: string; // ISO 8601
+    personaId?: PersonaId;
 }
 
 /**
