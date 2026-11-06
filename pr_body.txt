@@ -1,11 +1,13 @@
-💡 **実施内容 (What):**
-- `activeInterventionService.ts` と `interventionQuickPick.ts` で使用されている入力 UI (`showInputBox`, `showQuickPick`) に `title` プロパティを追加しました。
-- エラーや情報通知の一部 (`showWarningMessage`, `showInformationMessage`) を、ユーザーの作業を邪魔しないステータスバーメッセージ (`setStatusBarMessage`) に置き換えました。
+🎯 消化したTODO:
+- [x] ZodスキーマからJSON Schemaを自動生成し、OpenAI等の直接APIのStructured Outputs（strict: true）へ渡す。
 
-🎯 **理由・目的 (Why):**
-- ユーザー入力や選択の UI において、どの拡張機能が要求しているかコンテキストが明示されておらず、ユーザーの混乱を招く可能性があったため。
-- 提案がない場合や選択範囲がない場合などの軽微な警告をポップアップで表示すると、開発者のフローが阻害されるため、より控えめで非侵入的なフィードバックへ改善しました。
+💡 実装内容 (What):
+- `zod-to-json-schema` パッケージを用いて、`src/core/llm/promptBuilder.ts` でハードコードされていた `INTERVENTION_RESPONSE_SCHEMA` を、`LlmInterventionPlanSchema` (Zod) からの自動生成に置き換えました。
 
-📸 **Before/After:**
-- Before: タイトルなしの InputBox/QuickPick。ポップアップによる作業中断。
-- After: `vibeCodeEase: AIへの指示` などの明確なタイトル表示。ステータスバーでの静かなフィードバック。
+🔗 活用した基盤:
+- `src/types/llmIntervention.ts` に定義済みの `LlmInterventionPlanSchema` を活用。
+
+📝 次のステップ:
+- [ ] 直接API用のLLMプロバイダー抽象化を追加し、VS Code Language Model APIと切り替え可能にする。
+- [ ] Zodによるレスポンス再検証と、スキーマ不一致・拒否応答・タイムアウト時のエラー処理を追加する。
+- [ ] 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。
