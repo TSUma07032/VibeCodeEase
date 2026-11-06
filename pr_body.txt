@@ -1,12 +1,13 @@
-💡 実施内容 (What):
-- `SharedAnalysisCache.getResults` 内で無視リスト（`ignoredIssues`）をフィルタリングする際に行われていた、毎回の文字列ID生成処理を `AnalysisResult._id` プロパティへメモ化するよう最適化しました。
-- `externalResults` が空の場合の不必要な配列の生成 (`[...cached.results, ...external]`) を排除し、無視リストが空の場合は `filter` の実行そのものをスキップするようアーリーリターンを導入しました。
+🎯 消化したTODO:
+- [x] ZodスキーマからJSON Schemaを自動生成し、OpenAI等の直接APIのStructured Outputs（strict: true）へ渡す。
 
-🎯 理由・目的 (Why):
-- `getResults` はタイピングのたびに頻繁に実行されますが、内部で要素数 $O(N)$ 個すべてに対して `${uri}::...` といった文字列補間と新たな配列オブジェクトの生成を行っていたため、メインスレッドの処理時間を圧迫し、メモリの不要なアロケーション（およびそれに伴うGC負荷）を引き起こしていました。
+💡 実装内容 (What):
+- `zod-to-json-schema` パッケージを用いて、`src/core/llm/promptBuilder.ts` でハードコードされていた `INTERVENTION_RESPONSE_SCHEMA` を、`LlmInterventionPlanSchema` (Zod) からの自動生成に置き換えました。
 
-📊 影響 (Impact):
-- ローカルベンチマーク（10000回の連続実行、配列要素300件の条件下）において、実行時間が約 ~1300ms から約 ~130ms へ削減（約90%減）されることを確認しました。
+🔗 活用した基盤:
+- `src/types/llmIntervention.ts` に定義済みの `LlmInterventionPlanSchema` を活用。
 
-🔬 検証方法 (Measurement):
-- 全テストスイートが通過することを確認しました（`npm test`）。
+📝 次のステップ:
+- [ ] 直接API用のLLMプロバイダー抽象化を追加し、VS Code Language Model APIと切り替え可能にする。
+- [ ] Zodによるレスポンス再検証と、スキーマ不一致・拒否応答・タイムアウト時のエラー処理を追加する。
+- [ ] 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。
