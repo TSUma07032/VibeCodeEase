@@ -85,7 +85,11 @@ export class PreferenceStore {
 
             return this.profile;
         } catch (e) {
-            console.error('Failed to load personalization profile', e);
+            // 🛡️ Sentinel: 機密情報の漏洩を防ぐため、生のエラーオブジェクトではなく安全なメッセージのみをログ出力する
+            console.error(
+                'Failed to load personalization profile',
+                e instanceof Error ? e.message : String(e),
+            );
             return this.profile;
         }
     }
@@ -103,7 +107,11 @@ export class PreferenceStore {
                 'utf-8',
             );
         } catch (e) {
-            console.error('Failed to save personalization profile', e);
+            // 🛡️ Sentinel: 機密情報の漏洩を防ぐため、生のエラーオブジェクトではなく安全なメッセージのみをログ出力する
+            console.error(
+                'Failed to save personalization profile',
+                e instanceof Error ? e.message : String(e),
+            );
         }
     }
 
@@ -166,7 +174,11 @@ export class PreferenceStore {
             this.updateCentroids();
             await this.save();
         } catch (e) {
-            console.error('Failed to recalculate embeddings on provider change', e);
+            // 🛡️ Sentinel: 機密情報の漏洩を防ぐため、生のエラーオブジェクトではなく安全なメッセージのみをログ出力する
+            console.error(
+                'Failed to recalculate embeddings on provider change',
+                e instanceof Error ? e.message : String(e),
+            );
         }
     }
 }
