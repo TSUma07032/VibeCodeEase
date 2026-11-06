@@ -136,4 +136,4 @@ function registerExtensionCommands(
     );
 }
 
-export function deactivate(): void { }
+export function deactivate(): void {}
