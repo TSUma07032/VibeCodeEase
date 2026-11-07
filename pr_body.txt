@@ -1,4 +1,9 @@
-🚨 深刻度 (Severity): CRITICAL
-💡 脆弱性 (Vulnerability): APIキーがsettings.jsonに平文で保存され漏洩するリスク
-🎯 影響 (Impact): バージョン管理や他の拡張機能からAPIキーが流出する
-🔧 修正内容 (Fix): 設定からのフォールバック取得ロジックを削除し、SecretStorageのみを使用するよう修正しました
+💡 実施内容 (What):
+`InlineInterventionHoverProvider`で提供されるMarkdownツールチップにおいて、汎用的な絵文字（💬, 👉, ❌）をVS CodeネイティブのProduct Icons（`$(sparkle)`, `$(diff-multiple)`, `$(trash)`）に置換し、`supportThemeIcons = true`を有効化しました。
+
+🎯 理由・目的 (Why):
+VS Codeの標準UIに合わせたシームレスで洗練されたUXを提供するため。OSやフォント環境に依存しない統一感のあるアイコン表示により、開発者が拡張機能をより直感的に操作できるようにします。
+
+📸 Before/After:
+**Before:** `### 💬 vibeCodeEase...`, `👉 [詳細差分と対話を展開]...`, `❌ [この提案を却下する]...` (supportThemeIcons = false)
+**After:** `### $(sparkle) vibeCodeEase...`, `$(diff-multiple) [詳細差分と対話を展開]...`, `$(trash) [この提案を却下する]...` (supportThemeIcons = true)

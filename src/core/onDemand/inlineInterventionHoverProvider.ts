@@ -33,7 +33,9 @@ export class InlineInterventionHoverProvider implements vscode.HoverProvider {
             return undefined;
         }
 
-        const mdLines: string[] = [`### 💬 vibeCodeEase: AI介入提案 (${matching.length}件)`];
+        const mdLines: string[] = [
+            `### $(sparkle) vibeCodeEase: AI介入提案 (${matching.length}件)`,
+        ];
 
         matching.forEach((item, index) => {
             const encodedArg = encodeURIComponent(JSON.stringify([item.id]));
@@ -41,17 +43,18 @@ export class InlineInterventionHoverProvider implements vscode.HoverProvider {
             mdLines.push(`**${index + 1}. ${item.title}**  `);
             mdLines.push(`${item.summary}  `);
             mdLines.push(
-                `👉 [詳細差分と対話を展開](command:vibecodeease.expandIntervention?${encodedArg})`,
+                `$(diff-multiple) [詳細差分と対話を展開](command:vibecodeease.expandIntervention?${encodedArg})`,
             );
             mdLines.push('');
             mdLines.push(
-                `❌ [この提案を却下する](command:vibecodeease.discardIntervention?${encodedArg})`,
+                `$(trash) [この提案を却下する](command:vibecodeease.discardIntervention?${encodedArg})`,
             );
         });
 
         const md = new vscode.MarkdownString(mdLines.join('\n'));
         md.isTrusted = true;
         md.supportHtml = true;
+        md.supportThemeIcons = true;
 
         return new vscode.Hover(md);
     }
