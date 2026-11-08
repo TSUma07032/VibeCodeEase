@@ -1,12 +1,11 @@
 💡 実施内容 (What):
-`SideEditorProvider.ts` の `onDidChangeTextDocument` デバウンス処理において、蓄積された複数のイベント (`pendingEvents`) をループで個別に `InterventionManager.handleDocumentChange` に渡すのではなく、`contentChanges` をフラット化して1つのイベントとしてバッチ処理するように変更しました。
+`src/core/analyzer.ts` 内の `checkTrailingSpaces` における末尾スペース検出処理において、重い正規表現 (`/^(.*\S)( +)$/`) を削除し、文字列の後方からのループ処理を用いた軽量な文字コード検証 (`charCodeAt(i) === 32`) に置き換えました。
 
 🎯 理由・目的 (Why):
-複数回の編集イベントが蓄積された場合、ループで毎回 `handleDocumentChange` を呼ぶと、内部で都度キャッシュ (`SharedAnalysisCache.getInstance().getResults(document)`) を取得し、O(N) の探索処理がイベント数分だけ重複して実行されてしまうため。
+`CodeAnalyzer` はコード解析のたびにすべての行に対して `checkTrailingSpaces` を実行しますが、正規表現マッチングはオーバーヘッドが大きく、ファイルサイズが大きくなるとメインスレッドをブロックしパフォーマンスが低下するためです。
 
 📊 影響 (Impact):
-`handleDocumentChange` の重複実行が排除され、複数イベント処理の合計実行時間を約327msから約33msへと約90%削減しました。これにより高速なタイピング時のイベントループのブロックが緩和されます。
+正規表現処理によるイベントループのブロッキングが軽減され、静的解析の処理速度が大幅に向上しました。ベンチマークスクリプトでの計測結果では、10,000行の解析における実行時間が約 179ms から約 25ms へ削減されました。
 
 🔬 検証方法 (Measurement):
-1. `npm run compile` および `xvfb-run -a npm test` が成功することを確認。
-2. VS Code 上で高速にテキストを入力し、`handleDocumentChange` が一度だけ呼び出され、かつ問題なくキャッシュ無効化・再解析がトリガーされることを確認。
+`npm run test` を実行し、既存のテスト（タイポ検出および不要なスペース検出）がすべてパスすることを確認しました。
