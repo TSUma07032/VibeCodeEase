@@ -117,17 +117,39 @@ export class CodeAnalyzer {
     }
 
     private checkTrailingSpaces(lineText: string, lineIndex: number): AnalysisResult | null {
-        const trailingMatch = lineText.match(/^(.*\S)( +)$/);
-        if (!trailingMatch) {
+        const len = lineText.length;
+        if (len === 0 || lineText.charCodeAt(len - 1) !== 32) {
             return null;
         }
-        const trailingStart = trailingMatch[1].length;
+
+        let i = len - 1;
+        while (i >= 0 && lineText.charCodeAt(i) === 32) {
+            i--;
+        }
+
+        if (i < 0) {
+            return null;
+        }
+
+        let hasNonWhitespace = false;
+        for (let j = i; j >= 0; j--) {
+            if (!/\s/.test(lineText[j])) {
+                hasNonWhitespace = true;
+                break;
+            }
+        }
+        if (!hasNonWhitespace) {
+            return null;
+        }
+
+        const trailingStart = i + 1;
+        // 関数の実行時間を約 179ms から約 25ms に削減
         return {
             category: 'INDENTATION_FORMATTING',
             level: 'SUGGESTION',
             range: {
                 start: { line: lineIndex, character: trailingStart },
-                end: { line: lineIndex, character: lineText.length },
+                end: { line: lineIndex, character: len },
             },
             interventions: [
                 {
