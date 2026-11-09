@@ -51,7 +51,7 @@ export class ActiveInterventionService {
 
         return vscode.window.withProgress(
             {
-                location: vscode.ProgressLocation.Notification,
+                location: vscode.ProgressLocation.Window,
                 title: 'vibeCodeEase: AI提案を生成中...',
                 cancellable: false,
             },
