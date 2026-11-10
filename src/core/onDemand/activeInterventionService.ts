@@ -41,8 +41,8 @@ export class ActiveInterventionService {
 
         const instruction = await vscode.window.showInputBox({
             title: 'vibeCodeEase: AIへの指示',
-            prompt: 'AIへの指示・推敲内容を入力してください（例: パフォーマンスを改善して）',
-            placeHolder: '指示内容...',
+            prompt: 'AIへの指示・推敲内容を入力してください',
+            placeHolder: '例: 変数名をキャメルケースに変更して / 処理速度を最適化して',
         });
 
         if (!instruction || instruction.trim() === '') {

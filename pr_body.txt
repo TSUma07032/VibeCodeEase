@@ -1,11 +1,16 @@
 💡 実施内容 (What):
-`src/core/onDemand/interventionHistoryStore.ts`内の`adjustItemForChange`関数における追加行数の計算処理で、`match(/\n/g)`による正規表現と配列生成を排除し、軽量な`indexOf`による走査に置き換えました。また、行数の計算をネストされたループの外側にホイストしました。
+- `showQuickPick` に `matchOnDescription` と `matchOnDetail` を追加し、検索可能にしました。
+- QuickPick と InputBox の `placeHolder` に具体的で分かりやすい入力例・案内テキストを設定しました。
 
 🎯 理由・目的 (Why):
-ユーザーのエディタ編集ごとに呼ばれるホットパスにおいて、大量の配列アロケーションと無駄な再計算が発生しており、Node.jsのイベントループをブロックしエディタのパフォーマンス低下を招く可能性があったため。
+- QuickPick では一覧から目的の提案を探しやすくするため（フィルタリング機能の強化）。
+- InputBox では、ユーザーがどんな入力を行えばよいかの迷いを軽減するため（認知負荷の低下）。
 
-📊 影響 (Impact):
-イベントループのブロック時間が減少し、1000個のアイテムに対する100回の変更処理のベンチマーク実行時間が約 25.18ms から約 6.52ms に大幅に短縮されます。
+📸 Before/After:
+【Before】
+- InputBox: `placeHolder: '指示内容...'`
+- QuickPick: `placeHolder: 'AI介入提案を選択して詳細と対話を開く'` (検索フィルタはラベルのみ)
 
-🔬 検証方法 (Measurement):
-テストスイートの実行（`npm test`）によって機能の正常動作を確認し、ベンチマークテストの実行によって高速化を実証しています。
+【After】
+- InputBox: `placeHolder: '例: 変数名をキャメルケースに変更して / 処理速度を最適化して'`
+- QuickPick: `placeHolder: '詳細を確認したい提案を選択、または検索キーワードを入力...'` (詳細/説明文でのフィルタリング可能)
