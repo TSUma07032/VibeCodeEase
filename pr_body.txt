@@ -1,11 +1,9 @@
 💡 実施内容 (What):
-`src/core/onDemand/interventionHistoryStore.ts`内の`adjustItemForChange`関数における追加行数の計算処理で、`match(/\n/g)`による正規表現と配列生成を排除し、軽量な`indexOf`による走査に置き換えました。また、行数の計算をネストされたループの外側にホイストしました。
+- `src/commands.ts` および `src/core/onDemand/interventionQuickPick.ts` の `showQuickPick` オプションに `matchOnDescription: true` と `matchOnDetail: true` を追加しました。
 
 🎯 理由・目的 (Why):
-ユーザーのエディタ編集ごとに呼ばれるホットパスにおいて、大量の配列アロケーションと無駄な再計算が発生しており、Node.jsのイベントループをブロックしエディタのパフォーマンス低下を招く可能性があったため。
+- デフォルトでは `label` プロパティのみが検索対象となるため、ユーザーが `description` や `detail` の内容でフィルタリングできず、目的の項目を探しにくいという課題がありました。この変更により検索性が大幅に向上し、キーボード操作のみでのスムーズな選択が可能になります。
 
-📊 影響 (Impact):
-イベントループのブロック時間が減少し、1000個のアイテムに対する100回の変更処理のベンチマーク実行時間が約 25.18ms から約 6.52ms に大幅に短縮されます。
-
-🔬 検証方法 (Measurement):
-テストスイートの実行（`npm test`）によって機能の正常動作を確認し、ベンチマークテストの実行によって高速化を実証しています。
+📸 Before/After:
+- Before: モード選択や提案選択時、タイトル(`label`)でしか絞り込みができない。
+- After: モードの説明(`description`)や提案のサマリー(`detail`)の文字列でも絞り込みが可能になり、直感的なアクセスが実現。
