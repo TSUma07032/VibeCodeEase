@@ -1,6 +1,9 @@
-💡 実施内容 (What): `extractReplacementFromDiagnostic` メソッドにおいて、修正候補テキストの抽出処理を正規表現 (`String.prototype.match`) から `indexOf` と `substring` を使用した文字列スキャン処理に置き換えました。
-🎯 理由・目的 (Why): Diagnosticsの解析（エラーや警告の処理）は、エディタ上での入力やファイル変更に伴い高頻度で実行されます。ループ内での正規表現エンジンの呼び出しと不要な配列生成のオーバーヘッドを削減し、イベントループのブロッキングを防ぐためです。
-📊 影響 (Impact): ローカルベンチマーク環境において、大量のDiagnosticsメッセージ（50,000件）からの抽出処理実行時間を約20.4msから約12.0msに削減（約41%の高速化）しました。
-🔬 検証方法 (Measurement):
-1. `npm run compile` および `npm run lint` が正常に通過することを確認。
-2. `xvfb-run -a npm test` にてテストスイート全体が成功することを確認。
+💡 実施内容 (What):
+- `src/commands.ts` および `src/core/onDemand/interventionQuickPick.ts` の `showQuickPick` オプションに `matchOnDescription: true` と `matchOnDetail: true` を追加しました。
+
+🎯 理由・目的 (Why):
+- デフォルトでは `label` プロパティのみが検索対象となるため、ユーザーが `description` や `detail` の内容でフィルタリングできず、目的の項目を探しにくいという課題がありました。この変更により検索性が大幅に向上し、キーボード操作のみでのスムーズな選択が可能になります。
+
+📸 Before/After:
+- Before: モード選択や提案選択時、タイトル(`label`)でしか絞り込みができない。
+- After: モードの説明(`description`)や提案のサマリー(`detail`)の文字列でも絞り込みが可能になり、直感的なアクセスが実現。
