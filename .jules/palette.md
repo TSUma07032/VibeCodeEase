@@ -46,3 +46,6 @@
 ## 2024-11-08 - 提案生成プログレスの非侵入型UIへの改善
 **学び:** `vscode.window.withProgress` で時間のかかる処理を実行する際、`ProgressLocation.Notification` を使用すると画面右下にポップアップが表示され続け、開発者の視界を遮りフローを阻害する。
 **アクション:** 開発者の作業を邪魔しないよう、進捗表示には常に `ProgressLocation.Window` を優先し、ステータスバーでの控えめな通知を採用する。
+## 2024-11-11 - QuickPickの検索性向上
+**学び:** `vscode.window.showQuickPick`はデフォルトで`label`のみを検索対象とするため、ユーザーが詳細な情報（`description`や`detail`）を元に項目を検索できないという課題がある。
+**アクション:** `showQuickPick`を使用する際は、常に`matchOnDescription: true`および`matchOnDetail: true`を設定し、検索性と開発者体験（DX）を向上させる。
