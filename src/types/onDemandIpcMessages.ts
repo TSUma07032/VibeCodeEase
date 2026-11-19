@@ -93,7 +93,16 @@ export type WebviewToExtensionInterventionMessage =
               frequency?: 'manual' | 'onSave' | 'interval';
               intervalSeconds?: number;
               model?: string;
+              scrollSyncEnabled?: boolean;
           };
+      }
+    | {
+          type: 'SYNC_WEBVIEW_SCROLL';
+          payload: { topLine: number };
+      }
+    | {
+          type: 'SET_DETAIL_PANEL_OPEN';
+          payload: { isOpen: boolean };
       }
     | {
           type: 'UPDATE_API_KEY';

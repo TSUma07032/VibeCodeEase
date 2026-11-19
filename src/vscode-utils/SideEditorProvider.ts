@@ -26,6 +26,11 @@ import type { LearningSettingsWebviewMessage } from '../types/learningSettings';
 import type { InterventionDetail, PersonaId } from '../types/onDemandIntervention';
 import type { WebviewToExtensionInterventionMessage } from '../types/onDemandIpcMessages';
 import type { ExtensionToWebviewMessage, WebviewToExtensionMessage } from '../types/webviewMessage';
+import {
+    cloneEditorLayout,
+    computeExpandedEditorLayout,
+    type EditorLayout,
+} from './editorLayoutHelper';
 import { dispatchLegacyCommand, fetchSideEditorSettings } from './sideEditorConfig';
 import { getSideEditorHtml } from './sideEditorHtml';
 import {
@@ -52,6 +57,8 @@ const ON_DEMAND_IPC_TYPES = new Set([
     'UPDATE_API_KEY',
 ]);
 
+const SCROLL_SYNC_SUPPRESS_MS = 250;
+
 /**
  * [Why/Intent] SideEditorProviderの依存性（学習セッション・推敲サービス等）をテストおよび本番でDI注入するためのオプション
  */
@@ -77,6 +84,11 @@ export class SideEditorProvider implements vscode.Disposable {
     private _isApplyingIntervention = false;
     private _currentDocumentUri?: vscode.Uri;
     private _debounceTimer: NodeJS.Timeout | undefined;
+    private _scrollSyncEnabled = true;
+    private _suppressEditorScrollUntil = 0;
+    private _lastSyncedEditorTopLine: number | undefined;
+    private _savedEditorLayout: EditorLayout | undefined;
+    private _isLayoutExpandedForDetail = false;
     private readonly learningSessionStore: LearningSessionStore;
     private readonly learningBackgroundService: LearningBackgroundService;
     private readonly learningConfigStore: LearningConfigStore;
@@ -170,6 +182,15 @@ export class SideEditorProvider implements vscode.Disposable {
                     );
                     await GlobalState.getInstance().setPersonaId(settings.personaId);
                     await this.applyPersonaToPendingInterventions(settings.personaId);
+                }
+                if (settings.scrollSyncEnabled !== undefined) {
+                    this._scrollSyncEnabled = settings.scrollSyncEnabled;
+                    this._lastSyncedEditorTopLine = undefined;
+                    await config.update(
+                        'scrollSync',
+                        settings.scrollSyncEnabled,
+                        vscode.ConfigurationTarget.Global,
+                    );
                 }
                 this.llmService.startTimerIfConfigured();
                 await this.sendSettingsSync();
@@ -408,6 +429,7 @@ export class SideEditorProvider implements vscode.Disposable {
 
         if (detail) {
             this.pendingInterventionDetail = detail;
+            await this.expandSidebarWidthForDetail();
             void this.panel?.webview.postMessage({
                 type: 'EXPAND_INTERVENTION_DETAIL',
                 payload: {
@@ -514,6 +536,7 @@ export class SideEditorProvider implements vscode.Disposable {
     public async openSettings(): Promise<void> {
         this.pendingInterventionDetail = undefined;
         this.pendingTab = 'settings';
+        await this.restoreSidebarWidthFromDetail();
         if (!this.panel) {
             await this.openSideEditor();
         } else {
@@ -523,13 +546,160 @@ export class SideEditorProvider implements vscode.Disposable {
         }
     }
 
+    /**
+     * [Why/Intent] 詳細＆チャットパネル展開時に、元のエディタ分割比率を記憶した上で
+     * サイドバー（Webview）側の横幅を一時的に拡大し、縦3ライン構成を快適に閲覧できるようにする。
+     */
+    private async expandSidebarWidthForDetail(): Promise<void> {
+        if (this._isLayoutExpandedForDetail) {
+            return;
+        }
+        try {
+            const currentLayout =
+                await vscode.commands.executeCommand<EditorLayout>('vscode.getEditorLayout');
+            const expanded = computeExpandedEditorLayout(currentLayout);
+            if (!expanded || !currentLayout) {
+                return;
+            }
+            this._savedEditorLayout = cloneEditorLayout(currentLayout);
+            this._isLayoutExpandedForDetail = true;
+            await vscode.commands.executeCommand('vscode.setEditorLayout', expanded);
+        } catch {
+            // レイアウト操作が利用できない環境でも詳細画面表示自体は妨げない
+        }
+    }
+
+    /**
+     * [Why/Intent] 詳細＆チャットパネルを閉じた際（またはパネル破棄時）に、
+     * 一時拡大前のエディタ分割比率へ安全に自動復元する。
+     */
+    private async restoreSidebarWidthFromDetail(): Promise<void> {
+        if (!this._isLayoutExpandedForDetail || !this._savedEditorLayout) {
+            return;
+        }
+        const layoutToRestore = this._savedEditorLayout;
+        this._savedEditorLayout = undefined;
+        this._isLayoutExpandedForDetail = false;
+        try {
+            await vscode.commands.executeCommand('vscode.setEditorLayout', layoutToRestore);
+        } catch {
+            // 復元失敗時もクラッシュさせない
+        }
+    }
+
     private handlePanelDispose(): void {
         this.panel = undefined;
         this.pendingTab = undefined;
         this.pendingInterventionDetail = undefined;
+        this._lastSyncedEditorTopLine = undefined;
+        this._suppressEditorScrollUntil = 0;
+        void this.restoreSidebarWidthFromDetail();
         while (this.panelDisposables.length) {
             this.panelDisposables.pop()?.dispose();
         }
+    }
+
+    /**
+     * [Why/Intent] スクロール同期対象となるユーザー作業エディタ（非Beside列）をvisibleTextEditorsから解決する。
+     * サイドバーWebview操作中は activeTextEditor が undefined になり得るため、visibleTextEditors を優先参照する。
+     */
+    private findTargetVisibleEditor(): vscode.TextEditor | undefined {
+        const targetUriStr = this._currentDocumentUri?.toString();
+        if (targetUriStr) {
+            const matched = vscode.window.visibleTextEditors.find(
+                (e) =>
+                    e.viewColumn !== vscode.ViewColumn.Beside &&
+                    e.document.uri.toString() === targetUriStr,
+            );
+            if (matched) {
+                return matched;
+            }
+        }
+        const active = vscode.window.activeTextEditor;
+        if (active && active.viewColumn !== vscode.ViewColumn.Beside) {
+            return active;
+        }
+        return vscode.window.visibleTextEditors.find(
+            (e) => e.viewColumn !== vscode.ViewColumn.Beside && e.document.uri.scheme === 'file',
+        );
+    }
+
+    /**
+     * [Why/Intent] 作業エディタの表示範囲変更（スクロール）を検知し、サイドバーへ現在先頭行を同期する。
+     * Webview側からのスクロール指示直後（_suppressEditorScrollUntil 内）はエコーバックを抑止し無限ループを防止する。
+     */
+    private handleEditorVisibleRangesChange(event: vscode.TextEditorVisibleRangesChangeEvent): void {
+        if (!this._scrollSyncEnabled || !this.panel) {
+            return;
+        }
+        if (Date.now() < this._suppressEditorScrollUntil) {
+            return;
+        }
+        if (event.textEditor.viewColumn === vscode.ViewColumn.Beside) {
+            return;
+        }
+        if (
+            this._currentDocumentUri &&
+            event.textEditor.document.uri.toString() !== this._currentDocumentUri.toString()
+        ) {
+            return;
+        }
+        const topLine = event.visibleRanges[0]?.start.line;
+        if (topLine === undefined || topLine === this._lastSyncedEditorTopLine) {
+            return;
+        }
+        this._lastSyncedEditorTopLine = topLine;
+        void this.panel.webview.postMessage({
+            type: 'SYNC_EDITOR_SCROLL',
+            topLine,
+        });
+    }
+
+    /**
+     * [Why/Intent] サイドバーWebview側のスクロール位置（先頭行番号）を受け取り、
+     * フォーカスを奪わずに作業エディタを該当行先頭へスクロールする。
+     */
+    private handleWebviewScroll(rawTopLine: unknown): void {
+        if (!this._scrollSyncEnabled) {
+            return;
+        }
+        if (typeof rawTopLine !== 'number' || !Number.isFinite(rawTopLine)) {
+            return;
+        }
+        const editor = this.findTargetVisibleEditor();
+        if (!editor) {
+            return;
+        }
+        const maxLine = Math.max(0, editor.document.lineCount - 1);
+        const clampedLine = Math.max(0, Math.min(Math.floor(rawTopLine), maxLine));
+        const currentTopLine = editor.visibleRanges[0]?.start.line;
+        if (currentTopLine === clampedLine) {
+            this._lastSyncedEditorTopLine = clampedLine;
+            return;
+        }
+        this._suppressEditorScrollUntil = Date.now() + SCROLL_SYNC_SUPPRESS_MS;
+        this._lastSyncedEditorTopLine = clampedLine;
+        const range = new vscode.Range(clampedLine, 0, clampedLine, 0);
+        editor.revealRange(range, vscode.TextEditorRevealType.AtTop);
+    }
+
+    /**
+     * [Why/Intent] 現在表示中の作業エディタの先頭行をサイドバーへ初期同期する。
+     */
+    private sendCurrentEditorScrollSync(): void {
+        if (!this._scrollSyncEnabled || !this.panel) {
+            return;
+        }
+        const editor = this.findTargetVisibleEditor();
+        const topLine = editor?.visibleRanges[0]?.start.line;
+        if (topLine === undefined || topLine <= 0) {
+            return;
+        }
+        this._lastSyncedEditorTopLine = topLine;
+        void this.panel.webview.postMessage({
+            type: 'SYNC_EDITOR_SCROLL',
+            topLine,
+        });
     }
 
     private registerListeners(): void {
@@ -537,7 +707,30 @@ export class SideEditorProvider implements vscode.Disposable {
             (editor) => {
                 if (editor && editor.viewColumn !== vscode.ViewColumn.Beside) {
                     this._currentDocumentUri = editor.document.uri;
+                    this._lastSyncedEditorTopLine = undefined;
                     this.syncWithActiveEditor();
+                }
+            },
+            null,
+            this.panelDisposables,
+        );
+
+        vscode.window.onDidChangeTextEditorVisibleRanges(
+            (event) => {
+                this.handleEditorVisibleRangesChange(event);
+            },
+            null,
+            this.panelDisposables,
+        );
+
+        vscode.workspace.onDidChangeConfiguration(
+            (event) => {
+                if (
+                    event.affectsConfiguration('vibecodeease.scrollSync') ||
+                    event.affectsConfiguration('editor.fontSize') ||
+                    event.affectsConfiguration('editor.lineHeight')
+                ) {
+                    void this.sendSettingsSync();
                 }
             },
             null,
@@ -590,6 +783,7 @@ export class SideEditorProvider implements vscode.Disposable {
 
     private async sendSettingsSync(): Promise<void> {
         const s = await fetchSideEditorSettings(this.context);
+        this._scrollSyncEnabled = s.scrollSyncEnabled;
         const currentPersona =
             this.context.workspaceState.get<PersonaId>('vibecodeease.currentPersona') ??
             GlobalState.getInstance().personaId ??
@@ -603,6 +797,9 @@ export class SideEditorProvider implements vscode.Disposable {
             intervalSeconds: s.intervalSeconds,
             model: s.model,
             personaId: currentPersona,
+            scrollSyncEnabled: s.scrollSyncEnabled,
+            editorFontSize: s.editorFontSize,
+            editorLineHeight: s.editorLineHeight,
         });
     }
 
@@ -619,6 +816,20 @@ export class SideEditorProvider implements vscode.Disposable {
     }
 
     private async handleTypeMessage(type: string, message: unknown): Promise<void> {
+        if (type === 'SYNC_WEBVIEW_SCROLL') {
+            const payload = (message as { payload?: { topLine?: unknown } }).payload;
+            this.handleWebviewScroll(payload?.topLine);
+            return;
+        }
+        if (type === 'SET_DETAIL_PANEL_OPEN') {
+            const isOpen = Boolean((message as { payload?: { isOpen?: boolean } }).payload?.isOpen);
+            if (isOpen) {
+                await this.expandSidebarWidthForDetail();
+            } else {
+                await this.restoreSidebarWidthFromDetail();
+            }
+            return;
+        }
         if (type === 'REQUEST_EXPAND_DETAIL') {
             const payload = (message as { payload?: { interventionId?: string } }).payload;
             if (payload?.interventionId) {
@@ -689,6 +900,7 @@ export class SideEditorProvider implements vscode.Disposable {
                     });
                     this.pendingInterventionDetail = undefined;
                 }
+                this.sendCurrentEditorScrollSync();
             }
         }
     }
@@ -755,6 +967,7 @@ export class SideEditorProvider implements vscode.Disposable {
         if (targetDoc) {
             this.sendSyncDocument(targetDoc.fileName, targetDoc.getText());
             this.sendUpdateInterventions(targetDoc);
+            this.sendCurrentEditorScrollSync();
         }
     }
 

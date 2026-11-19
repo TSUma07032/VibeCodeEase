@@ -32,6 +32,7 @@ export interface OnDemandIpcHandlerContext {
         frequency?: 'manual' | 'onSave' | 'interval';
         intervalSeconds?: number;
         model?: string;
+        scrollSyncEnabled?: boolean;
     }) => Promise<void>;
     updateApiKey?: (apiKey: string) => Promise<void>;
     expandDetail?: (interventionId: string) => Promise<void>;
@@ -421,6 +422,8 @@ export class OnDemandIpcHandler {
                 break;
             case 'SWITCH_PERSONA':
             case 'REQUEST_ACTIVE_INTERVENTION':
+            case 'SYNC_WEBVIEW_SCROLL':
+            case 'SET_DETAIL_PANEL_OPEN':
                 break;
         }
     }

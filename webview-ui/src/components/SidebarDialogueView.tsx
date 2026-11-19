@@ -33,6 +33,7 @@ export interface SidebarDialogueViewProps {
     onApply?: (id: string) => void;
     onUndo?: (id: string) => void;
     onReject: (id: string) => void;
+    closeButtonLabel?: string;
 }
 
 /**
@@ -45,6 +46,7 @@ export const SidebarDialogueView: React.FC<SidebarDialogueViewProps> = ({
     isChatLoading,
     onApply,
     onReject,
+    closeButtonLabel = '⬅️ 一覧・簡易設定に戻る',
 }) => {
     const [chatInput, setChatInput] = useState('');
 
@@ -128,6 +130,7 @@ export const SidebarDialogueView: React.FC<SidebarDialogueViewProps> = ({
                 >
                     <button
                         type="button"
+                        data-testid="close-detail-pane-btn"
                         onClick={onBack}
                         style={{
                             background: 'transparent',
@@ -140,7 +143,7 @@ export const SidebarDialogueView: React.FC<SidebarDialogueViewProps> = ({
                             textAlign: 'left',
                         }}
                     >
-                        ⬅️ 一覧・簡易設定に戻る
+                        {closeButtonLabel}
                     </button>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

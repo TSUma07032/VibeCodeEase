@@ -1,15 +1,14 @@
 /**
  * [Why/Intent] vibeCodeEase サイドバーの初期画面（全面展開「💻 AI作業コード」＋最下部「📋 提案・依頼リスト（介入掲示板）」＋折りたたみ設定）コンポーネント。
- * - 上部（メイン全面表示）：「💻 AI作業コード（AIの作業スペース）」を内部スクロール枠なしで全面に表示。
- *   - 新しい提案（pending）はコード上にインライン差分ボックス（before / after / 採用・却下・詳細）としてはっきり表示する。
- *   - 古い提案（applied / dismissed / reverted）は該当行の右端にちっちゃいアイコンバッジ（✓介入1 / ✕介入2）として並べ、
- *     そのアイコンをクリックすると新提案と同じように「AI作業コード側でも」インライン差分ボックス（before / after / 採用・却下・詳細）が開閉される。
+ * - 上部（メイン全面表示）：「💻 AI作業コード（AIの作業スペース）」をエディタと同一行高で全面表示。
+ *   - 古い介入（applied / dismissed / reverted）はコード行の右側には表示せず、クリーンなコード行を維持する。
+ *   - 新しい介入（pending）は該当行が提案後コードに自動変更され、明るい濃い色でハイライト表示される。
+ *   - ハイライト行右端の「介入N」ボタンを押すと、行を下に押し出さず直上にフローティングで
+ *     「採用 / 却下 / 詳細」の簡易アクションバーが提示される。
  * - 最下部（コードの一番下のさらに下）：「📋 提案・依頼リスト（過去分も含む介入掲示板）」を配置。
- *   各項目（介入1：要約、介入2：要約...）をクリックするとトグルが開き、
- *   before（-）/ after（+）差分および「採用」「却下」「詳細（チャットを開く）」ボタンを表示する。
- * - 設定：「⚙️ 設定」ボタンで簡易設定・Gemini APIキー管理を開閉できる。
+ * - 設定：「⚙️ 設定」ボタンで簡易設定（ペルソナ・トリガー・モデル・スクロール同期）・Gemini APIキー管理を開閉できる。
  */
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     FREQUENCY_OPTIONS,
     MODEL_OPTIONS,
@@ -21,6 +20,10 @@ import type {
     InterventionItem,
     PersonaId,
 } from '../types/onDemandIntervention';
+import {
+    buildWorkspaceDisplayRows,
+    type IndexedIntervention,
+} from '../utils/workspaceRows';
 
 /**
  * [Why/Intent] SidebarInitialViewコンポーネントが要求するPropsインターフェース。
@@ -45,14 +48,8 @@ export interface SidebarInitialViewProps {
     onRejectIntervention?: (id: string) => void;
     isSettingsOpen?: boolean;
     onToggleSettings?: () => void;
-}
-
-/**
- * [Why/Intent] 番号付きの介入エントリー構造体（1始まりの連番 indexNumber を保持）。
- */
-interface IndexedIntervention {
-    item: InterventionItem;
-    indexNumber: number;
+    scrollSyncEnabled?: boolean;
+    onScrollSyncChange?: (enabled: boolean) => void;
 }
 
 /**
@@ -81,235 +78,9 @@ function extractBaseName(filePath: string | undefined): string {
 }
 
 /**
- * [Why/Intent] AI作業コード描画用の行配列を構築する。
- * documentText が同期済みの場合はその行配列をベースにしつつ、
- * 介入項目の行番号が documentText の行数を超える場合（または documentText 未同期時）でも
- * 介入対象行が欠落しないよう必要な行数を確保して originalCode を補完する。
- */
-function buildWorkspaceLines(
-    documentText: string | undefined,
-    interventions: InterventionItem[],
-): string[] {
-    const baseLines =
-        documentText && documentText.length > 0
-            ? documentText.split(/\r?\n/)
-            : [];
-    const maxInterventionLine = interventions.reduce(
-        (max, intv) =>
-            Math.max(max, intv.range.end.line, intv.range.start.line),
-        -1,
-    );
-
-    if (baseLines.length === 0 && maxInterventionLine < 0) {
-        return [];
-    }
-
-    const totalLines = Math.max(baseLines.length, maxInterventionLine + 1);
-    const result: string[] = Array.from(
-        { length: totalLines },
-        (_, idx) => baseLines[idx] ?? '',
-    );
-
-    // documentText 未同期時に originalCode から行テキストを補完
-    if (baseLines.length === 0) {
-        for (const intv of interventions) {
-            if (intv.originalCode) {
-                const origLines = intv.originalCode.split(/\r?\n/);
-                origLines.forEach((lineText, offset) => {
-                    const targetLine = intv.range.start.line + offset;
-                    if (targetLine < result.length && !result[targetLine]) {
-                        result[targetLine] = lineText;
-                    }
-                });
-            }
-        }
-    }
-
-    return result;
-}
-
-/**
- * [Why/Intent] AI作業コード内のインライン提案ボックス（新提案および右端アイコン押下で展開された過去提案の共通UI）を描画するサブコンポーネント。
- */
-const WorkspaceInterventionBox: React.FC<{
-    entry: IndexedIntervention;
-    isPast: boolean;
-    onApply?: (id: string, editedCode?: string) => void;
-    onReject?: (id: string) => void;
-    onDetail: (id: string) => void;
-}> = ({ entry, isPast, onApply, onReject, onDetail }) => {
-    const { item, indexNumber } = entry;
-    const shortTitle = formatShortTitle(item.title);
-    const badge = getStatusBadge(item.status);
-    const isApplied = item.status === 'applied';
-    const isDismissed = item.status === 'dismissed';
-    const beforeBlock = formatDiffBlock(item.originalCode, '-');
-    const afterBlock = formatDiffBlock(item.proposedCode, '+');
-
-    return (
-        <div
-            data-testid={
-                isPast
-                    ? `workspace-past-box-${item.id}`
-                    : `workspace-pending-box-${item.id}`
-            }
-            style={{
-                marginLeft: '36px',
-                padding: '8px 10px',
-                borderRadius: '6px',
-                border: isPast
-                    ? `1px solid ${badge.color}`
-                    : '1px solid var(--vscode-focusBorder, #007fd4)',
-                backgroundColor: isPast
-                    ? 'rgba(128, 128, 128, 0.08)'
-                    : 'rgba(0, 127, 212, 0.08)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '6px',
-                fontFamily: 'sans-serif',
-            }}
-        >
-            <div
-                style={{
-                    fontWeight: 600,
-                    fontSize: '12px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '6px',
-                }}
-            >
-                <span>{`💡 介入${indexNumber}：${shortTitle}`}</span>
-                <span
-                    style={{
-                        fontSize: '11px',
-                        color: isPast ? badge.color : 'inherit',
-                        opacity: 0.9,
-                    }}
-                >
-                    {isPast ? badge.label : '新提案'}
-                </span>
-            </div>
-
-            <div
-                style={{
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    color: 'var(--vscode-errorForeground, #f48771)',
-                }}
-            >
-                before
-            </div>
-            <pre
-                data-testid={`workspace-before-${item.id}`}
-                style={{
-                    margin: 0,
-                    padding: '4px 6px',
-                    borderRadius: '4px',
-                    fontSize: '11px',
-                    fontFamily: 'var(--mono, monospace)',
-                    backgroundColor: 'rgba(244, 135, 113, 0.1)',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                }}
-            >
-                {beforeBlock}
-            </pre>
-
-            <div
-                style={{
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    color: 'var(--vscode-testing-iconPassed, #4ec9b0)',
-                }}
-            >
-                after
-            </div>
-            <pre
-                data-testid={`workspace-after-${item.id}`}
-                style={{
-                    margin: 0,
-                    padding: '4px 6px',
-                    borderRadius: '4px',
-                    fontSize: '11px',
-                    fontFamily: 'var(--mono, monospace)',
-                    backgroundColor: 'rgba(78, 201, 176, 0.1)',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                }}
-            >
-                {afterBlock}
-            </pre>
-
-            <div
-                style={{
-                    display: 'flex',
-                    gap: '6px',
-                    flexWrap: 'wrap',
-                }}
-            >
-                <button
-                    type="button"
-                    data-testid={`workspace-apply-${item.id}`}
-                    disabled={isApplied}
-                    onClick={() => onApply?.(item.id, item.proposedCode)}
-                    style={{
-                        padding: '3px 8px',
-                        fontSize: '11.5px',
-                        cursor: isApplied ? 'not-allowed' : 'pointer',
-                        opacity: isApplied ? 0.5 : 1,
-                        backgroundColor: 'var(--vscode-button-background)',
-                        color: 'var(--vscode-button-foreground)',
-                        border: 'none',
-                        borderRadius: '4px',
-                    }}
-                >
-                    採用
-                </button>
-                <button
-                    type="button"
-                    data-testid={`workspace-reject-${item.id}`}
-                    disabled={isDismissed}
-                    onClick={() => onReject?.(item.id)}
-                    style={{
-                        padding: '3px 8px',
-                        fontSize: '11.5px',
-                        cursor: isDismissed ? 'not-allowed' : 'pointer',
-                        opacity: isDismissed ? 0.5 : 1,
-                        backgroundColor: 'transparent',
-                        color: 'var(--vscode-errorForeground, #f48771)',
-                        border: '1px solid var(--vscode-errorForeground, #f48771)',
-                        borderRadius: '4px',
-                    }}
-                >
-                    却下
-                </button>
-                <button
-                    type="button"
-                    data-testid={`workspace-detail-${item.id}`}
-                    onClick={() => onDetail(item.id)}
-                    style={{
-                        padding: '3px 8px',
-                        fontSize: '11.5px',
-                        cursor: 'pointer',
-                        backgroundColor:
-                            'var(--vscode-button-secondaryBackground)',
-                        color: 'var(--vscode-button-secondaryForeground)',
-                        border: '1px solid var(--vscode-panel-border)',
-                        borderRadius: '4px',
-                    }}
-                >
-                    詳細
-                </button>
-            </div>
-        </div>
-    );
-};
-
-/**
  * [Why/Intent] vibeCodeEase サイドバー初期画面の実装。
- * 上部に全面展開の「💻 AI作業コード（新提案はインライン表示、過去提案は行右端にちっちゃいアイコン表示＋押下でAI作業コード上でもインライン展開）」、
- * 一番下のさらに下に「📋 提案・依頼リスト（過去分も含むトグル式掲示板）」を配置する。
+ * 上部に「💻 AI作業コード（新提案は提案後コードへ明るくハイライト置換＋介入ボタン押下で上側フローティング簡易バー表示、過去提案は非表示）」、
+ * 最下部に「📋 提案・依頼リスト（過去分も含むトグル式掲示板）」を配置する。
  */
 export const SidebarInitialView: React.FC<SidebarInitialViewProps> = ({
     personaId,
@@ -328,16 +99,45 @@ export const SidebarInitialView: React.FC<SidebarInitialViewProps> = ({
     onRejectIntervention,
     isSettingsOpen,
     onToggleSettings,
+    scrollSyncEnabled = true,
+    onScrollSyncChange,
 }) => {
     const [isEditingApiKey, setIsEditingApiKey] = useState(false);
     const [apiKeyInput, setApiKeyInput] = useState('');
     const [internalSettingsOpen, setInternalSettingsOpen] = useState(false);
     const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
-    const [workspaceExpandedPastIds, setWorkspaceExpandedPastIds] = useState<
-        Record<string, boolean>
-    >({});
+    const [activePopoverId, setActivePopoverId] = useState<string | null>(null);
+    const activePopoverAnchorRef = useRef<HTMLDivElement | null>(null);
 
     const settingsOpen = isSettingsOpen ?? internalSettingsOpen;
+
+    // フローティング簡易アクションバー表示中の Escape キー・外部クリックで安全に閉じる
+    useEffect(() => {
+        if (!activePopoverId) {
+            return;
+        }
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setActivePopoverId(null);
+            }
+        };
+        const handlePointerDown = (event: PointerEvent) => {
+            const target = event.target as Node | null;
+            if (
+                target &&
+                activePopoverAnchorRef.current &&
+                !activePopoverAnchorRef.current.contains(target)
+            ) {
+                setActivePopoverId(null);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('pointerdown', handlePointerDown);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('pointerdown', handlePointerDown);
+        };
+    }, [activePopoverId]);
 
     /**
      * [Why/Intent] 「⚙️ 設定」ボタン押下時に、親制御（onToggleSettings）または内部ステートを切り替える。
@@ -361,19 +161,11 @@ export const SidebarInitialView: React.FC<SidebarInitialViewProps> = ({
     };
 
     /**
-     * [Why/Intent] AI作業コード右端のちっちゃい過去介入アイコンをクリックした際、
-     * 新提案と同じように「AI作業コード側でも」インライン差分ボックスを開閉し、下部掲示板のトグルとも連動させる。
+     * [Why/Intent] AI作業コード上の新提案ボタン（介入N）押下時に、
+     * 該当行の直上に浮かせる簡易アクションバー（採用 / 却下 / 詳細）を開閉する。
      */
-    const handleClickPastIcon = (id: string) => {
-        const nextOpen = !workspaceExpandedPastIds[id];
-        setWorkspaceExpandedPastIds((prev) => ({
-            ...prev,
-            [id]: nextOpen,
-        }));
-        setExpandedIds((prev) => ({
-            ...prev,
-            [id]: nextOpen,
-        }));
+    const handleTogglePendingPopover = (id: string) => {
+        setActivePopoverId((prev) => (prev === id ? null : id));
     };
 
     const currentPersonaOption =
@@ -404,23 +196,10 @@ export const SidebarInitialView: React.FC<SidebarInitialViewProps> = ({
         }),
     );
 
-    // 行番号ごとの「新しい提案（pending）」と「古い提案（applied / dismissed / reverted）」のマップを作成
-    const pendingByStartLine = new Map<number, IndexedIntervention[]>();
-    const pastByStartLine = new Map<number, IndexedIntervention[]>();
-    for (const entry of indexedInterventions) {
-        const line = entry.item.range.start.line;
-        if (entry.item.status === 'pending') {
-            const list = pendingByStartLine.get(line) ?? [];
-            list.push(entry);
-            pendingByStartLine.set(line, list);
-        } else {
-            const list = pastByStartLine.get(line) ?? [];
-            list.push(entry);
-            pastByStartLine.set(line, list);
-        }
-    }
-
-    const workspaceLines = buildWorkspaceLines(documentText, interventions);
+    const workspaceRows = buildWorkspaceDisplayRows(
+        documentText,
+        indexedInterventions,
+    );
     const baseFileName = extractBaseName(documentFileName);
 
     return (
@@ -652,6 +431,44 @@ export const SidebarInitialView: React.FC<SidebarInitialViewProps> = ({
                                 ))}
                             </select>
                         </div>
+
+                        <div
+                            style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '2px',
+                                paddingTop: '4px',
+                                borderTop: '1px solid var(--vscode-panel-border)',
+                            }}
+                        >
+                            <label
+                                htmlFor="scroll-sync-checkbox"
+                                className="scroll-sync-label"
+                            >
+                                <input
+                                    id="scroll-sync-checkbox"
+                                    data-testid="scroll-sync-checkbox"
+                                    type="checkbox"
+                                    className="scroll-sync-checkbox"
+                                    checked={scrollSyncEnabled}
+                                    onChange={(e) =>
+                                        onScrollSyncChange?.(e.target.checked)
+                                    }
+                                />
+                                <span style={{ fontWeight: 500, fontSize: '12px' }}>
+                                    🔗 エディタとスクロール同期
+                                </span>
+                            </label>
+                            <div
+                                style={{
+                                    fontSize: '11.5px',
+                                    opacity: 0.8,
+                                    color: 'var(--vscode-descriptionForeground)',
+                                }}
+                            >
+                                作業エディタとAI作業コードのスクロール位置を双方向に連動させます
+                            </div>
+                        </div>
                     </div>
 
                     {/* 🔑 APIキーセクション */}
@@ -760,95 +577,169 @@ export const SidebarInitialView: React.FC<SidebarInitialViewProps> = ({
                 </div>
             )}
 
-            {/* 💻 上部メイン全面エリア：AI作業コード（内部スクロール枠なし・全面展開） */}
+            {/* 💻 上部メイン全面エリア：AI作業コード（内部スクロール枠なし・全面展開・エディタ行高同期） */}
             <div
                 data-testid="ai-workspace-code"
-                style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                    padding: '10px',
-                    borderRadius: '6px',
-                    backgroundColor:
-                        'var(--vscode-editor-background, rgba(0, 0, 0, 0.2))',
-                    border: '1px solid var(--vscode-panel-border)',
-                    fontFamily: 'var(--mono, monospace)',
-                    fontSize: '12px',
-                }}
+                className="ai-workspace-code"
             >
-                {workspaceLines.length === 0 ? (
+                {workspaceRows.length === 0 ? (
                     <div
                         style={{
                             opacity: 0.7,
                             padding: '8px',
                             textAlign: 'center',
-                            fontFamily: 'sans-serif',
+                            fontFamily: 'var(--sans, sans-serif)',
+                            fontSize: '12.5px',
+                            lineHeight: 1.5,
                         }}
                     >
                         左側のエディタでコードを開くと、ここにAI作業スペースが同期されます。
                     </div>
                 ) : (
-                    workspaceLines.map((lineText, lineIdx) => {
-                        const pendingItems =
-                            pendingByStartLine.get(lineIdx) ?? [];
-                        const pastItems = pastByStartLine.get(lineIdx) ?? [];
-                        const expandedPastItems = pastItems.filter(
-                            ({ item }) =>
-                                Boolean(workspaceExpandedPastIds[item.id]),
+                    workspaceRows.map((row, rowIdx) => {
+                        const activeEntry = row.pendingButtons.find(
+                            (entry) => entry.item.id === activePopoverId,
                         );
+                        const isPopoverOpen = Boolean(activeEntry);
+                        const popoverPlacement =
+                            rowIdx <= 1 && !settingsOpen ? 'bottom' : 'top';
+                        const diffClassName =
+                            row.diffKind === 'deletion'
+                                ? 'is-pending-deletion'
+                                : row.diffKind === 'addition'
+                                  ? 'is-pending-addition'
+                                  : '';
+                        const groupClassName = [
+                            'ai-workspace-line-group',
+                            diffClassName,
+                            isPopoverOpen ? 'is-popover-open' : '',
+                        ]
+                            .filter(Boolean)
+                            .join(' ');
 
                         return (
                             <div
-                                key={`ws-line-${lineIdx}`}
-                                style={{
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '4px',
-                                }}
+                                key={row.key}
+                                ref={
+                                    isPopoverOpen
+                                        ? activePopoverAnchorRef
+                                        : undefined
+                                }
+                                data-workspace-line={row.sourceLine}
+                                data-pending-highlight={
+                                    row.isPendingHighlight ? 'true' : undefined
+                                }
+                                data-diff-kind={
+                                    row.diffKind !== 'unchanged'
+                                        ? row.diffKind
+                                        : undefined
+                                }
+                                className={groupClassName}
                             >
-                                {/* コード行本体 ＋ 右端のちっちゃい過去提案アイコン群 */}
-                                <div
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        gap: '8px',
-                                        minHeight: '20px',
-                                    }}
-                                >
+                                {/* 状態2：該当行の直上に浮かせる簡易アクションバー（行を下に押し出さない） */}
+                                {activeEntry && (
                                     <div
-                                        style={{
-                                            display: 'flex',
-                                            alignItems: 'flex-start',
-                                            gap: '8px',
-                                            minWidth: 0,
-                                            flex: 1,
-                                        }}
+                                        role="group"
+                                        aria-label={`介入${activeEntry.indexNumber}の操作`}
+                                        data-testid={`workspace-action-popover-${activeEntry.item.id}`}
+                                        data-placement={popoverPlacement}
+                                        className="ai-workspace-action-popover"
                                     >
-                                        <span
-                                            style={{
-                                                width: '28px',
-                                                textAlign: 'right',
-                                                opacity: 0.45,
-                                                userSelect: 'none',
-                                                flexShrink: 0,
-                                            }}
-                                        >
-                                            {lineIdx + 1}
+                                        <div className="ai-workspace-action-popover-title">
+                                            {`💡 介入${activeEntry.indexNumber}：${formatShortTitle(activeEntry.item.title)}`}
+                                        </div>
+                                        <div className="ai-workspace-action-popover-buttons">
+                                            <button
+                                                type="button"
+                                                data-testid={`workspace-apply-${activeEntry.item.id}`}
+                                                onClick={() => {
+                                                    onApplyIntervention?.(
+                                                        activeEntry.item.id,
+                                                        activeEntry.item
+                                                            .proposedCode,
+                                                    );
+                                                    setActivePopoverId(null);
+                                                }}
+                                                style={{
+                                                    padding: '3px 9px',
+                                                    fontSize: '11.5px',
+                                                    fontWeight: 600,
+                                                    cursor: 'pointer',
+                                                    backgroundColor:
+                                                        'var(--vscode-button-background)',
+                                                    color: 'var(--vscode-button-foreground)',
+                                                    border: 'none',
+                                                    borderRadius: '4px',
+                                                }}
+                                            >
+                                                ✓ 採用
+                                            </button>
+                                            <button
+                                                type="button"
+                                                data-testid={`workspace-reject-${activeEntry.item.id}`}
+                                                onClick={() => {
+                                                    onRejectIntervention?.(
+                                                        activeEntry.item.id,
+                                                    );
+                                                    setActivePopoverId(null);
+                                                }}
+                                                style={{
+                                                    padding: '3px 9px',
+                                                    fontSize: '11.5px',
+                                                    cursor: 'pointer',
+                                                    backgroundColor:
+                                                        'transparent',
+                                                    color: 'var(--vscode-errorForeground, #f48771)',
+                                                    border: '1px solid var(--vscode-errorForeground, #f48771)',
+                                                    borderRadius: '4px',
+                                                }}
+                                            >
+                                                ✕ 却下
+                                            </button>
+                                            <button
+                                                type="button"
+                                                data-testid={`workspace-detail-${activeEntry.item.id}`}
+                                                onClick={() => {
+                                                    onSelectIntervention(
+                                                        activeEntry.item.id,
+                                                    );
+                                                    setActivePopoverId(null);
+                                                }}
+                                                style={{
+                                                    padding: '3px 9px',
+                                                    fontSize: '11.5px',
+                                                    cursor: 'pointer',
+                                                    backgroundColor:
+                                                        'var(--vscode-button-secondaryBackground)',
+                                                    color: 'var(--vscode-button-secondaryForeground)',
+                                                    border: '1px solid var(--vscode-panel-border)',
+                                                    borderRadius: '4px',
+                                                }}
+                                            >
+                                                💬 詳細
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* コード行本体 ＋ 新提案（pending）のみ右端に介入ボタンを配置 */}
+                                <div className="ai-workspace-line-row">
+                                    <div className="ai-workspace-line-content">
+                                        <span className="ai-workspace-line-number">
+                                            {row.lineNumberLabel}
                                         </span>
                                         <span
-                                            style={{
-                                                whiteSpace: 'pre-wrap',
-                                                wordBreak: 'break-all',
-                                                flex: 1,
-                                            }}
+                                            className="ai-workspace-diff-sign"
+                                            aria-hidden="true"
                                         >
-                                            {lineText || ' '}
+                                            {row.diffSign}
+                                        </span>
+                                        <span className="ai-workspace-line-text">
+                                            {row.text || ' '}
                                         </span>
                                     </div>
 
-                                    {/* 古い提案（採用済・却下済）は行の右端にちっちゃいアイコンバッジとして並べる */}
-                                    {pastItems.length > 0 && (
+                                    {row.pendingButtons.length > 0 && (
                                         <div
                                             style={{
                                                 display: 'flex',
@@ -857,56 +748,30 @@ export const SidebarInitialView: React.FC<SidebarInitialViewProps> = ({
                                                 flexShrink: 0,
                                             }}
                                         >
-                                            {pastItems.map(
+                                            {row.pendingButtons.map(
                                                 ({ item, indexNumber }) => {
-                                                    const isApplied =
-                                                        item.status ===
-                                                        'applied';
-                                                    const isPastExpanded =
-                                                        Boolean(
-                                                            workspaceExpandedPastIds[
-                                                                item.id
-                                                            ],
-                                                        );
+                                                    const isOpen =
+                                                        activePopoverId ===
+                                                        item.id;
                                                     return (
                                                         <button
-                                                            key={`past-icon-${item.id}`}
+                                                            key={`pending-btn-${item.id}`}
                                                             type="button"
-                                                            data-testid={`workspace-past-icon-${item.id}`}
+                                                            className="ai-workspace-pending-btn"
+                                                            data-testid={`workspace-pending-btn-${item.id}`}
                                                             aria-expanded={
-                                                                isPastExpanded
+                                                                isOpen
                                                             }
-                                                            title={`介入${indexNumber}：${formatShortTitle(item.title)} (${isApplied ? '採用済' : '却下済'}) - クリックでAI作業コード上に展開`}
+                                                            title={`介入${indexNumber}：${formatShortTitle(item.title)} - クリックで採用・却下・詳細を表示`}
                                                             onClick={() =>
-                                                                handleClickPastIcon(
+                                                                handleTogglePendingPopover(
                                                                     item.id,
                                                                 )
                                                             }
-                                                            style={{
-                                                                padding:
-                                                                    '1px 5px',
-                                                                fontSize:
-                                                                    '10.5px',
-                                                                cursor: 'pointer',
-                                                                borderRadius:
-                                                                    '10px',
-                                                                border: isApplied
-                                                                    ? '1px solid var(--vscode-testing-iconPassed, #4ec9b0)'
-                                                                    : '1px solid var(--vscode-descriptionForeground, #888)',
-                                                                backgroundColor:
-                                                                    isApplied
-                                                                        ? 'rgba(78, 201, 176, 0.14)'
-                                                                        : 'rgba(128, 128, 128, 0.12)',
-                                                                color: isApplied
-                                                                    ? 'var(--vscode-testing-iconPassed, #4ec9b0)'
-                                                                    : 'var(--vscode-descriptionForeground, #aaa)',
-                                                                whiteSpace:
-                                                                    'nowrap',
-                                                            }}
                                                         >
-                                                            {isApplied
-                                                                ? `✓介入${indexNumber}`
-                                                                : `✕介入${indexNumber}`}
+                                                            {isOpen
+                                                                ? `介入${indexNumber} ▴`
+                                                                : `介入${indexNumber}`}
                                                         </button>
                                                     );
                                                 },
@@ -914,30 +779,6 @@ export const SidebarInitialView: React.FC<SidebarInitialViewProps> = ({
                                         </div>
                                     )}
                                 </div>
-
-                                {/* 過去分アイコンをクリックした際は、新提案と同じように「AI作業コード側でも」インライン展開する */}
-                                {expandedPastItems.map((entry) => (
-                                    <WorkspaceInterventionBox
-                                        key={`ws-past-box-${entry.item.id}`}
-                                        entry={entry}
-                                        isPast={true}
-                                        onApply={onApplyIntervention}
-                                        onReject={onRejectIntervention}
-                                        onDetail={onSelectIntervention}
-                                    />
-                                ))}
-
-                                {/* 新しい提案（pending）はAI作業コード上にはっきりとインライン表示する */}
-                                {pendingItems.map((entry) => (
-                                    <WorkspaceInterventionBox
-                                        key={`ws-pending-box-${entry.item.id}`}
-                                        entry={entry}
-                                        isPast={false}
-                                        onApply={onApplyIntervention}
-                                        onReject={onRejectIntervention}
-                                        onDetail={onSelectIntervention}
-                                    />
-                                ))}
                             </div>
                         );
                     })

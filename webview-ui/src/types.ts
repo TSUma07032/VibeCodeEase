@@ -38,9 +38,10 @@ export type WebviewToExtensionMessage =
 // Extension -> Webview
 export type ExtensionToWebviewMessage = 
   | { type: 'SYNC_DOCUMENT', fileName: string, text: string }
+  | { type: 'SYNC_EDITOR_SCROLL', topLine: number }
   | { type: 'UPDATE_INTERVENTIONS', interventions: WebviewIntervention[] }
   | { type: 'NAVIGATE_TO_SETTINGS' }
-  | { type: 'SYNC_SETTINGS', hasApiKey: boolean, apiKeyLength?: number, interventionLevel: AiInterventionLevel, frequency: 'manual' | 'onSave' | 'interval', intervalSeconds: number, model: string }
+  | { type: 'SYNC_SETTINGS', hasApiKey: boolean, apiKeyLength?: number, interventionLevel: AiInterventionLevel, frequency: 'manual' | 'onSave' | 'interval', intervalSeconds: number, model: string, scrollSyncEnabled?: boolean, editorFontSize?: number, editorLineHeight?: number }
   | { type: 'LLM_STATUS_UPDATE', status: 'idle' | 'loading' | 'error' }
   | { type: 'LLM_RESPONSE_UPDATE', text: string, timestamp: number }
   | { type: 'LLM_ERROR_LOG', message: string, timestamp: number }

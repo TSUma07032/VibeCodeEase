@@ -19,6 +19,41 @@ export interface SideEditorSettings {
     frequency: 'manual' | 'onSave' | 'interval';
     intervalSeconds: number;
     model: string;
+    scrollSyncEnabled: boolean;
+    editorFontSize: number;
+    editorLineHeight: number;
+}
+
+const MINIMUM_EDITOR_LINE_HEIGHT = 8;
+const DEFAULT_EDITOR_FONT_SIZE = 14;
+
+/**
+ * [Why/Intent] VS Code エディタ本体と同一の計算式で1行あたりの高さ（px）を算出する。
+ * editor.lineHeight が 0（自動）の場合は OS 既定倍率（macOS: 1.5 / その他: 1.35）、
+ * 0 より大きく 8 未満の場合は fontSize に対する倍率、8 以上は px 絶対値として計算する。
+ */
+export function computeEditorLineHeight(
+    fontSize: number,
+    configuredLineHeight: number,
+    platform: NodeJS.Platform = process.platform,
+): number {
+    const safeFontSize =
+        typeof fontSize === 'number' && Number.isFinite(fontSize) && fontSize > 0
+            ? fontSize
+            : DEFAULT_EDITOR_FONT_SIZE;
+    const rawLineHeight =
+        typeof configuredLineHeight === 'number' && Number.isFinite(configuredLineHeight)
+            ? configuredLineHeight
+            : 0;
+
+    if (rawLineHeight <= 0) {
+        const goldenRatio = platform === 'darwin' ? 1.5 : 1.35;
+        return Math.max(MINIMUM_EDITOR_LINE_HEIGHT, Math.round(goldenRatio * safeFontSize));
+    }
+    if (rawLineHeight < MINIMUM_EDITOR_LINE_HEIGHT) {
+        return Math.max(MINIMUM_EDITOR_LINE_HEIGHT, Math.round(rawLineHeight * safeFontSize));
+    }
+    return Math.max(MINIMUM_EDITOR_LINE_HEIGHT, Math.round(rawLineHeight));
 }
 
 export interface LegacyCommandContext {
@@ -68,6 +103,16 @@ export async function fetchSideEditorSettings(
 
     const intervalSeconds = config.get<number>('llm.syncIntervalSeconds') ?? 10;
     const model = config.get<string>('llmModel') ?? 'gemini-3.5-flash-lite';
+    const scrollSyncEnabled = config.get<boolean>('scrollSync') ?? true;
+
+    const editorConfig = vscode.workspace.getConfiguration('editor');
+    const rawFontSize = editorConfig.get<number>('fontSize');
+    const editorFontSize =
+        typeof rawFontSize === 'number' && Number.isFinite(rawFontSize) && rawFontSize > 0
+            ? rawFontSize
+            : DEFAULT_EDITOR_FONT_SIZE;
+    const rawLineHeight = editorConfig.get<number>('lineHeight') ?? 0;
+    const editorLineHeight = computeEditorLineHeight(editorFontSize, rawLineHeight);
 
     return {
         apiKey,
@@ -75,6 +120,9 @@ export async function fetchSideEditorSettings(
         frequency: frequency as 'manual' | 'onSave' | 'interval',
         intervalSeconds,
         model,
+        scrollSyncEnabled,
+        editorFontSize,
+        editorLineHeight,
     };
 }
 
