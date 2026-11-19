@@ -1,24 +1,27 @@
+/**
+ * [Why/Intent] ファイル保存や定期インターバルを契機としたLLM自動推敲、
+ * ダッシュボード状態管理（idle/loading/error）、および構造化エラー・具体的推奨アクション通知を統括するバックグラウンドサービス。
+ */
 import * as vscode from 'vscode';
 import { GlobalState } from '../state/globalState';
-import { LlmInterventionService } from './llmInterventionService';
+import type { AnalysisResult, LlmInterventionPlan } from '../types';
 import { SharedAnalysisCache } from './analyzer';
-import { AnalysisResult, LlmTriggerMode } from '../types';
+import {
+    DEFAULT_SYNC_INTERVAL_SECONDS,
+    MAX_AUTO_ANALYSIS_LINES,
+    MAX_SYNC_INTERVAL_SECONDS,
+    MIN_SYNC_INTERVAL_SECONDS,
+} from './llm/llmConstants';
+import { LlmError } from './llm/llmErrors';
+import { isSensitiveDocument, type LlmInterventionService } from './llmInterventionService';
 
 /**
- * バックグラウンドでLLMによる解析を実行し、SharedAnalysisCache に結果をマージするサービス。
+ * [Why/Intent] エディタイベントやタイマーに連動してLLM推敲を実行し、UI状態同期とエラー通知を管理するサービス
  */
+// [AI-WARNING] DO NOT REMOVE THIS OPTIMIZATION: Extending LlmBackgroundService to handle Dashboard states (idle, loading, error, logs, response) and timer intervals.
 export class LlmBackgroundService implements vscode.Disposable {
     private readonly _disposables: vscode.Disposable[] = [];
-    private readonly _llmService = new LlmInterventionService();
-    
-    // ポーリング(continuous)モード用の状態
-    private _continuousTimer?: ReturnType<typeof setTimeout>;
-    private _lastAnalysisTime = 0;
-    private _lastAnalyzedContent = new Map<string, string>();
-    private _lastAnalyzedVersion = new Map<string, number>();
-    private _backoffUntil = 0;
-
-    // 現在実行中の解析をキャンセルするためのトークンソース
+    private readonly _llmService?: LlmInterventionService;
     private _cancellationTokenSource?: vscode.CancellationTokenSource;
 
     private readonly _onDidStartAnalysis = new vscode.EventEmitter<void>();
@@ -30,187 +33,325 @@ export class LlmBackgroundService implements vscode.Disposable {
     private readonly _onDidError = new vscode.EventEmitter<string>();
     public readonly onDidError = this._onDidError.event;
 
-    constructor(private readonly secrets: vscode.SecretStorage) {
-        // onDidChangeTextDocument (ポーリング用: スロットリング対応)
-        this._disposables.push(
-            vscode.workspace.onDidChangeTextDocument((event) => {
-                const triggerMode = GlobalState.getInstance().llmTriggerMode;
-                if (triggerMode !== 'continuous') {return;}
-                
-                const editor = vscode.window.activeTextEditor;
-                if (!editor || event.document !== editor.document) {return;}
+    public readonly onDidUpdateDashboard = new vscode.EventEmitter<unknown>();
 
-                this._scheduleContinuousAnalysis(editor.document);
-            })
-        );
+    private _status: 'idle' | 'loading' | 'error' = 'idle';
+    private _latestResponse: { text: string; timestamp: number } | null = null;
+    private _errorLogs: Array<{ message: string; timestamp: number }> = [];
+    private _timerId: NodeJS.Timeout | undefined;
+    private readonly _lastAnalyzedVersions = new Map<string, number>();
+    private _isPaused = false;
 
-        // onDidSaveTextDocument (保存時のみ用)
+    /** [Why/Intent] 学習支援セッション開始時に自動推敲タイマーを停止して一時停止フラグを立てる */
+    public pause(): void {
+        this._isPaused = true;
+        if (this._timerId) {
+            clearInterval(this._timerId);
+            this._timerId = undefined;
+        }
+    }
+
+    /** [Why/Intent] 学習支援セッション終了時または一時停止解除時に自動推敲タイマーを再開する */
+    public resume(): void {
+        this._isPaused = false;
+        this.startTimerIfConfigured();
+    }
+
+    /** [Why/Intent] 自動推敲が一時停止中か否かを返す */
+    public get isPaused(): boolean {
+        return this._isPaused;
+    }
+
+    public constructor(
+        readonly _secrets: vscode.SecretStorage,
+        llmService?: LlmInterventionService,
+    ) {
+        this._llmService = llmService;
         this._disposables.push(
             vscode.workspace.onDidSaveTextDocument((document) => {
-                const triggerMode = GlobalState.getInstance().llmTriggerMode;
-                if (triggerMode !== 'on-save') {return;}
-
-                const editor = vscode.window.activeTextEditor;
-                if (editor && document === editor.document) {
-                    this._runAnalysis(document);
+                const config = vscode.workspace.getConfiguration('vibecodeease');
+                const syncFreq =
+                    config.get<string>('llm.syncFrequency') ??
+                    (config.get<boolean>('analyzeOnSave') ? 'onSave' : 'manual');
+                if (
+                    syncFreq === 'onSave' &&
+                    document === vscode.window.activeTextEditor?.document
+                ) {
+                    void this.runAnalysis(document, true);
                 }
-            })
+            }),
         );
-
-        // onDidChangeActiveTextEditor (エディタ切り替え時にポーリングなら再確認)
-        this._disposables.push(
-            vscode.window.onDidChangeActiveTextEditor((editor) => {
-                if (this._continuousTimer) {
-                    clearTimeout(this._continuousTimer);
-                }
-                const triggerMode = GlobalState.getInstance().llmTriggerMode;
-                if (editor && triggerMode === 'continuous') {
-                    this._scheduleContinuousAnalysis(editor.document);
-                }
-            })
-        );
+        this.startTimerIfConfigured();
     }
 
-    private _scheduleContinuousAnalysis(document: vscode.TextDocument) {
-        const now = Date.now();
-        const THROTTLE_MS = 1000; // 1秒間隔でスロットリング（俊敏に）
-        
-        if (this._continuousTimer) {
-            clearTimeout(this._continuousTimer);
+    /**
+     * [Why/Intent] ユーザー設定に基づきインターバルタイマーを開始または破棄する
+     */
+    // [AI-WARNING] DO NOT REMOVE THIS OPTIMIZATION: Start interval timer for LLM sync if configured.
+    public startTimerIfConfigured(): void {
+        if (this._timerId) {
+            clearInterval(this._timerId);
+            this._timerId = undefined;
         }
-
-        if (now - this._lastAnalysisTime > THROTTLE_MS) {
-            this._lastAnalysisTime = now;
-            this._runAnalysis(document);
-        } else {
-            this._continuousTimer = setTimeout(() => {
-                this._lastAnalysisTime = Date.now();
-                this._runAnalysis(document);
-            }, THROTTLE_MS - (now - this._lastAnalysisTime));
+        if (this._isPaused) {
+            return;
+        }
+        const config = vscode.workspace.getConfiguration('vibecodeease');
+        const syncFreq =
+            config.get<string>('llm.syncFrequency') ??
+            (config.get<boolean>('analyzeOnSave') ? 'onSave' : 'manual');
+        if (syncFreq === 'interval') {
+            const rawSecs =
+                config.get<number>('llm.syncIntervalSeconds') ?? DEFAULT_SYNC_INTERVAL_SECONDS;
+            const intervalSecs = Math.min(
+                MAX_SYNC_INTERVAL_SECONDS,
+                Math.max(MIN_SYNC_INTERVAL_SECONDS, rawSecs),
+            );
+            this._timerId = setInterval(() => this.runAnalysisOnInterval(), intervalSecs * 1000);
         }
     }
 
-    private async _runAnalysis(document: vscode.TextDocument) {
-        const uri = document.uri.toString();
-        
-        if (Date.now() < this._backoffUntil) {
-            return;
-        }
-
-        // 🛡️ Sentinel: 機密ファイルはスキップ (.envなど)
-        if (document.fileName.includes('.env') || document.languageId === 'secrets') {
-            return;
-        }
-
-        // 変更なしならスキップ
-        const currentContent = document.getText();
-        const lastContent = this._lastAnalyzedContent.get(uri);
-        if (lastContent === currentContent) {
-            return;
-        }
-
-        // LLM 設定確認
-        const state = GlobalState.getInstance();
-        let apiKey: string | undefined = undefined;
-
-        if (state.llmProvider === 'gemini') {
-            apiKey = await this.secrets.get('vibecodeease.geminiApiKey');
-            if (!apiKey) {
-                // API キー未設定: サイレントに無視
+    // [AI-WARNING] DO NOT REMOVE THIS OPTIMIZATION: Interval analysis execution logic.
+    private runAnalysisOnInterval(): void {
+        for (const editor of vscode.window.visibleTextEditors) {
+            if (
+                editor.document.uri.scheme === 'file' &&
+                editor.viewColumn !== vscode.ViewColumn.Beside
+            ) {
+                void this.runAnalysis(editor.document, true);
                 return;
             }
         }
+    }
 
-        // 古い解析が走っていればキャンセル
+    /**
+     * [Why/Intent] Webviewダッシュボード初期表示用の最新状態（ステータス・生返答・エラーログ）を取得する
+     */
+    // [AI-WARNING] DO NOT REMOVE THIS OPTIMIZATION: Retrieve current dashboard state for UI initialization.
+    public getDashboardState(): {
+        status: 'idle' | 'loading' | 'error';
+        response: { text: string; timestamp: number } | null;
+        logs: Array<{ message: string; timestamp: number }>;
+    } {
+        return {
+            status: this._status,
+            response: this._latestResponse,
+            logs: this._errorLogs,
+        };
+    }
+
+    /**
+     * [Why/Intent] 蓄積されたエラーログを初期化し、ダッシュボードへ変更を通知する
+     */
+    // [AI-WARNING] DO NOT REMOVE THIS OPTIMIZATION: Clear error logs and notify UI.
+    public clearErrorLogs(): void {
+        this._errorLogs = [];
+        this.onDidUpdateDashboard.fire({ type: 'LLM_DASHBOARD_INIT', ...this.getDashboardState() });
+    }
+
+    /** [Why/Intent] ユーザー設定のプロバイダおよび選択中ペルソナに応じたプラン作成処理へ委譲する */
+    private async executeLlmPlan(
+        document: vscode.TextDocument,
+        token: vscode.CancellationToken,
+    ): Promise<LlmInterventionPlan> {
+        if (!this._llmService) {
+            throw new LlmError({
+                code: 'UNKNOWN',
+                message: 'LlmInterventionService が初期化されていません。',
+            });
+        }
+        const state = GlobalState.getInstance();
+        return this._llmService.createPlan({
+            document,
+            token,
+            modelSelector: state.llmModel,
+            presetMode: state.presetMode,
+            personaId: state.personaId,
+        });
+    }
+
+    /** [Why/Intent] LLM解析結果を内部キャッシュへマージし、エディタ・ステータスバー・ダッシュボードへ反映する */
+    private applyPlanResults(document: vscode.TextDocument, plan: LlmInterventionPlan): void {
+        const uri = document.uri.toString();
+        const results: AnalysisResult[] = plan.edits.map((edit) => ({
+            category: edit.category,
+            level: 'SUGGESTION',
+            source: 'llm',
+            range: {
+                start: { line: edit.startLine, character: edit.startCharacter },
+                end: { line: edit.endLine, character: edit.endCharacter },
+            },
+            interventions: [
+                {
+                    originalText: document.getText(
+                        new vscode.Range(
+                            edit.startLine,
+                            edit.startCharacter,
+                            edit.endLine,
+                            edit.endCharacter,
+                        ),
+                    ),
+                    replacementText: edit.newText,
+                    message: `🤖 **AI 提案**: ${edit.reason}`,
+                },
+            ],
+        }));
+
+        SharedAnalysisCache.getInstance().mergeExternalResults(uri, results);
+        this._lastAnalyzedVersions.set(uri, document.version);
+        vscode.window.setStatusBarMessage('$(check) vibeCodeEase: AI 解析完了', 3000);
+
+        const mdText =
+            !plan.edits || plan.edits.length === 0
+                ? '**AI 提案**: 特に修正の必要はありません。'
+                : `### AI 提案 (${plan.edits.length}件)\n${plan.edits.map((e) => `- **行 ${e.startLine + 1}**: ${e.reason}\n`).join('')}`;
+
+        this._latestResponse = { text: mdText, timestamp: Date.now() };
+        this._status = 'idle';
+        this.onDidUpdateDashboard.fire({
+            type: 'LLM_RESPONSE_UPDATE',
+            text: this._latestResponse.text,
+            timestamp: this._latestResponse.timestamp,
+        });
+        this.onDidUpdateDashboard.fire({ type: 'LLM_STATUS_UPDATE', status: 'idle' });
+    }
+
+    /** [Why/Intent] LlmError から構造化された識別タグと具体的推奨アクションを含むログメッセージを生成する */
+    private formatErrorLog(error: unknown): string {
+        if (error instanceof LlmError) {
+            return `[${error.code}] ${error.message} (推奨対処: ${error.suggestedAction})`;
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        return `[UNKNOWN] ${message}`;
+    }
+
+    /** [Why/Intent] LlmError の種別に応じた具体的アクション付きステータスバー通知を表示する */
+    private showErrorMessage(error: unknown): void {
+        if (error instanceof LlmError) {
+            vscode.window.setStatusBarMessage(
+                `$(error) AIエラー (${error.code}): ${error.suggestedAction}`,
+                10000,
+            );
+            return;
+        }
+        vscode.window.setStatusBarMessage('$(error) AI通信エラー: 解析に失敗しました', 5000);
+    }
+
+    /** [Why/Intent] 解析中の例外発生時、イベント発火・UI通知・最大50件のログ履歴保存を行う */
+    private handleAnalysisError(error: unknown, token: vscode.CancellationToken): void {
+        if (token.isCancellationRequested) {
+            return;
+        }
+        // 🛡️ Sentinel: 機密情報（システムプロンプトやAPIキー等）の漏洩を防ぐため、生のエラーオブジェクトではなく安全なメッセージのみをログ出力する
+        console.error(
+            '[LlmBackgroundService] Analysis failed:',
+            error instanceof Error ? error.message : String(error),
+        );
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        this._onDidError.fire(errorMessage);
+        this.showErrorMessage(error);
+
+        const logMsg = this.formatErrorLog(error);
+        const timestamp = Date.now();
+        this._errorLogs.push({ message: logMsg, timestamp });
+        if (this._errorLogs.length > 50) {
+            this._errorLogs.shift();
+        }
+
+        this._status = 'error';
+        this.onDidUpdateDashboard.fire({ type: 'LLM_ERROR_LOG', message: logMsg, timestamp });
+        this.onDidUpdateDashboard.fire({ type: 'LLM_STATUS_UPDATE', status: 'error' });
+    }
+
+    /** [Why/Intent] 機密ファイル除外とURI単位の未変更バージョン除外を判定する */
+    private shouldSkipDocument(document: vscode.TextDocument, isAuto: boolean): boolean {
+        if (isSensitiveDocument(document)) {
+            return true;
+        }
+        if (isAuto && document.lineCount > MAX_AUTO_ANALYSIS_LINES) {
+            return true;
+        }
+        const lastVersion = this._lastAnalyzedVersions.get(document.uri.toString());
+        return isAuto && lastVersion === document.version;
+    }
+
+    /** [Why/Intent] 先行する未完了の解析リクエストをキャンセルして新規トークンを発行する */
+    private createAnalysisCancellationToken(): vscode.CancellationToken {
         if (this._cancellationTokenSource) {
             this._cancellationTokenSource.cancel();
             this._cancellationTokenSource.dispose();
         }
         this._cancellationTokenSource = new vscode.CancellationTokenSource();
-        const token = this._cancellationTokenSource.token;
+        return this._cancellationTokenSource.token;
+    }
+
+    /** [Why/Intent] 解析のライフサイクル（進捗表示、キャンセレーション制御、完了イベント発火）を統括する */
+    private async performAnalysis(
+        document: vscode.TextDocument,
+        token: vscode.CancellationToken,
+    ): Promise<void> {
+        this._onDidStartAnalysis.fire();
 
         try {
-            this._onDidStartAnalysis.fire();
-            // タイムアウトなしでステータスバーに表示し続け、完了時に上書きする
-            const statusBarDisposable = vscode.window.setStatusBarMessage('$(sync~spin) vibeCodeEase: AI 解析中...');
-            this._disposables.push(statusBarDisposable); // 一時的な保持。完了時にdisposeする方が綺麗だが上書きされるのでOK
-
-            // LLM呼び出し
-            let plan;
-            if (state.llmProvider === 'gemini' && apiKey) {
-                plan = await this._llmService.createGeminiPlan(document, token, apiKey, state.llmModel, undefined, state.presetMode);
-            } else {
-                plan = await this._llmService.createPlan(document, token, state.llmModel, undefined, state.presetMode);
-            }
-            
-            statusBarDisposable.dispose();
-
-            if (token.isCancellationRequested) {return;}
-
-            // plan.edits を AnalysisResult[] に変換してキャッシュにマージ
-            const results: AnalysisResult[] = plan.edits.map(edit => ({
-                category: edit.category,
-                level: 'SUGGESTION', // バックグラウンド解析は基本提案とする
-                source: 'llm',
-                range: {
-                    start: { line: edit.startLine, character: edit.startCharacter },
-                    end: { line: edit.endLine, character: edit.endCharacter }
+            const plan = await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Window,
+                    title: 'vibeCodeEase: AI 解析中...',
                 },
-                interventions: [{
-                    originalText: document.getText(new vscode.Range(
-                        edit.startLine, edit.startCharacter,
-                        edit.endLine, edit.endCharacter
-                    )),
-                    replacementText: edit.newText,
-                    message: `🤖 **AI 提案**: ${edit.reason}`
-                }]
-            }));
-
-            SharedAnalysisCache.getInstance().mergeExternalResults(uri, results);
-            
-            this._lastAnalyzedContent.set(uri, currentContent);
-            this._lastAnalyzedVersion.set(uri, document.version);
-
-            vscode.window.setStatusBarMessage('$(check) vibeCodeEase: AI 解析完了', 3000);
-
-            // シグナルを発火してSidebar側にプッシュさせるなど必要ならここで。
-            // 実際は、ユーザーがテキストを変更し続けると SidebarProvider 側で onDidChangeTextDocument が発火し、
-            // debounce を経て getResults が呼ばれるため自然に反映される。
-            // しかし、何もタイプせずに結果が返ってきた時のために、ダミーイベントとして何か発行するか、
-            // SidebarProviderの pushLiveIssues を呼び出したい。
-            // 最も簡単なのは、設定変更イベントを偽装して再描画させるか、
-            // `vscode.commands.executeCommand('vibecodeease.refreshLiveIssues')` のようなものを呼ぶこと。
-            vscode.commands.executeCommand('vibecodeease.refreshLiveIssues');
-
-        } catch (error) {
-            if (!token.isCancellationRequested) {
-                console.error('[LlmBackgroundService] Analysis failed:', error);
-                const errorMessage = error instanceof Error ? error.message : String(error);
-                this._onDidError.fire(errorMessage);
-                
-                if (errorMessage.toLowerCase().includes('quota')) {
-                    vscode.window.setStatusBarMessage(`$(error) AI API Quota 超過: プランまたは課金情報を確認してください`, 10000);
-                    this._backoffUntil = Date.now() + 1000 * 30; // 30秒間に短縮（元5分は長すぎるため）
-                } else if (errorMessage.includes('503') || errorMessage.includes('429')) {
-                    vscode.window.setStatusBarMessage(`$(error) AI通信エラー: サーバーが混雑しています (${errorMessage.includes('503') ? '503' : '429'})`, 10000);
-                    this._backoffUntil = Date.now() + 1000 * 10; // 10秒間に短縮（元1分から短縮）
-                } else {
-                    vscode.window.setStatusBarMessage('$(error) AI通信エラー: 解析に失敗しました', 5000);
-                }
+                async () => {
+                    return this.executeLlmPlan(document, token);
+                },
+            );
+            if (token.isCancellationRequested) {
+                this._status = 'idle';
+                this.onDidUpdateDashboard.fire({ type: 'LLM_STATUS_UPDATE', status: 'idle' });
+                return;
             }
+            this.applyPlanResults(document, plan);
+        } catch (error) {
+            this.handleAnalysisError(error, token);
         } finally {
             this._onDidCompleteAnalysis.fire(document.uri);
         }
     }
 
-    public dispose() {
-        this._disposables.forEach(d => d.dispose());
-        if (this._continuousTimer) {
-            clearTimeout(this._continuousTimer);
+    /**
+     * [Why/Intent] 対象ドキュメントに対してLLM推敲を実行し、ステータスバー更新および結果/エラー通知を行う
+     */
+    // [AI-WARNING] DO NOT REMOVE THIS OPTIMIZATION: Main analysis logic with UI status updates and error logging.
+    public async runAnalysis(
+        document: vscode.TextDocument,
+        isAuto: boolean = false,
+    ): Promise<void> {
+        if ((this._isPaused && isAuto) || this.shouldSkipDocument(document, isAuto)) {
+            return;
+        }
+
+        this._status = 'loading';
+        this.onDidUpdateDashboard.fire({ type: 'LLM_STATUS_UPDATE', status: 'loading' });
+
+        const token = this.createAnalysisCancellationToken();
+        await this.performAnalysis(document, token);
+    }
+
+    /**
+     * [Why/Intent] 登録済みのリスナー・タイマー・EventEmitterを破棄する
+     */
+    public dispose(): void {
+        for (const d of this._disposables) {
+            d.dispose();
         }
         if (this._cancellationTokenSource) {
             this._cancellationTokenSource.cancel();
             this._cancellationTokenSource.dispose();
         }
+        if (this._timerId) {
+            clearInterval(this._timerId);
+            this._timerId = undefined;
+        }
+        this._onDidStartAnalysis.dispose();
+        this._onDidCompleteAnalysis.dispose();
+        this._onDidError.dispose();
+        this.onDidUpdateDashboard.dispose();
     }
 }

@@ -1,4 +1,4 @@
-import { PainCategory } from './painCategory';
+import type { PainCategory } from './painCategory';
 
 /**
  * 各 PainCategory に対するユーザーの嗜好値
@@ -6,5 +6,5 @@ import { PainCategory } from './painCategory';
  * 1次元ベクトルとして表現される
  */
 export interface UserPreferenceProfile {
-  preferences: Record<PainCategory, number>;
+    preferences: Record<PainCategory, number>;
 }

@@ -1,329 +1,492 @@
-import './App.css';
+/**
+ * [Why/Intent] vibeCodeEase サイドバーのReact側ルートコンポーネント。
+ * ExtensionからのIPCメッセージを購読し、初期状態（SidebarInitialView: 上部「AI作業コード」＋下部「トグル式介入掲示板リスト」＋開閉式設定）と
+ * 介入対話パネル（SidebarDialogueView: チャット＆詳細画面）の画面遷移（sidebarMode）および状態管理を統括する。
+ * 「詳細」ボタン押下時には、常に一番上の介入案ではなく、その時押された介入IDの詳細・チャット履歴を確実に展開する。
+ */
 import { useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
+import { SidebarDialogueView } from './components/SidebarDialogueView';
+import { SidebarInitialView } from './components/SidebarInitialView';
+import {
+    formatShortTitle,
+    getPersonaOpeningLine,
+} from './constants/sidebarOptions';
+import type { ExtensionToWebviewMessage } from './types';
 import type {
-  PresetMode,
-  SettingsPayload,
-  LlmConfig,
-  LlmProvider,
-  LlmTriggerMode
-} from './types';
-import { PersonalizationPanel } from './components/PersonalizationPanel';
+    InterventionDetail,
+    InterventionItem,
+    PersonaId,
+} from './types/onDemandIntervention';
+import type { ExtensionToWebviewInterventionMessage } from './types/onDemandIpcMessages';
+import { vscode } from './utils/vscode';
 
-// VS Code API を取得するための宣言
-declare const acquireVsCodeApi: any;
-const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
-
-/** プリセット選択時の嗜好値プレビュー用 */
-
-
+/**
+ * [Why/Intent] メインアプリケーションコンポーネント。
+ */
 function App() {
-  const [presetMode, setPresetMode] = useState<PresetMode>('HINT');
-  
-  // LLMトリガーモード
-  const [llmTriggerMode, setLlmTriggerMode] = useState<LlmTriggerMode>('on-save');
-  
-  // LLM / API Key State
-  const [llmConfig, setLlmConfig] = useState<LlmConfig>({ provider: 'gemini', model: 'gemini-3.6-flash' });
-  const [hasGeminiApiKey, setHasGeminiApiKey] = useState<boolean>(false);
-  const [apiKeyValue, setApiKeyValue] = useState<string>('');
-  const [isEditingApiKey, setIsEditingApiKey] = useState<boolean>(false);
-  const [isPersonalizedMode, setIsPersonalizedMode] = useState<boolean>(true);
+    const [sidebarMode, setSidebarMode] = useState<'initial' | 'dialogue'>(
+        'initial',
+    );
+    const [selectedDetail, setSelectedDetail] =
+        useState<InterventionDetail | null>(null);
+    const [interventions, setInterventions] = useState<InterventionItem[]>([]);
+    const [documentText, setDocumentText] = useState<string>('');
+    const [documentFileName, setDocumentFileName] = useState<string>('');
+    const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
-  // Personalization State
-  const [pzProfile, setPzProfile] = useState<any>(null);
-  const [pzMetrics, setPzMetrics] = useState<any>(null);
-  const [pzCandidates, setPzCandidates] = useState<any[]>([]);
-  const [pzBusy, setPzBusy] = useState<boolean>(false);
-  const [pzError, setPzError] = useState<string>('');
-  const [llmError, setLlmError] = useState<string>('');
+    // 簡易設定およびAPIキー状態
+    const [hasApiKey, setHasApiKey] = useState<boolean>(false);
+    const [apiKeyLength, setApiKeyLength] = useState<number>(0);
+    const [personaId, setPersonaId] = useState<PersonaId>('mentor');
+    const [frequency, setFrequency] = useState<'manual' | 'onSave' | 'interval'>(
+        'onSave',
+    );
+    const [intervalSeconds, setIntervalSeconds] = useState<number>(60);
+    const [model, setModel] = useState<string>('gemini-3.5-flash-lite');
 
-  useEffect(() => {
-    // 起動時に拡張機能へ設定取得リクエストを送る
-    vscode?.postMessage({ command: 'GET_SETTINGS' });
+    // ローディング・エラー状態
+    const [isRefining, setIsRefining] = useState<boolean>(false);
+    const [refineError, setRefineError] = useState<string | null>(null);
+    const [isChatLoading, setIsChatLoading] = useState<boolean>(false);
 
-    const handleMessage = (event: MessageEvent) => {
-      const data = event.data;
-      if (!data || typeof data !== 'object') return;
+    // 初期マウント時に1度だけ ready ハンドシェイクを送信する
+    useEffect(() => {
+        vscode.postMessage({ command: 'ready' });
+    }, []);
 
-      switch (data.type) {
-        case 'SETTINGS_DATA': {
-          const payload = data.payload as SettingsPayload;
-          setPresetMode(payload.presetMode);
-          if (payload.llmConfig) setLlmConfig(payload.llmConfig);
-          if (payload.hasGeminiApiKey !== undefined) setHasGeminiApiKey(payload.hasGeminiApiKey);
-          if (payload.llmTriggerMode) setLlmTriggerMode(payload.llmTriggerMode);
-          break;
-        }
-        case 'PZ_STATE':
-          setPzProfile(data.payload.profile);
-          setPzMetrics(data.payload.metrics);
-          break;
-        case 'PZ_CANDIDATES':
-          setPzCandidates(data.payload);
-          break;
-        case 'PZ_BUSY':
-          setPzBusy(data.payload);
-          if (data.payload) setPzError('');
-          break;
-        case 'PZ_ERROR':
-          setPzError(data.payload);
-          break;
-        case 'BACKGROUND_ANALYSIS_STARTED':
-          setLlmError('');
-          break;
-        case 'LLM_ERROR':
-          setLlmError(data.payload as string);
-          break;
-      }
+    useEffect(() => {
+        const handleMessage = (
+            event: MessageEvent<
+                | ExtensionToWebviewMessage
+                | ExtensionToWebviewInterventionMessage
+                | {
+                      type: 'SYNC_SESSION_STATE';
+                      payload?: unknown;
+                  }
+                | {
+                      type: 'LLM_DASHBOARD_INIT';
+                      status?: unknown;
+                      response?: unknown;
+                      logs?: unknown;
+                  }
+                | {
+                      type: 'LLM_STATUS_UPDATE';
+                      status?: unknown;
+                  }
+            >,
+        ) => {
+            const message = event.data;
+            if (!message || typeof message !== 'object') {
+                return;
+            }
+
+            if ('type' in message) {
+                switch (message.type) {
+                    case 'SYNC_DOCUMENT':
+                        setDocumentText(message.text);
+                        setDocumentFileName(message.fileName);
+                        break;
+                    case 'EXPAND_INTERVENTION_DETAIL':
+                        // [Why/Intent] ホバーまたは掲示板の「詳細」押下時にバッチング遅延なく即座に該当IDの対話画面へ切り替える（RULE-007）
+                        flushSync(() => {
+                            setSelectedDetail(message.payload.detail);
+                            setPersonaId(message.payload.persona);
+                            setSidebarMode('dialogue');
+                        });
+                        break;
+                    case 'UPDATE_INTERVENTION_DETAIL':
+                        setSelectedDetail((prev) =>
+                            prev && prev.id === message.payload.interventionId
+                                ? message.payload.detail
+                                : prev,
+                        );
+                        setInterventions((prev) =>
+                            prev.map((item) =>
+                                item.id === message.payload.interventionId
+                                    ? message.payload.detail
+                                    : item,
+                            ),
+                        );
+                        break;
+                    case 'SET_REFINE_LOADING':
+                        setIsRefining(message.payload.isLoading);
+                        if (message.payload.error) {
+                            setRefineError(message.payload.error);
+                        } else if (message.payload.isLoading) {
+                            setRefineError(null);
+                        }
+                        break;
+                    case 'RECEIVE_CHAT_MESSAGE':
+                        setSelectedDetail((prev) => {
+                            if (
+                                !prev ||
+                                prev.id !== message.payload.interventionId
+                            ) {
+                                return prev;
+                            }
+                            const existing = prev.chatHistory ?? [];
+                            return {
+                                ...prev,
+                                chatHistory: [
+                                    ...existing,
+                                    message.payload.message,
+                                ],
+                            };
+                        });
+                        break;
+                    case 'SET_CHAT_LOADING':
+                        setIsChatLoading(message.payload.isLoading);
+                        break;
+                    case 'SYNC_HISTORY_STATE': {
+                        setInterventions(message.payload.interventions);
+                        setSelectedDetail((prev) => {
+                            if (!prev) {
+                                return null;
+                            }
+                            const matching =
+                                message.payload.interventions.find(
+                                    (i) => i.id === prev.id,
+                                );
+                            if (matching) {
+                                return {
+                                    ...prev,
+                                    status: matching.status,
+                                    originalCode:
+                                        matching.originalCode ??
+                                        prev.originalCode,
+                                    proposedCode:
+                                        matching.proposedCode ??
+                                        prev.proposedCode,
+                                };
+                            }
+                            return prev;
+                        });
+                        break;
+                    }
+                    case 'SYNC_SETTINGS':
+                        setHasApiKey(message.hasApiKey);
+                        setApiKeyLength(message.apiKeyLength ?? 0);
+                        if ('frequency' in message && message.frequency) {
+                            setFrequency(message.frequency);
+                        }
+                        if (
+                            'intervalSeconds' in message &&
+                            message.intervalSeconds !== undefined
+                        ) {
+                            setIntervalSeconds(message.intervalSeconds);
+                        }
+                        if ('model' in message && message.model) {
+                            setModel(message.model);
+                        }
+                        if ('personaId' in message && message.personaId) {
+                            setPersonaId(message.personaId as PersonaId);
+                        }
+                        break;
+                    case 'NAVIGATE_TO_SETTINGS':
+                        setSelectedDetail(null);
+                        setSidebarMode('initial');
+                        setIsSettingsOpen(true);
+                        break;
+                    case 'UPDATE_INTERVENTIONS':
+                        setInterventions((prev) => {
+                            if (prev.length === 0) {
+                                return message.interventions.map((intv) => ({
+                                    id: intv.id,
+                                    title: formatShortTitle(intv.message),
+                                    summary: intv.message,
+                                    range: intv.range,
+                                    status: 'pending',
+                                    personaId: 'mentor',
+                                    createdAt: '',
+                                    updatedAt: '',
+                                    originalCode: intv.originalText,
+                                    proposedCode: intv.replacementText,
+                                }));
+                            }
+                            return prev;
+                        });
+                        break;
+                }
+            }
+        };
+
+        window.addEventListener('message', handleMessage);
+        return () => window.removeEventListener('message', handleMessage);
+    }, []);
+
+    /**
+     * [Why/Intent] 選択されたペルソナ属性をローカル状態へ即座に反映し、
+     * ExtensionへUPDATE_QUICK_SETTINGSメッセージを送信してワークスペース状態へ永続化する。
+     */
+    const handlePersonaChange = (newPersona: PersonaId) => {
+        setPersonaId(newPersona);
+        vscode.postMessage({
+            type: 'UPDATE_QUICK_SETTINGS',
+            payload: { personaId: newPersona },
+        });
     };
 
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, []);
+    /**
+     * [Why/Intent] 介入実行トリガーモード（onSave/interval/manual）を更新し、
+     * ExtensionへUPDATE_QUICK_SETTINGSメッセージを送信してVS Code設定（llm.syncFrequency）へ永続化する。
+     */
+    const handleFrequencyChange = (
+        newFreq: 'manual' | 'onSave' | 'interval',
+    ) => {
+        setFrequency(newFreq);
+        vscode.postMessage({
+            type: 'UPDATE_QUICK_SETTINGS',
+            payload: { frequency: newFreq },
+        });
+    };
 
-  const handleSelectPreset = (preset: PresetMode) => {
-    setPresetMode(preset);
-    vscode?.postMessage({ command: 'SET_PRESET', payload: preset });
-  };
+    /**
+     * [Why/Intent] 自動推敲の実行間隔秒数を更新し、
+     * ExtensionへUPDATE_QUICK_SETTINGSメッセージを送信してVS Code設定（llm.syncIntervalSeconds）へ永続化する。
+     */
+    const handleIntervalSecondsChange = (newSec: number) => {
+        setIntervalSeconds(newSec);
+        vscode.postMessage({
+            type: 'UPDATE_QUICK_SETTINGS',
+            payload: { intervalSeconds: newSec },
+        });
+    };
 
-  const handleLlmProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const provider = e.target.value as LlmProvider;
-    // providerが切り替わったらデフォルトモデルも切り替える
-    const model = provider === 'gemini' ? 'gemini-3.6-flash' : 'auto';
-    setLlmConfig({ provider, model });
-    vscode?.postMessage({ command: 'SET_LLM_CONFIG', payload: { provider, model } });
-  };
+    /**
+     * [Why/Intent] 推敲用Geminiモデル識別子を更新し、
+     * ExtensionへUPDATE_QUICK_SETTINGSメッセージを送信してVS Code設定（llmModel）へ永続化する。
+     */
+    const handleModelChange = (newModel: string) => {
+        setModel(newModel);
+        vscode.postMessage({
+            type: 'UPDATE_QUICK_SETTINGS',
+            payload: { model: newModel },
+        });
+    };
 
-  const handleLlmModelChange = (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>) => {
-    const model = e.target.value;
-    setLlmConfig(prev => ({ ...prev, model }));
-    vscode?.postMessage({ command: 'SET_LLM_CONFIG', payload: { provider: llmConfig.provider, model } });
-  };
+    /**
+     * [Why/Intent] 入力されたGemini APIキーをExtensionへ送信（UPDATE_API_KEY）し、
+     * 安全なシークレットストア（SecretStorage）へ暗号化永続化する。
+     */
+    const handleSaveApiKey = (key: string) => {
+        vscode.postMessage({
+            type: 'UPDATE_API_KEY',
+            payload: { apiKey: key },
+        });
+    };
 
-  const handleSaveApiKey = () => {
-    vscode?.postMessage({ command: 'SAVE_API_KEY', payload: { apiKey: apiKeyValue } });
-    setIsEditingApiKey(false);
-    setApiKeyValue('');
-  };
+    /**
+     * [Why/Intent] AI作業コードまたは掲示板のトグル内で「詳細」ボタンが押された際、
+     * その時押された介入ID（id）の originalCode / proposedCode / chatHistory を保持した詳細データを構築して
+     * チャット対話画面（setSidebarMode('dialogue')）へ即時遷移させ、Extensionへも該当IDの展開要求を送信する。
+     */
+    const handleSelectIntervention = (id: string) => {
+        const item = interventions.find((i) => i.id === id);
+        const now = new Date().toISOString();
+        const activePersona = item?.personaId ?? personaId;
+        const shortTitle = formatShortTitle(item?.title ?? 'AI提案');
+        const existingChat =
+            item?.chatHistory && item.chatHistory.length > 0
+                ? item.chatHistory
+                : [
+                      {
+                          id: `opening-${id}`,
+                          sender: 'ai' as const,
+                          message: getPersonaOpeningLine(
+                              activePersona,
+                              shortTitle,
+                          ),
+                          timestamp: now,
+                          personaId: activePersona,
+                      },
+                  ];
+        const detail: InterventionDetail = {
+            id,
+            title: shortTitle,
+            summary: item?.summary ?? '',
+            range: item?.range ?? {
+                start: { line: 0, character: 0 },
+                end: { line: 0, character: 0 },
+            },
+            status: item?.status ?? 'pending',
+            personaId: activePersona,
+            originalCode: item?.originalCode ?? '',
+            proposedCode: item?.proposedCode ?? '',
+            createdAt: item?.createdAt || now,
+            updatedAt: item?.updatedAt || now,
+            chatHistory: existingChat,
+        };
+        setSelectedDetail(detail);
+        setSidebarMode('dialogue');
+        vscode.postMessage({
+            type: 'REQUEST_EXPAND_DETAIL',
+            payload: { interventionId: id },
+        });
+    };
 
-  const handleDeleteApiKey = () => {
-    vscode?.postMessage({ command: 'DELETE_API_KEY' });
-    setIsEditingApiKey(false);
-    setApiKeyValue('');
-  };
-  return (
-    <div className="App">
-      {llmError && (
-        <div style={{ padding: '10px', backgroundColor: '#5a1d1d', color: '#ffb3b3', borderRadius: '4px', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div><strong>❌ AI Communication Error:</strong> {llmError}</div>
-          <button style={{ marginLeft: '10px', padding: '2px 8px', cursor: 'pointer' }} onClick={() => setLlmError('')}>Dismiss</button>
-        </div>
-      )}
-      {/* Section 1: UIUX 設定 */}
-      <section className="card uiux-section">
-        <h2 className="section-title">🖥️ Section 1: UIUX Settings (AIとの接し方)</h2>
-        <div className="form-group">
-          <label>Trigger Mode (AI介入の発生タイミング)</label>
-          <div className="radio-group">
-            {[
-              { value: 'continuous', label: '10秒ごと(連続)', desc: '作業中に自動で継続的に解析・生成' },
-              { value: 'on-save', label: '保存時のみ', desc: '推奨・APIコスト節約' },
-              { value: 'disabled', label: '無効（生成しない）', desc: 'LLM解析を完全に停止' },
-            ].map(opt => (
-              <label key={opt.value} className={`radio-option ${llmTriggerMode === opt.value ? 'radio-selected' : ''}`}>
-                <input
-                  type="radio"
-                  name="llm-trigger"
-                  value={opt.value}
-                  checked={llmTriggerMode === opt.value}
-                  onChange={() => {
-                    vscode?.postMessage({ command: 'SET_LLM_TRIGGER_MODE', payload: opt.value });
-                  }}
+    /**
+     * [Why/Intent] 対話パネルから初期画面（AI作業スペース＋掲示板リスト）へ戻るハンドラ。
+     */
+    const handleBackToInitial = () => {
+        setSelectedDetail(null);
+        setRefineError(null);
+        setSidebarMode('initial');
+    };
+
+    /**
+     * [Why/Intent] ユーザーからの方針修正指示（instruction）をExtensionへ送信（REFINE_INTERVENTION）する。
+     */
+    const handleRefine = (instruction: string) => {
+        if (!selectedDetail) {
+            return;
+        }
+        vscode.postMessage({
+            type: 'REFINE_INTERVENTION',
+            payload: {
+                interventionId: selectedDetail.id,
+                userInstruction: instruction,
+                personaId,
+            },
+        });
+    };
+
+    /**
+     * [Why/Intent] ユーザーが入力したチャットメッセージをローカルのchatHistoryへ即時追加する「楽観的チャット表示」を行い、
+     * 直ちにExtensionへIPC送信（SEND_CHAT_MESSAGE）する。
+     */
+    const handleSendMessage = (text: string) => {
+        if (!selectedDetail) {
+            return;
+        }
+        const userMsg = {
+            id: `msg-${Date.now()}`,
+            sender: 'user' as const,
+            message: text,
+            timestamp: new Date().toISOString(),
+        };
+        setSelectedDetail((prev) =>
+            prev
+                ? {
+                      ...prev,
+                      chatHistory: [...(prev.chatHistory ?? []), userMsg],
+                  }
+                : null,
+        );
+        vscode.postMessage({
+            type: 'SEND_CHAT_MESSAGE',
+            payload: {
+                interventionId: selectedDetail.id,
+                personaId,
+                text,
+            },
+        });
+    };
+
+    /**
+     * [Why/Intent] 対象提案のコード置換適用要求をExtensionへ発行する（APPLY_INTERVENTION）。
+     */
+    const handleApply = (id: string) => {
+        setInterventions((prev) =>
+            prev.map((item) =>
+                item.id === id ? { ...item, status: 'applied' } : item,
+            ),
+        );
+        setSelectedDetail((prev) =>
+            prev && prev.id === id ? { ...prev, status: 'applied' } : prev,
+        );
+        vscode.postMessage({
+            type: 'APPLY_INTERVENTION',
+            payload: { interventionId: id },
+        });
+    };
+
+    /**
+     * [Why/Intent] 適用済みの提案コードを取り消し、元コードへ復元する要求をExtensionへ発行する（UNDO_INTERVENTION）。
+     */
+    const handleUndo = (id: string) => {
+        vscode.postMessage({
+            type: 'UNDO_INTERVENTION',
+            payload: { interventionId: id },
+        });
+    };
+
+    /**
+     * [Why/Intent] 対象提案を却下・無効化する要求をExtensionへ発行する（DISCARD_INTERVENTION）。
+     * ローカル状態も即座に 'dismissed' へ更新し、「却下された感」の強いUIフィードバックを即時反映する。
+     */
+    const handleReject = (id: string) => {
+        setInterventions((prev) =>
+            prev.map((item) =>
+                item.id === id ? { ...item, status: 'dismissed' } : item,
+            ),
+        );
+        setSelectedDetail((prev) =>
+            prev && prev.id === id ? { ...prev, status: 'dismissed' } : prev,
+        );
+        vscode.postMessage({
+            type: 'DISCARD_INTERVENTION',
+            payload: { interventionId: id },
+        });
+    };
+
+    return (
+        <div
+            className="sidebar-container"
+            style={{
+                height: '100vh',
+                width: '100%',
+                maxWidth: '100%',
+                minWidth: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                boxSizing: 'border-box',
+                overflowX: 'hidden',
+                overflowY: 'auto',
+                scrollbarGutter: 'stable',
+            }}
+        >
+            {/* メイン画面描画: sidebarMode による切り替え */}
+            {sidebarMode === 'initial' ? (
+                <SidebarInitialView
+                    personaId={personaId}
+                    onPersonaChange={handlePersonaChange}
+                    frequency={frequency}
+                    onFrequencyChange={handleFrequencyChange}
+                    intervalSeconds={intervalSeconds}
+                    onIntervalSecondsChange={handleIntervalSecondsChange}
+                    model={model}
+                    onModelChange={handleModelChange}
+                    hasApiKey={hasApiKey}
+                    apiKeyLength={apiKeyLength}
+                    onSaveApiKey={handleSaveApiKey}
+                    interventions={interventions}
+                    documentText={documentText}
+                    documentFileName={documentFileName}
+                    onSelectIntervention={handleSelectIntervention}
+                    onApplyIntervention={handleApply}
+                    onRejectIntervention={handleReject}
+                    isSettingsOpen={isSettingsOpen}
+                    onToggleSettings={() =>
+                        setIsSettingsOpen((prev) => !prev)
+                    }
                 />
-                <span className="radio-label-text">
-                  <strong>{opt.label}</strong>
-                  <small>{opt.desc}</small>
-                </span>
-              </label>
-            ))}
-          </div>
+            ) : selectedDetail ? (
+                <SidebarDialogueView
+                    detail={selectedDetail}
+                    onBack={handleBackToInitial}
+                    onRefine={handleRefine}
+                    isRefining={isRefining}
+                    refineError={refineError}
+                    onSendMessage={handleSendMessage}
+                    isChatLoading={isChatLoading}
+                    onApply={handleApply}
+                    onUndo={handleUndo}
+                    onReject={handleReject}
+                />
+            ) : null}
         </div>
-
-        <div className="pz-controls uiux-controls" style={{ display: 'flex', gap: '10px', marginBottom: '10px', flexWrap: 'wrap' }}>
-          <div>
-            <label>Visibility Level (通知・提示の強さ): </label>
-            <select
-              value={pzProfile?.visibilityLevel || 'subtle'}
-              onChange={e => vscode?.postMessage({ command: 'PZ_SET_UIUX', payload: { visibility: e.target.value } })}
-              className="styled-select"
-            >
-              <option value="stealth">Stealth (最小限)</option>
-              <option value="subtle">Subtle (控えめ)</option>
-              <option value="active">Active (積極的)</option>
-            </select>
-          </div>
-          <div>
-            <label>Explanation Verbosity (理由説明の表示量): </label>
-            <select
-              value={pzProfile?.explanationVerbosity || 'summary'}
-              onChange={e => vscode?.postMessage({ command: 'PZ_SET_UIUX', payload: { verbosity: e.target.value } })}
-              className="styled-select"
-            >
-              <option value="minimal">Minimal (1行要約)</option>
-              <option value="summary">Summary (箇条書き)</option>
-              <option value="detailed">Detailed (詳細)</option>
-            </select>
-          </div>
-          <div>
-            <label>Application Automation (差分適用の自動化): </label>
-            <select
-              value={pzProfile?.applicationAutomation || 'manual'}
-              onChange={e => vscode?.postMessage({ command: 'PZ_SET_UIUX', payload: { automation: e.target.value } })}
-              className="styled-select"
-            >
-              <option value="manual">Manual (手動確認)</option>
-              <option value="bulk">Bulk (ファイル一括)</option>
-              <option value="auto">Auto (保存時自動適用)</option>
-            </select>
-          </div>
-        </div>
-      </section>
-
-      {/* Section 2: 生成物の設定 */}
-      <section className="card generation-section">
-        <h2 className="section-title">🧠 Section 2: AI Content Settings (生成物の方向性)</h2>
-        <div style={{ display: 'flex', gap: '20px', marginBottom: '15px' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-            <input type="radio" checked={!isPersonalizedMode} onChange={() => setIsPersonalizedMode(false)} />
-            <span>🔧 既存人格 (固定プリセット)</span>
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-            <input type="radio" checked={isPersonalizedMode} onChange={() => setIsPersonalizedMode(true)} />
-            <span>🧠 パーソナライズ (動的学習)</span>
-          </label>
-        </div>
-
-        {!isPersonalizedMode ? (
-          <div className="preset-grid" style={{ display: 'flex', gap: '10px' }}>
-            <div
-              className={`preset-card ${presetMode === 'HINT' ? 'active' : ''}`}
-              onClick={() => handleSelectPreset('HINT')}
-              style={{ flex: 1, padding: '10px', textAlign: 'center', cursor: 'pointer', border: presetMode === 'HINT' ? '2px solid var(--vscode-button-background)' : '1px solid var(--vscode-widget-border)', borderRadius: '4px' }}
-            >
-              <div>💡 ヒント中心</div>
-            </div>
-            <div
-              className={`preset-card ${presetMode === 'ARCHITECTURE' ? 'active' : ''}`}
-              onClick={() => handleSelectPreset('ARCHITECTURE')}
-              style={{ flex: 1, padding: '10px', textAlign: 'center', cursor: 'pointer', border: presetMode === 'ARCHITECTURE' ? '2px solid var(--vscode-button-background)' : '1px solid var(--vscode-widget-border)', borderRadius: '4px' }}
-            >
-              <div>📐 設計思想中心</div>
-            </div>
-            <div
-              className={`preset-card ${presetMode === 'BUG_TYPO' ? 'active' : ''}`}
-              onClick={() => handleSelectPreset('BUG_TYPO')}
-              style={{ flex: 1, padding: '10px', textAlign: 'center', cursor: 'pointer', border: presetMode === 'BUG_TYPO' ? '2px solid var(--vscode-button-background)' : '1px solid var(--vscode-widget-border)', borderRadius: '4px' }}
-            >
-              <div>🐛 タイポやバグの温床を中心</div>
-            </div>
-          </div>
-        ) : (
-          <PersonalizationPanel 
-            vscode={vscode} 
-            profile={pzProfile} 
-            metrics={pzMetrics} 
-            candidates={pzCandidates} 
-            isBusy={pzBusy} 
-            error={pzError} 
-          />
-        )}
-
-        <div style={{ marginTop: '15px', padding: '10px', background: 'var(--vscode-input-background)', borderRadius: '4px' }}>
-          <div style={{ fontSize: '12px', color: 'var(--vscode-descriptionForeground)', marginBottom: '5px' }}>📝 現在の生成プロンプト（簡易表示）:</div>
-          <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: '12px', color: 'var(--vscode-editor-foreground)' }}>
-            {isPersonalizedMode ? 
-              (pzProfile?.preferenceSummary || '学習データがありません。') : 
-              (presetMode === 'HINT' ? 'タイポを手軽に直しつつ、構文・ロジックは解説ヒントを提示。コード理解を最優先。' : 
-               presetMode === 'ARCHITECTURE' ? 'AI介入を最小限に抑え、自力でコードを紡ぐクラフト重視。アーキテクチャの提案を主に行う。' : 
-               '面倒なタイポや整形・構文修正を自動化。バグの温床となる箇所を積極的に修正。')}
-          </pre>
-        </div>
-      </section>
-
-      {/* Section 3: LLM & API 設定 */}
-      <section className="card llm-section">
-        <h2 className="section-title">⚙️ Section 3: LLM & API Settings</h2>
-        <div className="llm-config-box">
-          <div className="form-group">
-            <label>Provider</label>
-            <select value={llmConfig.provider} onChange={handleLlmProviderChange} className="styled-select">
-              <option value="gemini">Google Gemini</option>
-              <option value="vscode-lm">VS Code LM</option>
-            </select>
-          </div>
-          
-          <div className="form-group">
-            <label>Model</label>
-            <input 
-              list="model-list" 
-              value={llmConfig.model} 
-              onChange={handleLlmModelChange} 
-              className="styled-input" 
-              placeholder="モデル名を入力または選択"
-            />
-            <datalist id="model-list">
-              {llmConfig.provider === 'gemini' ? (
-                <>
-                  <option value="gemini-3.6-flash" />
-                  <option value="gemini-2.5-flash" />
-                  <option value="gemini-2.0-flash" />
-                  <option value="gemini-1.5-flash" />
-                  <option value="gemini-1.5-pro" />
-                  <option value="auto" />
-                </>
-              ) : (
-                <>
-                  <option value="auto" />
-                  <option value="gpt-4o" />
-                  <option value="gpt-4o-mini" />
-                  <option value="claude-3.5-sonnet" />
-                </>
-              )}
-            </datalist>
-          </div>
-
-          {llmConfig.provider === 'gemini' && (
-            <div className="form-group api-key-group">
-              <label>API Key</label>
-              {hasGeminiApiKey && !isEditingApiKey ? (
-                <div className="api-key-status">
-                  <span className="status-badge success">✅ 設定済み</span>
-                  <div className="api-key-actions">
-                    <button className="action-button small" onClick={() => setIsEditingApiKey(true)}>変更</button>
-                    <button className="secondary-button small danger" onClick={handleDeleteApiKey}>削除</button>
-                  </div>
-                </div>
-              ) : (
-                <div className="api-key-input-box">
-                  <input
-                    type="password"
-                    value={apiKeyValue}
-                    onChange={e => setApiKeyValue(e.target.value)}
-                    placeholder="APIキーを入力"
-                    className="styled-input"
-                  />
-                  <div className="api-key-actions">
-                    <button className="action-button small" onClick={handleSaveApiKey} disabled={!apiKeyValue}>保存</button>
-                    {hasGeminiApiKey && <button className="secondary-button small" onClick={() => setIsEditingApiKey(false)}>キャンセル</button>}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </section>
-    </div>
-  );
+    );
 }
 
 export default App;

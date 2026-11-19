@@ -1,5 +1,5 @@
-import * as crypto from 'crypto';
+import * as crypto from 'node:crypto';
 
-export function getNonce() {
-  return crypto.randomBytes(16).toString('hex');
+export function getNonce(): string {
+    return crypto.randomBytes(16).toString('hex');
 }

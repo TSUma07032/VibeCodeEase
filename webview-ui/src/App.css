@@ -784,3 +784,11 @@ input[type="range"] {
 .issue-btn-reject:hover {
   background-color: var(--vscode-editorWidget-background);
 }
+
+.ai-diff-highlight {
+  background-color: rgba(0, 255, 0, 0.1);
+}
+.ai-diff-margin {
+  background-color: rgba(0, 255, 0, 0.5);
+  width: 5px !important;
+}

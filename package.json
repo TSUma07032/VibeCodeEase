@@ -31,33 +31,53 @@
       {
         "command": "vibecodeease.applyIntervention",
         "title": "vibeCodeEase: Apply Intervention"
+      },
+      {
+        "command": "vibecodeease.openSideEditor",
+        "title": "vibeCodeEase: Open AI Side Editor"
+      },
+      {
+        "command": "vibecodeease.openSettings",
+        "title": "vibeCodeEase: 設定を開く"
+      },
+      {
+        "command": "vibecodeease.showInterventionSummary",
+        "title": "vibeCodeEase: Show Intervention Summary"
+      },
+      {
+        "command": "vibecodeease.expandIntervention",
+        "title": "vibeCodeEase: Expand Intervention Detail"
+      },
+      {
+        "command": "vibecodeease.applyInterventionById",
+        "title": "vibeCodeEase: Apply Intervention By ID"
+      },
+      {
+        "command": "vibecodeease.discardIntervention",
+        "title": "vibeCodeEase: Discard Intervention"
+      },
+      {
+        "command": "vibecodeease.requestActiveIntervention",
+        "title": "vibeCodeEase: ここを作業してコメント作成"
       }
     ],
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "vibecodeease-sidebar",
-          "title": "vibeCodeEase",
-          "icon": "media/icon.svg"
-        }
-      ]
-    },
-    "views": {
-      "vibecodeease-sidebar": [
-        {
-          "id": "vibecodeease.sidebarView",
-          "name": "vibeCodeEase Settings",
-          "type": "webview"
-        }
-      ]
-    },
     "keybindings": [
       {
-        "command": "vibecodeease.tabToApply",
-        "key": "tab",
-        "when": "editorTextFocus && !editorHasSelection && !inSnippetMode && !suggestWidgetVisible"
+        "command": "vibecodeease.showInterventionSummary",
+        "key": "alt+i",
+        "mac": "cmd+i",
+        "when": "editorTextFocus"
       }
     ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "vibecodeease.requestActiveIntervention",
+          "when": "editorHasSelection",
+          "group": "vibecodeease@1"
+        }
+      ]
+    },
     "configuration": {
       "title": "vibeCodeEase",
       "properties": {
@@ -72,8 +92,66 @@
         },
         "vibecodeease.llmModel": {
           "type": "string",
-          "default": "gemini-3.6-flash",
+          "enum": [
+            "gemini-3.8-flash",
+            "gemini-3.8-live",
+            "gemini-3.8-live-extended-thinking",
+            "gemini-3.8-flash-tts",
+            "gemini-3.8-flash-lite-tts",
+            "gemini-3.6-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-3.1-flash-lite",
+            "gemini-nano-banana-2.1",
+            "gemini-3.1-flash-image",
+            "gemini-3.1-flash-lite-image",
+            "gemini-3-pro-image",
+            "gemini-3.1-pro-preview",
+            "gemini-3-flash-preview",
+            "gemini-3.5-live-translate-preview",
+            "gemini-3.1-flash-live-preview",
+            "gemini-3.1-flash-tts-preview",
+            "gemini-omni-1.1-flash",
+            "gemini-3.5-transcribe",
+            "gemini-3.5-transcribe-live",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-image",
+            "gemini-2.5-flash-native-audio-preview-12-2025",
+            "gemini-2.5-flash-preview-tts",
+            "gemini-2.5-flash-lite"
+          ],
+          "default": "gemini-3.5-flash-lite",
           "description": "LLM Model to use (e.g. gemini-3.6-flash, gpt-4o)"
+        },
+        "vibecodeease.aiInterventionLevel": {
+          "type": "string",
+          "enum": [
+            "Level 1 (Typo/Bug Fix)",
+            "Level 2 (Refactoring)",
+            "Level 3 (Architecture Optimization)"
+          ],
+          "default": "Level 2 (Refactoring)",
+          "description": "AIによる推敲（介入）の積極性レベルを指定します"
+        },
+        "vibecodeease.analyzeOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "ファイル保存時に自動でAIによるコード推敲を実行します",
+          "deprecationMessage": "Use vibecodeease.llm.syncFrequency instead."
+        },
+        "vibecodeease.llm.syncFrequency": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "onSave",
+            "interval"
+          ],
+          "default": "onSave",
+          "description": "LLM API communication frequency"
+        },
+        "vibecodeease.llm.syncIntervalSeconds": {
+          "type": "number",
+          "default": 30,
+          "description": "Communication interval in seconds (30-3600)"
         }
       }
     }
@@ -92,14 +170,22 @@
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "check-types": "tsc --noEmit",
-    "lint": "eslint src",
+    "lint": "npm run lint:biome && npm run lint:eslint",
+    "lint:biome": "biome check .",
+    "lint:eslint": "eslint src",
+    "lint:fix": "biome check --write . && eslint src --fix",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
     "test:ui": "npm run test --prefix webview-ui",
     "test:e2e": "npm run test:e2e --prefix webview-ui",
     "test:e2e:headed": "npm run test:e2e:headed --prefix webview-ui",
     "test:all": "npm run test:ui && npm run test",
+    "test:llm": "npm run compile-tests && vscode-test --run out/test/llmIntegration.test.js",
     "test": "vscode-test"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@eslint/js": "^9.0.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
     "@types/vscode": "^1.125.0",
@@ -110,9 +196,11 @@
     "esbuild": "^0.25.9",
     "eslint": "^9.34.0",
     "npm-run-all": "^4.1.5",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.71.1"
   },
   "dependencies": {
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "zod-to-json-schema": "^3.25.2"
   }
 }

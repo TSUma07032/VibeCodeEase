@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import { ActionLogService } from './core/actionLogService';
+import type { ActionLogService } from './core/actionLogService';
 import { GlobalState } from './state/globalState';
-import { PresetMode, PRESET_DEFINITIONS } from './types';
+import { PRESET_DEFINITIONS, type PresetMode } from './types';
 
 interface PresetQuickPickItem extends vscode.QuickPickItem {
     preset: PresetMode;
@@ -11,98 +11,120 @@ export interface CommandDependencies {
     actionLogService: ActionLogService;
 }
 
-export function registerCommands(context: vscode.ExtensionContext, deps: CommandDependencies): void {
-    const { actionLogService } = deps;
-
-    // 1. Hello World コマンド
-    const helloWorldDisposable = vscode.commands.registerCommand('vibecodeease.helloWorld', () => {
-        vscode.window.showInformationMessage('Hello World from vibeCodeEase!');
-    });
-    context.subscriptions.push(helloWorldDisposable);
-
-    // 2. 介入適用コマンド
-    const applyInterventionCommand = vscode.commands.registerCommand(
-        'vibecodeease.applyIntervention',
-        async (uri: vscode.Uri, range: vscode.Range, newText: string) => {
-            if (!uri || !range || typeof newText !== 'string') {
-                return;
-            }
-            const edit = new vscode.WorkspaceEdit();
-            edit.replace(uri, range, newText);
-            const applied = await vscode.workspace.applyEdit(edit);
-            if (applied) {
-                vscode.window.setStatusBarMessage('$(check) 修正を適用しました', 3000);
-                actionLogService.log({
-                    category: 'SYSTEM',
-                    action: 'APPLY',
-                    targetId: uri.toString(),
-                    payload: 'Applied intervention via command'
-                });
-            }
-        }
-    );
-    context.subscriptions.push(applyInterventionCommand);
-
-    // 3. Gemini API キー設定コマンド
-    const configureGeminiKey = vscode.commands.registerCommand('vibecodeease.configureGeminiKey', async () => {
-        const apiKey = await vscode.window.showInputBox({
-            prompt: 'Gemini APIキーを入力してください。キーはVS CodeのSecretStorageに保存されます。',
-            password: true,
-            ignoreFocusOut: true,
-            placeHolder: 'AIza...'
-        });
-        if (apiKey === undefined) {
-            return;
-        }
-        if (!apiKey.trim()) {
-            await context.secrets.delete('vibecodeease.geminiApiKey');
-            vscode.window.setStatusBarMessage('$(check) Gemini APIキーを削除しました。', 3000);
-            return;
-        }
-        await context.secrets.store('vibecodeease.geminiApiKey', apiKey.trim());
-        vscode.window.setStatusBarMessage('$(check) Gemini APIキーを安全に保存しました。', 3000);
-    });
-    context.subscriptions.push(configureGeminiKey);
-
-    // 4. モード切り替えコマンド (プリセット選択式)
-    const switchModeCommand = vscode.commands.registerCommand('vibecodeease.switchMode', async () => {
+function registerSwitchModeCommand(actionLogService: ActionLogService): vscode.Disposable {
+    return vscode.commands.registerCommand('vibecodeease.switchMode', async () => {
         const items: PresetQuickPickItem[] = [
             {
-                label: `$(lightbulb) ヒントモード (Hint)`,
+                label: '$(lightbulb) ヒントモード (Hint)',
                 description: PRESET_DEFINITIONS.HINT.description,
-                preset: 'HINT'
+                preset: 'HINT',
             },
             {
-                label: `$(versions) アーキテクチャモード (Architecture)`,
+                label: '$(versions) アーキテクチャモード (Architecture)',
                 description: PRESET_DEFINITIONS.ARCHITECTURE.description,
-                preset: 'ARCHITECTURE'
+                preset: 'ARCHITECTURE',
             },
             {
-                label: `$(bug) バグ・タイポ修正 (Bug/Typo)`,
+                label: '$(bug) バグ・タイポ修正 (Bug/Typo)',
                 description: PRESET_DEFINITIONS.BUG_TYPO.description,
-                preset: 'BUG_TYPO'
+                preset: 'BUG_TYPO',
             },
             {
                 label: '$(settings) カスタム調整 (Custom)',
                 description: 'サイドバーのスライダー設定に従って動作',
-                preset: 'CUSTOM'
-            }
+                preset: 'CUSTOM',
+            },
         ];
 
         const selected = await vscode.window.showQuickPick(items, {
-            placeHolder: 'vibeCodeEase の動作モードを選択してください'
+            title: 'vibeCodeEase: 動作モード選択',
+            placeHolder: 'vibeCodeEase の動作モードを選択してください',
+            matchOnDescription: true,
+            matchOnDetail: true,
         });
 
         if (selected) {
             await GlobalState.getInstance().setPresetMode(selected.preset);
-            vscode.window.setStatusBarMessage(`$(check) モードを「${selected.label}」に変更しました`, 3000);
+            vscode.window.setStatusBarMessage(
+                `$(check) モードを「${selected.label}」に変更しました`,
+                3000,
+            );
             actionLogService.log({
                 category: 'MODE_CHANGE',
                 action: 'SWITCH_PRESET',
                 targetId: selected.preset,
-                payload: `Switched preset to ${selected.preset}`
+                payload: `Switched preset to ${selected.preset}`,
             });
         }
     });
-    context.subscriptions.push(switchModeCommand);
+}
+
+function registerConfigureKeyCommand(context: vscode.ExtensionContext): vscode.Disposable {
+    return vscode.commands.registerCommand('vibecodeease.configureGeminiKey', async () => {
+        const key = await vscode.window.showInputBox({
+            title: 'vibeCodeEase: Gemini API設定',
+            prompt: 'Gemini API キーを入力してください（空欄で削除）',
+            placeHolder: '例: AIzaSy...',
+            password: true,
+            ignoreFocusOut: true,
+        });
+        if (key === undefined) {
+            return;
+        }
+        const trimmed = key.trim();
+        if (trimmed) {
+            await context.secrets.store('vibecodeease.geminiApiKey', trimmed);
+            vscode.window.setStatusBarMessage(
+                '$(check) Gemini API キーを SecretStorage に保存しました',
+                3000,
+            );
+        } else {
+            await context.secrets.delete('vibecodeease.geminiApiKey');
+            vscode.window.setStatusBarMessage(
+                '$(info) Gemini API キーを SecretStorage から削除しました',
+                3000,
+            );
+        }
+    });
+}
+
+function registerApplyInterventionCommand(actionLogService: ActionLogService): vscode.Disposable {
+    return vscode.commands.registerCommand(
+        'vibecodeease.applyIntervention',
+        async (params?: {
+            uri: vscode.Uri;
+            range: vscode.Range;
+            newText: string;
+            category?: string;
+        }) => {
+            if (!params?.uri || !params.range || typeof params.newText !== 'string') {
+                return false;
+            }
+            const edit = new vscode.WorkspaceEdit();
+            edit.replace(params.uri, params.range, params.newText);
+            const applied = await vscode.workspace.applyEdit(edit);
+            if (applied) {
+                actionLogService.log({
+                    category: params.category ?? 'INTERVENTION',
+                    action: 'APPLY_COMMAND',
+                    targetId: params.uri.toString(),
+                    payload: 'Applied intervention via command',
+                });
+                vscode.window.setStatusBarMessage('$(check) コードを適用しました', 3000);
+            }
+            return applied;
+        },
+    );
+}
+
+export function registerCommands(
+    context: vscode.ExtensionContext,
+    deps: CommandDependencies,
+): void {
+    const { actionLogService } = deps;
+    context.subscriptions.push(
+        registerSwitchModeCommand(actionLogService),
+        registerConfigureKeyCommand(context),
+        registerApplyInterventionCommand(actionLogService),
+    );
 }

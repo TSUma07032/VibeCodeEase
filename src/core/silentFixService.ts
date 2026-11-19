@@ -1,6 +1,8 @@
-﻿import * as vscode from 'vscode';
-import { SharedAnalysisCache } from './analyzer';
+import * as vscode from 'vscode';
 import { GlobalState } from '../state/globalState';
+import type { PainCategory } from '../types';
+import { SharedAnalysisCache } from './analyzer';
+import type { PersonalizationService } from './personalization/personalizationService';
 
 /**
  * ファイル保存時（onWillSaveTextDocument）に、
@@ -10,42 +12,49 @@ export class SilentFixService {
     private disposables: vscode.Disposable[] = [];
     private onFixAppliedCallback?: (fixCount: number, documentUri: string) => void;
 
-    constructor(private readonly personalizationService?: any) {
+    constructor(private readonly personalizationService?: PersonalizationService) {
         this.disposables.push(
             vscode.workspace.onWillSaveTextDocument((event) => {
                 this.handleWillSave(event);
-            })
+            }),
         );
     }
 
-    public setOnFixAppliedCallback(callback: (fixCount: number, documentUri: string) => void) {
+    public setOnFixAppliedCallback(
+        callback: (fixCount: number, documentUri: string) => void,
+    ): void {
         this.onFixAppliedCallback = callback;
+    }
+
+    private shouldAutoApply(category: PainCategory): boolean {
+        const level = GlobalState.getInstance().getInterventionLevel(category);
+        if (level === 'IGNORE') {
+            return false;
+        }
+        const automation = this.personalizationService?.getProfile().applicationAutomation;
+        return level === 'SILENT' || automation === 'auto';
     }
 
     private handleWillSave(event: vscode.TextDocumentWillSaveEvent): void {
         const document = event.document;
-        const globalState = GlobalState.getInstance();
-
-        // ドキュメント内の問題を検出
         const results = SharedAnalysisCache.getInstance().getResults(document);
         const edits: vscode.TextEdit[] = [];
 
         for (const result of results) {
-            // SILENT 判定されたものだけを自動修正対象とする
-            const level = globalState.getInterventionLevel(result.category);
-            const automation = this.personalizationService ? this.personalizationService.getProfile().applicationAutomation : 'manual';
-            if (automation !== 'auto') { continue; }
-            if (level !== 'SILENT') {
+            if (!this.shouldAutoApply(result.category)) {
                 continue;
             }
 
             for (const intervention of result.interventions) {
-                if (intervention.replacementText) {
+                if (
+                    intervention.replacementText !== undefined &&
+                    (intervention.replacementText !== '' || intervention.originalText !== '')
+                ) {
                     const range = new vscode.Range(
                         result.range.start.line,
                         result.range.start.character,
                         result.range.end.line,
-                        result.range.end.character
+                        result.range.end.character,
                     );
                     edits.push(vscode.TextEdit.replace(range, intervention.replacementText));
                 }
@@ -60,8 +69,9 @@ export class SilentFixService {
         }
     }
 
-    public dispose() {
-        this.disposables.forEach(d => d.dispose());
+    public dispose(): void {
+        this.disposables.forEach((d) => {
+            d.dispose();
+        });
     }
 }
-

@@ -1,11 +1,9 @@
 💡 実施内容 (What):
-- `src/core/editorDecorator.ts` の `onDidChangeTextDocument` および `SharedAnalysisCache` のイベントリスナーにおける装飾の更新処理に対して、デバウンス（Debounce）処理を追加しました。
+- `src/commands.ts` および `src/core/onDemand/interventionQuickPick.ts` の `showQuickPick` オプションに `matchOnDescription: true` と `matchOnDetail: true` を追加しました。
 
 🎯 理由・目的 (Why):
-- ユーザーが高速にテキストを入力した際に、既存のタイマーをクリアせずに新しい `setTimeout` を多数登録してしまい、重複した無駄な装飾更新処理が走り、メインスレッドを圧迫する可能性があったためです。
+- デフォルトでは `label` プロパティのみが検索対象となるため、ユーザーが `description` や `detail` の内容でフィルタリングできず、目的の項目を探しにくいという課題がありました。この変更により検索性が大幅に向上し、キーボード操作のみでのスムーズな選択が可能になります。
 
-📊 影響 (Impact):
-- 100回の連続イベント発火時の処理回数を100回（約150.36ms）から1回（約151.61ms）へと大幅に削減し、不要な計算とUIフリーズを防ぎます。
-
-🔬 検証方法 (Measurement):
-- `npm run lint`, `npm run compile`, `xvfb-run -a npm test` がすべてパスすることを確認済みです。
+📸 Before/After:
+- Before: モード選択や提案選択時、タイトル(`label`)でしか絞り込みができない。
+- After: モードの説明(`description`)や提案のサマリー(`detail`)の文字列でも絞り込みが可能になり、直感的なアクセスが実現。

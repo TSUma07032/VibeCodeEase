@@ -5,11 +5,11 @@
 **脆弱性:** `ActionLogService`の`setWorkspaceRoot`で、`rootPath.startsWith(workspacePath)`を使用していたため、`workspace-hacked`のようなプレフィックスが一致するディレクトリへのパストラバーサルを許可してしまう問題がありました。
 **学び:** `startsWith`を単に文字列に対して使用すると、パスセパレータを考慮しないため、意図しないディレクトリへのアクセスを許可してしまう可能性があります。
 **予防策:** パスを検証する際は、必ず`path.resolve()`でパスを正規化し、ベースパスに`path.sep`（例: `/`や`\`）を付けた文字列で`startsWith`判定を行うか、完全一致をチェックする必要があります。
-## 2024-10-25 - [Medium] Prevent Information Leakage in Error Messages
-**脆弱性:** `GeminiClient` のAPIリクエスト失敗時のエラーメッセージに、APIからの生のレスポンスボディ (`details`) が含まれていました。もしレスポンスボディ内にAPIキーやリクエスト時の機密データが含まれていた場合、エラーメッセージとして漏洩する可能性がありました。
-**学び:** 外部APIの呼び出しにおいて、エラーハンドリング時に生のレスポンスボディをそのままUIやログに出力すると、予期せぬ情報漏洩（Information Leakage）を引き起こす可能性があります。
-**予防策:** エラーメッセージにはステータスコードや一般的な解決策のみを含め、機密データを含みうる生のレスポンスボディは安全に破棄するか、マスク処理を行ってから出力する必要があります。
-## 2024-11-20 - [Critical] Prevent API Key Leakage via settings.json
-**脆弱性:** `package.json` の `configuration` に `vibecodeease.geminiApiKey` が定義されており、`vscode.workspace.getConfiguration().get()` を通じて読み込まれていました。これにより、ユーザーのAPIキーがワークスペースの `settings.json` に平文で保存され、漏洩するリスクがありました。
-**学び:** 拡張機能において、APIキー等のシークレット情報を `package.json` の `configuration` に定義すると、設定ファイルに平文で保存されるため危険です。
-**予防策:** 認証情報の管理には必ず `vscode.SecretStorage` (`context.secrets`) のみを使用し、`package.json` に設定項目を設けないようにします。
+## 2024-10-25 - [Critical] Prevent API Key Leakage via settings.json
+**脆弱性:** `package.json` で `vibecodeease.geminiApiKey` が設定プロパティとして定義されており、`vscode.workspace.getConfiguration` を経由して取得されるフォールバックが実装されていました。これにより、ユーザーのAPIキーが `settings.json` に平文で保存され、バージョン管理や他の拡張機能から漏洩するリスクがありました。
+**学び:** `package.json` の `configuration` にシークレット情報を定義すると、VS Code の設定画面から容易に入力できますが、その値は平文でローカルファイルに保存されます。認証トークンやAPIキーは、常に暗号化されたストレージで管理する必要があります。
+**予防策:** `package.json` からAPIキーの設定項目を削除し、コード内のすべてのAPIキー取得処理を `vscode.SecretStorage` に限定します。平文の設定ストアからのフォールバック取得ロジックは削除します。
+## 2024-11-03 - [Medium] Prevent Information Leakage via Error Logs
+**脆弱性:** エラーハンドリング時に `console.error(error)` などを通じて、生の例外オブジェクト（APIレスポンス全体やリクエストのペイロードが含まれる可能性がある）がそのままログに出力されていました。
+**学び:** 外部API呼び出しやファイル操作などのエラーをそのままログ出力すると、システムプロンプト、APIキー、ローカルファイルパス、またはユーザーの機密コードなどの情報が、拡張機能のOutput Channel等に漏洩するリスクがあります。
+**予防策:** エラーをログに記録する際は、生の例外オブジェクトをそのまま渡すのではなく、`error.message` や `String(error)` などの安全なプロパティのみを抽出して記録するようにサニタイズ処理を行う必要があります。

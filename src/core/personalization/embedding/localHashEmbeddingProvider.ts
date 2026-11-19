@@ -1,5 +1,5 @@
-import { EmbeddingProvider } from './embeddingProvider';
 import { normalizeInPlace } from '../vectorMath';
+import type { EmbeddingProvider } from './embeddingProvider';
 
 /**
  * Fallback embedding provider that computes a fixed-size vector based on character n-grams.
@@ -10,14 +10,14 @@ export class LocalHashEmbeddingProvider implements EmbeddingProvider {
     private readonly dim = 512;
     private readonly nGramSizes = [2, 3]; // bi-grams and tri-grams
 
-    public async embedBatch(texts: string[]): Promise<number[][]> {
-        return texts.map(text => this.embedSingle(text));
+    public embedBatch(texts: string[]): Promise<number[][]> {
+        return Promise.resolve(texts.map((text) => this.embedSingle(text)));
     }
 
     private embedSingle(text: string): number[] {
-        const vec = new Array(this.dim).fill(0);
+        const vec: number[] = new Array<number>(this.dim).fill(0);
         const normalized = text.toLowerCase().replace(/\s+/g, '');
-        
+
         if (normalized.length === 0) {
             return vec;
         }
@@ -39,9 +39,10 @@ export class LocalHashEmbeddingProvider implements EmbeddingProvider {
      * Simple 32-bit Murmur3-like hash for strings
      */
     private murmurHash3(str: string, seed: number = 0): number {
-        let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
-        for (let i = 0, ch; i < str.length; i++) {
-            ch = str.charCodeAt(i);
+        let h1 = 0xdeadbeef ^ seed,
+            h2 = 0x41c6ce57 ^ seed;
+        for (let i = 0; i < str.length; i++) {
+            const ch = str.charCodeAt(i);
             h1 = Math.imul(h1 ^ ch, 2654435761);
             h2 = Math.imul(h2 ^ ch, 1597334677);
         }

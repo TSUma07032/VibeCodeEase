@@ -1,6 +1,6 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
-import * as fs from 'fs';
-import * as path from 'path';
 
 export interface ActionLogEntry {
     category: string;
@@ -23,13 +23,18 @@ export class ActionLogService {
         }
     }
 
-    public setWorkspaceRoot(rootPath: string) {
+    public setWorkspaceRoot(rootPath: string): void {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (workspaceFolders && workspaceFolders.length > 0) {
             const workspacePath = path.resolve(workspaceFolders[0].uri.fsPath);
             const resolvedTarget = path.resolve(rootPath);
-            if (!resolvedTarget.startsWith(workspacePath + path.sep) && resolvedTarget !== workspacePath) {
-                throw new Error('セキュリティ違反: ワークスペース外のファイルへのアクセスが試行されました');
+            if (
+                !resolvedTarget.startsWith(workspacePath + path.sep) &&
+                resolvedTarget !== workspacePath
+            ) {
+                throw new Error(
+                    'セキュリティ違反: ワークスペース外のファイルへのアクセスが試行されました',
+                );
             }
         }
 
@@ -56,9 +61,11 @@ export class ActionLogService {
             return;
         }
 
+        const sanitizeField = (val: string | number | undefined): string =>
+            String(val ?? '').replace(/[\r\n,]/g, ' ');
         const timestamp = new Date().toISOString();
-        const safePayload = (entry.payload || '').replace(/"/g, '""');
-        const line = `${timestamp},${this.userId},experiment,${entry.category},${entry.action},${entry.targetId || ''},${entry.value !== undefined ? entry.value : ''},"${safePayload}"\n`;
+        const safePayload = (entry.payload ?? '').replace(/\r?\n/g, '\\n').replace(/"/g, '""');
+        const line = `${timestamp},${this.userId},experiment,${sanitizeField(entry.category)},${sanitizeField(entry.action)},${sanitizeField(entry.targetId)},${sanitizeField(entry.value)},"${safePayload}"\n`;
 
         try {
             fs.appendFileSync(this.logFilePath, line, 'utf8');

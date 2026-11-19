@@ -135,8 +135,9 @@
 - [ ] LLM Structured Outputs（Zod + JSON Schema）を導入する。
   - 説明: LLMの介入プランをアプリケーション側の型定義から生成したJSON Schemaに拘束し、構造化された応答を型安全に受け取る。
   - [x] `LlmInterventionPlan` / `LlmEdit` に対応するZodスキーマを定義する。
-    - Jules Memo: Zodを導入し、LlmEditSchemaとLlmInterventionPlanSchemaを定義しました。TypeScriptの型定義もz.inferを使用してDRYに保つように修正しました。
-  - [ ] ZodスキーマからJSON Schemaを自動生成し、OpenAI等の直接APIのStructured Outputs（`strict: true`）へ渡す。
+    - Jules Memo: `src/types/llmIntervention.ts` で `z.object` と `z.enum` を用いてZodスキーマを定義し、`z.infer` に置き換え。`planValidator.ts`の独自型検証ロジックをZodの `safeParse` に置き換え。
+  - [x] ZodスキーマからJSON Schemaを自動生成し、OpenAI等の直接APIのStructured Outputs（`strict: true`）へ渡す。
+    - Jules Memo: zod-to-json-schemaを利用し、src/core/llm/promptBuilder.tsのハードコードされたINTERVENTION_RESPONSE_SCHEMAをLlmInterventionPlanSchemaからの自動生成に置き換えました。
   - [ ] 直接API用のLLMプロバイダー抽象化を追加し、VS Code Language Model APIと切り替え可能にする。
   - [ ] Zodによるレスポンス再検証と、スキーマ不一致・拒否応答・タイムアウト時のエラー処理を追加する。
   - [ ] 判定結果を `HoverProvider` と `CodeActionProvider` が参照する仕組みを追加する。(次にやるべきこと)
@@ -144,4 +145,25 @@
 - [ ] LLM Structured Outputs（Zod + JSON Schema）の更なる厳格化
 - [ ] Webviewから送信されるメッセージアクションの型安全性をさらに高めるリファクタリング
 - [ ] Tabキーによるワンタッチ適用の機能を、より広い範囲（インライン補完や複数候補時の選択UI）に拡張する。
-- [ ] ZodスキーマからJSON Schemaを自動生成し、OpenAI等の直接APIのStructured Outputs（`strict: true`）へ渡す。
+
+## 🚀 6. UI/UX Redesign & Future Architecture (Next-Generation Agents)
+> **⚠️ ATTENTION NEXT-GENERATION AGENTS:**
+> 以下の項目は現在のスプリントのスコープ外ですが、長期的なビジョンのために不可欠な要素です。
+> 将来のフェーズ（または次世代のAIエージェント）に実装を委譲します。適宜ロードマップとして参照してください。
+
+- [x] **AIワークスペースの可視化と分離 (非侵入型UIの実現)**
+  - 説明: ユーザーの作業を邪魔せず、裏側でAI版のコードを維持・改善する仕組みへの移行。
+  - [x] 既存のVS CodeネイティブDiffView自動展開を廃止し、バックグラウンド同期のみに留める（extension.ts の ensureDiffViewIsOpen のリファクタリング）。
+  - [x] Webview (Monaco Editor) を用いたカスタムAIワークスペースパネル（サイドバー等）の構築。
+- [x] **GitHub風のDiff表示とインタラクティブな学習支援（基盤実装）**
+  - 説明: サイドパネル内でのAI版コード表示において、差分をハイライトし、クリック可能な指摘事項・解説を付与する。
+  - [x] 現在の DiffProvider の責務を、WebviewへのDiffデータ転送とReact側でのデコレーション描画に移行・拡張する。
+  - [x] Reactコンポーネントで、提案行に対するポップオーバー（変更理由、設計上の改善ポイント、ミスの解説等）を実装する。
+- [ ] **【Next-Gen】Side-by-SideのDiffビューとチャット連携**
+  - [ ] 単一エディタのインラインハイライトから、GitHub PRレビューのようなSide-by-SideのDiffビューへの移行（UIの拡張）。
+  - [ ] 提案に対する対話的質問機能（ポップオーバー内でのAIチャット）の実装。
+- [ ] **同期と自律的改善のライフサイクル構築**
+  - 説明: ユーザーの「ファイルセーブ」をトリガーにAIワークスペースのベースを同期し、バックグラウンドでのポーリングで自律的改善を回す機能。
+  - [ ] llmBackgroundService.ts と連携し、セーブ時にベース状態を即時同期するフローの確立。
+  - [ ] 独立した「AIワークスペース状態モデル」を保持し、都度パースするのではなく差分のみを同期・更新するアーキテクチャの導入。
+  - [ ] AIがAIワークスペース上のコードを「非同期に自己改善（ブラッシュアップ）し続ける」ループの強化と、その進捗をUI（サイドバーアイコンのバッジやステータス）に非侵入型で反映する仕組みの実装。

@@ -1,357 +1,236 @@
+/**
+ * [Why/Intent] 拡張機能のエントリポイント。ライフサイクル管理（activate/deactivate）、
+ * 各種サービス初期化、LlmGatewayと依存性のDI配線、およびコマンド登録を統括する。
+ * ユーザーの作業領域（左側のVS Codeテキストエディタ）には一切侵入しない（ホバー・背景色・Gutterアイコン・行末テキスト等を表示しない）
+ * 非侵襲スタンスを徹底し、すべてのAI介入表示・操作を右側のAI作業スペース（SideEditor Webview）へ集約する。
+ */
 import * as vscode from 'vscode';
-import { SidebarProvider } from './vscode-utils/SidebarProvider';
-import { VibeHoverProvider } from './core/HoverProvider';
-import { VibeCodeActionProvider } from './core/CodeActionProvider';
-import { VibeStatusBar } from './vscode-utils/StatusBar';
-import { GlobalState } from './state/globalState';
-import { DiagnosticsService } from './core/diagnosticsService';
-import { SilentFixService } from './core/silentFixService';
-import { ActionLogService } from './core/actionLogService';
-import { AdaptiveEngine } from './core/adaptiveEngine';
-import { SharedAnalysisCache } from './core/analyzer';
-import { LlmBackgroundService } from './core/llmBackgroundService';
-import { EditorDecorator } from './core/editorDecorator';
-import { ProposalCodeLensProvider } from './core/proposalCodeLensProvider';
-import { AnalysisResult } from './types';
-import { findOriginalTextRange } from './core/llm/planValidator';
-import { DiffProvider, DIFF_SCHEME } from './core/diffProvider';
-
 import { registerCommands } from './commands';
+import { ActionLogService } from './core/actionLogService';
+import { DiagnosticsService } from './core/diagnosticsService';
+import { LlmConfigRepository } from './core/llm/llmConfigRepository';
+import { LlmGateway } from './core/llm/llmGateway';
+import { LlmBackgroundService } from './core/llmBackgroundService';
+import { LlmInterventionService } from './core/llmInterventionService';
+import { ActiveInterventionService } from './core/onDemand/activeInterventionService';
+import { InterventionQuickPick } from './core/onDemand/interventionQuickPick';
+import { PersonalizationService } from './core/personalization/personalizationService';
+import { SilentFixService } from './core/silentFixService';
+import { GlobalState } from './state/globalState';
+import { SideEditorProvider } from './vscode-utils/SideEditorProvider';
+import { VibeStatusBar } from './vscode-utils/StatusBar';
 
-export function activate(context: vscode.ExtensionContext) {
-	GlobalState.getInstance().initialize(context);
-
-	// ワークスペースパスの解決
-	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-
-	// Phase 2 & 3: サービスの初期化
-	const actionLogService = new ActionLogService(workspaceRoot);
-	const adaptiveEngine = new AdaptiveEngine(3);
-	const diagnosticsService = new DiagnosticsService();
-	const llmBackgroundService = new LlmBackgroundService(context.secrets);
-	const editorDecorator = new EditorDecorator();
-
-	const { PersonalizationService } = require('./core/personalization/personalizationService');
-	const { GeminiClient } = require('./core/llm/geminiClient');
-	const { VscodeLmClient } = require('./core/llm/vscodeLmClient');
-	const getApiKey = async () => { return await context.secrets.get('vibecodeease.geminiApiKey'); };
-	const personalizationService = new PersonalizationService(context.globalStorageUri, new GeminiClient(), new VscodeLmClient(), getApiKey);
-	personalizationService.initialize();
-
-	const silentFixService = new SilentFixService(personalizationService);
-	const codeLensProvider = new ProposalCodeLensProvider(personalizationService);
-
-	const diffProvider = new DiffProvider();
-	context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(DIFF_SCHEME, diffProvider));
-
-	context.subscriptions.push(
-		llmBackgroundService.onDidCompleteAnalysis((uri) => {
-			const modifiedUri = vscode.Uri.parse(`${DIFF_SCHEME}://modified${uri.path}`);
-			diffProvider.update(modifiedUri);
-		})
-	);
-
-	const ensureDiffViewIsOpen = async (editor: vscode.TextEditor | undefined) => {
-		if (!editor) return;
-		if (editor.document.uri.scheme !== 'file') return;
-
-		const triggerMode = GlobalState.getInstance().llmTriggerMode;
-		if (triggerMode === 'disabled') return;
-
-		const tabs = vscode.window.tabGroups.activeTabGroup?.tabs || [];
-		const isDiffOpen = tabs.some(tab => {
-			if (tab.input instanceof vscode.TabInputTextDiff) {
-				return tab.input.original.toString() === editor.document.uri.toString() &&
-					   tab.input.modified.scheme === DIFF_SCHEME;
-			}
-			return false;
-		});
-
-		if (!isDiffOpen) {
-			const uri = editor.document.uri;
-			const modifiedUri = vscode.Uri.parse(`${DIFF_SCHEME}://modified${uri.path}`);
-			await vscode.commands.executeCommand('vscode.diff', uri, modifiedUri, `${uri.path.split('/').pop()} (Original ↔ AI Proposed)`, { preserveFocus: true, preview: true });
-		}
-	};
-
-	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(ensureDiffViewIsOpen));
-	if (vscode.window.activeTextEditor) {
-		ensureDiffViewIsOpen(vscode.window.activeTextEditor);
-	}
-
-	context.subscriptions.push(
-		vscode.commands.registerCommand('vibecodeease.showDiff', async () => {
-			const editor = vscode.window.activeTextEditor;
-			if (!editor) return;
-			const uri = editor.document.uri;
-			const modifiedUri = vscode.Uri.parse(`${DIFF_SCHEME}://modified${uri.path}`);
-			await vscode.commands.executeCommand('vscode.diff', uri, modifiedUri, `${uri.path.split('/').pop()} (Original ↔ AI Proposed)`);
-		})
-	);
-
-	// 保存時自動修正（SILENT）のコールバック配線
-	silentFixService.setOnFixAppliedCallback((fixCount, docUri) => {
-		vscode.window.setStatusBarMessage(`$(zap) 保存時に${fixCount}件の問題を自動修正しました`, 3000);
-		actionLogService.log({
-			category: 'SILENT_FIX',
-			action: 'APPLY_ON_SAVE',
-			targetId: docUri,
-			value: fixCount,
-			payload: `Automatically fixed ${fixCount} issues on save`
-		});
-	});
-
-	// サイドバーProviderの初期化とアクションコールバック配線
-	const sidebarProvider = new SidebarProvider(context.extensionUri, context.secrets, llmBackgroundService, personalizationService);
-	sidebarProvider.getMessageHandler().setActionCallback((action, plan, docUri) => {
-		// ログ記録
-		actionLogService.log({
-			category: 'LLM_PLAN',
-			action,
-			targetId: docUri,
-			value: plan.edits.length,
-			payload: plan.summary
-		});
-
-		// 適応エンジンへの通知（各編集のカテゴリごとに記録）
-		for (const edit of plan.edits) {
-			adaptiveEngine.recordAction(edit.category, action);
-		}
-	});
-
-	// プロバイダー・リスナーの登録
-	context.subscriptions.push(
-		vscode.workspace.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration('vibecodeease')) {
-				GlobalState.getInstance().reloadConfiguration();
-			}
-		})
-	);
-
-	context.subscriptions.push(
-		vscode.window.registerWebviewViewProvider(
-			"vibecodeease.sidebarView",
-			sidebarProvider
-		)
-	);
-
-	context.subscriptions.push(
-		vscode.languages.registerHoverProvider('*', new VibeHoverProvider(personalizationService))
-	);
-
-	context.subscriptions.push(
-		vscode.languages.registerCodeActionsProvider(
-			'*',
-			new VibeCodeActionProvider(),
-			{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }
-		)
-	);
-
-	context.subscriptions.push(diagnosticsService);
-	context.subscriptions.push(silentFixService);
-	context.subscriptions.push(llmBackgroundService);
-	context.subscriptions.push(editorDecorator);
-	context.subscriptions.push(
-		vscode.languages.registerCodeLensProvider('*', codeLensProvider)
-	);
-
-	const refreshLiveIssuesCmd = vscode.commands.registerCommand('vibecodeease.refreshLiveIssues', () => {
-		sidebarProvider.pushLiveIssues();
-	});
-	context.subscriptions.push(refreshLiveIssuesCmd);
-
-	const disposable = vscode.commands.registerCommand('vibecodeease.helloWorld', () => {
-		vscode.window.showInformationMessage('Hello World from vibeCodeEase!');
-	});
-	context.subscriptions.push(disposable);
-
-	const applyInterventionCommand = vscode.commands.registerCommand('vibecodeease.applyIntervention', async (uri: vscode.Uri, range: vscode.Range, newText: string) => {
-		if (!uri || !range || typeof newText !== 'string') {
-			return;
-		}
-		const edit = new vscode.WorkspaceEdit();
-		edit.replace(uri, range, newText);
-		const applied = await vscode.workspace.applyEdit(edit);
-		if (applied) {
-			vscode.window.setStatusBarMessage('$(check) 修正を適用しました', 3000);
-			actionLogService.log({
-				category: 'SYSTEM',
-				action: 'APPLY',
-				targetId: uri.toString(),
-				payload: 'Applied intervention via command'
-			});
-		}
-	});
-	context.subscriptions.push(applyInterventionCommand);
-
-	const reviewInterventionCommand = vscode.commands.registerCommand('vibecodeease.reviewIntervention', async (uri: vscode.Uri, result: AnalysisResult, id: string) => {
-		if (!uri || !result) {
-			return;
-		}
-		const intervention = result.interventions[0];
-		if (!intervention || !intervention.replacementText) {
-			return;
-		}
-
-		// 🤖 提案理由を整形
-		const reasonMatch = intervention.message?.match(/🤖 \*\*AI 提案\*\*: (.*)/s);
-		const reason = reasonMatch ? reasonMatch[1] : (intervention.message ?? '理由の記載はありません。');
-
-		const oldCode = intervention.originalText || '';
-		const newCode = intervention.replacementText;
-
-		// モーダルダイアログで確認
-		const action = await vscode.window.showInformationMessage(
-			`🤖 提案理由:\n${reason}\n\n================\n【変更前】\n${oldCode}\n\n【変更後】\n${newCode}\n================`,
-			{ modal: true },
-			'✨ 適用',
-			'✕ 却下'
-		);
-
-		if (action === '✨ 適用') {
-			const editor = vscode.window.activeTextEditor;
-			if (!editor || editor.document.uri.toString() !== uri.toString()) {
-				vscode.window.showErrorMessage('適用先のファイルがアクティブではありません。');
-				return;
-			}
-			const edit = new vscode.WorkspaceEdit();
-			let range = new vscode.Range(
-				result.range.start.line, result.range.start.character,
-				result.range.end.line, result.range.end.character
-			);
-			// ズレ補正
-			if (intervention.originalText) {
-				const dynamicRange = findOriginalTextRange(editor.document, intervention.originalText, result.range.start.line, result.range.start.character);
-				if (dynamicRange) {
-					range = dynamicRange;
-				} else {
-					vscode.window.showErrorMessage('コードが大幅に変更されたため、適用位置を特定できませんでした。');
-					return;
-				}
-			}
-
-			edit.replace(uri, range, newCode);
-			const applied = await vscode.workspace.applyEdit(edit);
-			if (applied) {
-				SharedAnalysisCache.getInstance().ignoreIssue(id);
-				vscode.window.setStatusBarMessage('$(check) 修正を適用しました', 3000);
-				actionLogService.log({
-					category: 'SYSTEM',
-					action: 'APPLY_REVIEW',
-					targetId: uri.toString(),
-					payload: 'Applied intervention after review'
-				});
-			}
-		} else if (action === '✕ 却下') {
-			vscode.commands.executeCommand('vibecodeease.rejectIntervention', id);
-		}
-	});
-	context.subscriptions.push(reviewInterventionCommand);
-
-	const rejectInterventionCommand = vscode.commands.registerCommand('vibecodeease.rejectIntervention', (id: string) => {
-		if (id) {
-			SharedAnalysisCache.getInstance().ignoreIssue(id);
-			vscode.window.setStatusBarMessage('$(close) 提案を却下しました', 3000);
-			vscode.commands.executeCommand('vibecodeease.refreshLiveIssues');
-			
-			// If CodeLens/Decorations need refresh
-			// It should happen naturally via onDidChangeState or text changes, but to force:
-			const editor = vscode.window.activeTextEditor;
-			if (editor) {
-				editorDecorator.updateDecorations(editor);
-			}
-		}
-	});
-	context.subscriptions.push(rejectInterventionCommand);
-
-	const tabToApplyCommand = vscode.commands.registerCommand('vibecodeease.tabToApply', async () => {
-		const editor = vscode.window.activeTextEditor;
-		if (!editor) {
-			return vscode.commands.executeCommand('tab');
-		}
-
-		const document = editor.document;
-		const selection = editor.selection;
-		const globalState = GlobalState.getInstance();
-
-		const results = SharedAnalysisCache.getInstance().getResults(document);
-
-		for (const result of results) {
-			if (result.range.start.line > selection.end.line) {
-				break;
-			}
-
-			const level = globalState.getInterventionLevel(result.category);
-			if (level === 'IGNORE') {
-				continue;
-			}
-
-			const resultRange = new vscode.Range(
-				result.range.start.line, result.range.start.character,
-				result.range.end.line, result.range.end.character
-			);
-
-			if (selection.contains(resultRange.start) || selection.contains(resultRange.end) || selection.intersection(resultRange) || selection.start.line === resultRange.start.line) {
-				if (result.interventions.length > 0 && result.interventions[0].replacementText) {
-					const newText = result.interventions[0].replacementText;
-					const edit = new vscode.WorkspaceEdit();
-					edit.replace(document.uri, resultRange, newText);
-					const applied = await vscode.workspace.applyEdit(edit);
-					if (applied) {
-						vscode.window.setStatusBarMessage('$(check) 修正をワンタッチ適用しました', 3000);
-						actionLogService.log({
-							category: 'SYSTEM',
-							action: 'APPLY_TAB',
-							targetId: document.uri.toString(),
-							payload: `Applied intervention via Tab key: ${result.category}`
-						});
-					}
-					return;
-				}
-			}
-		}
-
-		// If no intervention found, fallback to default tab behavior
-		return vscode.commands.executeCommand('tab');
-	});
-	context.subscriptions.push(tabToApplyCommand);
-
-	const configureGeminiKey = vscode.commands.registerCommand('vibecodeease.configureGeminiKey', async () => {
-		const apiKey = await vscode.window.showInputBox({
-			title: 'vibeCodeEase: Configure Gemini API Key',
-			prompt: 'Gemini APIキーを入力してください。キーはVS CodeのSecretStorageに保存されます。',
-			password: true,
-			ignoreFocusOut: true,
-			placeHolder: 'AIza...'
-		});
-		if (apiKey === undefined) {
-			return;
-		}
-		if (!apiKey.trim()) {
-			await context.secrets.delete('vibecodeease.geminiApiKey');
-			vscode.window.setStatusBarMessage('$(check) Gemini APIキーを削除しました。', 3000);
-			return;
-		}
-		await context.secrets.store('vibecodeease.geminiApiKey', apiKey.trim());
-		vscode.window.setStatusBarMessage('$(check) Gemini APIキーを安全に保存しました。', 3000);
-	});
-	context.subscriptions.push(configureGeminiKey);
-
-	const statusBar = new VibeStatusBar();
-	context.subscriptions.push(statusBar);
-
-	// コマンド登録
-	registerCommands(context, { actionLogService });
-
-	// セッション開始ログ
-	actionLogService.log({
-		category: 'SYSTEM',
-		action: 'SESSION_START',
-		payload: 'Extension Activated with Phase 1-3 features'
-	});
+/**
+ * [Why/Intent] VS Codeのコマンド引数（位置引数 arg1, arg2 または配列 [id, uri]）を安全に正規化するヘルパー。
+ * 2番目以降の介入案の「詳細」「採用」「却下」実行時に documentUri や id が欠落する不具合を防止する。
+ */
+export function parseInterventionCommandArgs(
+    arg1?: unknown,
+    arg2?: unknown,
+): { id?: string; uri?: string } {
+    if (Array.isArray(arg1)) {
+        const id = typeof arg1[0] === 'string' ? arg1[0] : undefined;
+        const uri = typeof arg1[1] === 'string' ? arg1[1] : undefined;
+        return { id, uri };
+    }
+    if (typeof arg1 === 'string') {
+        const uri = typeof arg2 === 'string' ? arg2 : undefined;
+        return { id: arg1, uri };
+    }
+    return {};
 }
 
-export function deactivate() {}
+/**
+ * [Why/Intent] オンデマンド介入コマンド群およびドキュメント変更時のAI作業スペース同期リスナーを登録するヘルパー関数。
+ * ユーザー作業領域（左側のエディタ）には一切の装飾（Decorator）やホバー（HoverProvider）を登録せず、
+ * 右側のAI作業スペース（SideEditor）の更新のみを行う。
+ */
+function registerOnDemandInterventions(
+    context: vscode.ExtensionContext,
+    sideEditorProvider: SideEditorProvider,
+    llmGateway: LlmGateway,
+): void {
+    const historyStore = sideEditorProvider.getHistoryStore();
+    const quickPick = new InterventionQuickPick(historyStore);
+    const activeService = new ActiveInterventionService(llmGateway, historyStore);
 
+    context.subscriptions.push(
+        vscode.window.onDidChangeActiveTextEditor((editor) => {
+            if (editor && editor.viewColumn !== vscode.ViewColumn.Beside) {
+                sideEditorProvider.sendUpdateInterventions(editor.document);
+            }
+        }),
+        vscode.workspace.onDidChangeTextDocument(async (event) => {
+            const activeEditor = vscode.window.activeTextEditor;
+            if (activeEditor?.document.uri.toString() === event.document.uri.toString()) {
+                await historyStore.validateAndAdjustRange(
+                    activeEditor.document.uri.toString(),
+                    event,
+                );
+            }
+        }),
+        vscode.commands.registerCommand('vibecodeease.showInterventionSummary', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (editor) {
+                await quickPick.show(editor);
+            }
+        }),
+        vscode.commands.registerCommand(
+            'vibecodeease.expandIntervention',
+            async (arg1?: unknown, arg2?: unknown) => {
+                const { id, uri } = parseInterventionCommandArgs(arg1, arg2);
+                if (id) {
+                    await sideEditorProvider.expandIntervention(id, uri);
+                }
+            },
+        ),
+        vscode.commands.registerCommand(
+            'vibecodeease.applyInterventionById',
+            async (arg1?: unknown, arg2?: unknown) => {
+                const { id, uri } = parseInterventionCommandArgs(arg1, arg2);
+                if (id) {
+                    const editor = vscode.window.activeTextEditor;
+                    await sideEditorProvider.applyInterventionById(
+                        id,
+                        uri ?? editor?.document.uri.toString(),
+                    );
+                }
+            },
+        ),
+        vscode.commands.registerCommand(
+            'vibecodeease.discardIntervention',
+            async (arg1?: unknown, arg2?: unknown) => {
+                const { id, uri } = parseInterventionCommandArgs(arg1, arg2);
+                if (id) {
+                    const editor = vscode.window.activeTextEditor;
+                    await sideEditorProvider.discardIntervention(
+                        id,
+                        uri ?? editor?.document.uri.toString(),
+                    );
+                }
+            },
+        ),
+        vscode.commands.registerCommand('vibecodeease.requestActiveIntervention', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (editor) {
+                await activeService.requestActiveIntervention(editor);
+            }
+        }),
+        vscode.commands.registerCommand('vibecodeease.refreshDecorations', () => {
+            // [Why/Intent] ユーザー作業領域（左エディタ）への装飾侵入を行わない方針のため no-op とする（互換性維持のためコマンド自体は存続）。
+        }),
+    );
+}
 
+/**
+ * [Why/Intent] 拡張機能の各種VS Codeコマンド（SideEditor起動・設定画面起動・HelloWorld）を登録するヘルパー関数。
+ */
+function registerExtensionCommands(
+    context: vscode.ExtensionContext,
+    sideEditorProvider: SideEditorProvider,
+): void {
+    context.subscriptions.push(
+        vscode.commands.registerCommand('vibecodeease.helloWorld', () => {
+            vscode.window.setStatusBarMessage('$(info) Hello World from vibeCodeEase!', 3000);
+        }),
+        vscode.commands.registerCommand('vibecodeease.openSideEditor', () => {
+            void sideEditorProvider.openSideEditor();
+        }),
+        vscode.commands.registerCommand('vibecodeease.openSettings', () => {
+            void sideEditorProvider.openSettings();
+        }),
+    );
+}
 
+/**
+ * [Why/Intent] VS Code拡張機能のアクティベーション関数。
+ * グローバル状態、LLMインフラ、各種サービス（ログ、診断、バックグラウンド推敲、パーソナライズ、サイドエディタ）
+ * およびAI作業スペース連携機能を順次初期化・配線する。
+ */
+export function activate(context: vscode.ExtensionContext): void {
+    GlobalState.getInstance().initialize(context);
+
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+
+    const llmConfigRepo = new LlmConfigRepository(context.secrets);
+    const llmGateway = new LlmGateway(llmConfigRepo);
+    const llmInterventionService = new LlmInterventionService(llmGateway);
+
+    const actionLogService = new ActionLogService(workspaceRoot);
+    const diagnosticsService = new DiagnosticsService();
+    const llmBackgroundService = new LlmBackgroundService(context.secrets, llmInterventionService);
+
+    const personalizationService = new PersonalizationService({
+        globalStorageUri: context.globalStorageUri,
+        gateway: llmGateway,
+        getApiKey: () => llmConfigRepo.getApiKey(),
+    });
+    void personalizationService.initialize();
+
+    const silentFixService = new SetOnFixHelper(personalizationService, actionLogService).service;
+    const sideEditorProvider = SideEditorProvider.getInstance(context, llmBackgroundService, {
+        llmInterventionService,
+    });
+
+    context.subscriptions.push(
+        llmBackgroundService.onDidCompleteAnalysis((uri) => {
+            const doc =
+                vscode.window.visibleTextEditors.find(
+                    (e) => e.document.uri.toString() === uri.toString(),
+                )?.document ??
+                vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
+            if (doc) {
+                sideEditorProvider.sendUpdateInterventions(doc);
+            }
+        }),
+        vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration('vibecodeease')) {
+                GlobalState.getInstance().reloadConfiguration();
+            }
+        }),
+        llmConfigRepo,
+        diagnosticsService,
+        silentFixService,
+        llmBackgroundService,
+        sideEditorProvider,
+        new VibeStatusBar(),
+    );
+
+    registerExtensionCommands(context, sideEditorProvider);
+    registerCommands(context, { actionLogService });
+    registerOnDemandInterventions(context, sideEditorProvider, llmGateway);
+
+    actionLogService.log({
+        category: 'SYSTEM',
+        action: 'SESSION_START',
+        payload: 'Extension Activated with Phase 1-3 features and OnDemand Interventions',
+    });
+}
+
+class SetOnFixHelper {
+    public readonly service: SilentFixService;
+    public constructor(
+        personalizationService: PersonalizationService,
+        actionLogService: ActionLogService,
+    ) {
+        this.service = new SilentFixService(personalizationService);
+        this.service.setOnFixAppliedCallback((fixCount, docUri) => {
+            vscode.window.setStatusBarMessage(
+                `$(zap) 保存時に${fixCount}件の問題を自動修正しました`,
+                3000,
+            );
+            actionLogService.log({
+                category: 'SILENT_FIX',
+                action: 'APPLY_ON_SAVE',
+                targetId: docUri,
+                value: fixCount,
+                payload: `Automatically fixed ${fixCount} issues on save`,
+            });
+        });
+    }
+}
+
+/**
+ * [Why/Intent] VS Code拡張機能の非アクティベーション時のクリーンアップ関数。
+ */
+export function deactivate(): void {}

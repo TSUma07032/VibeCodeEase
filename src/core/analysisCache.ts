@@ -1,6 +1,6 @@
-﻿import * as vscode from 'vscode';
-import { AnalysisResult } from '../types';
-import { CodeAnalyzer } from './analyzer';
+import type * as vscode from 'vscode';
+import type { AnalysisResult } from '../types';
+import type { CodeAnalyzer } from './analyzer';
 
 export interface CachedAnalysis {
     version: number;
@@ -21,14 +21,14 @@ export class AnalysisCache {
         const uri = document.uri.toString();
         const cached = this.cache.get(uri);
 
-        if (cached && cached.version === document.version) {
+        if (cached?.version === document.version) {
             return cached.results;
         }
 
         const results = analyzer.analyze(document.getText());
         this.cache.set(uri, {
             version: document.version,
-            results
+            results,
         });
         return results;
     }

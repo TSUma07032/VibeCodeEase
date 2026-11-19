@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { PainCategory, PAIN_CATEGORY_LABELS } from '../types';
 import { GlobalState } from '../state/globalState';
+import { PAIN_CATEGORY_LABELS, type PainCategory } from '../types';
 
 export interface ActionRecord {
     category: PainCategory;
@@ -28,11 +28,11 @@ export class AdaptiveEngine {
         this.history.push({
             category,
             action,
-            timestamp: Date.now()
+            timestamp: Date.now(),
         });
 
         if (action === 'APPLY') {
-            this.consecutiveCounts[category] = (this.consecutiveCounts[category] || 0) + 1;
+            this.consecutiveCounts[category] = (this.consecutiveCounts[category] ?? 0) + 1;
             return this.checkAndPromptAutoSilent(category);
         } else {
             this.consecutiveCounts[category] = 0;
@@ -47,7 +47,7 @@ export class AdaptiveEngine {
      */
     public getConsecutiveApproveCount(category: PainCategory): number {
         // ⚡ Bolt: O(N)の履歴逆走査ループを排除し、O(1)のキャッシュプロパティによる状態管理に変更して、履歴肥大化時の実行時間を ~15ms から ~1ms に削減
-        return this.consecutiveCounts[category] || 0;
+        return this.consecutiveCounts[category] ?? 0;
     }
 
     /**
@@ -59,10 +59,13 @@ export class AdaptiveEngine {
         const currentLevel = globalState.getInterventionLevel(category);
 
         if (count >= this.consecutiveThreshold && currentLevel !== 'SILENT') {
-            const categoryLabel = PAIN_CATEGORY_LABELS[category] || category;
+            const categoryLabel = PAIN_CATEGORY_LABELS[category] ?? category;
             // ポップアップでの確認を省き、自動的にSILENTにアップグレードしてステータスバーで通知する
-            globalState.updatePreference(category, 0.9).then(() => {
-                vscode.window.setStatusBarMessage(`$(zap) 【適応型提案】「${categoryLabel}」を連続承認したため、自動修正(SILENT)に切り替えました`, 5000);
+            void globalState.updatePreference(category, 0.9).then(() => {
+                vscode.window.setStatusBarMessage(
+                    `$(zap) 【適応型提案】「${categoryLabel}」を連続承認したため、自動修正(SILENT)に切り替えました`,
+                    5000,
+                );
             });
             return true;
         }
@@ -70,4 +73,3 @@ export class AdaptiveEngine {
         return false;
     }
 }
-

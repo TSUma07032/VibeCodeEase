@@ -1,0 +1,174 @@
+/**
+ * [Why/Intent] ユーザー逆指名（右クリックコンテキストメニュー ➜ showInputBox ➜ 提案生成）を
+ * 統括するサービス。選択範囲の検証、現在のペルソナに応じたLLM呼出、UUID採番、履歴保存、Webview展開連携を行う。
+ */
+import * as vscode from 'vscode';
+import { GlobalState } from '../../state/globalState';
+import type { InterventionDetail } from '../../types/onDemandIntervention';
+import type { ILlmGateway } from '../llm/llmGateway';
+import {
+    ACTIVE_INTERVENTION_RESPONSE_SCHEMA,
+    formatInterventionOneLiner,
+    formatPersonaSummary,
+    getPersonaOpeningMessage,
+    PERSONA_PROMPTS,
+} from '../llm/promptBuilder';
+import type { InterventionHistoryStore } from './interventionHistoryStore';
+
+/**
+ * [Why/Intent] LLMゲートウェイから構造化出力として返却される逆指名提案のレスポンス構造。
+ */
+interface ActiveInterventionResponse {
+    title: string;
+    summary: string;
+    proposedCode: string;
+}
+
+/**
+ * [Why/Intent] ユーザーのコード選択と能動的指示（プロンプト）に基づき、
+ * バックグラウンドでAI推敲案を生成してインライン装飾とサイドパネルへ反映するサービス。
+ */
+export class ActiveInterventionService {
+    public constructor(
+        readonly _gateway: ILlmGateway,
+        readonly _historyStore: InterventionHistoryStore,
+    ) {}
+
+    /**
+     * [Why/Intent] エディタ上の選択範囲とユーザー入力プロンプトを受け取り、
+     * プログレス通知を表示しながら逆指名介入提案を生成・保存・Webview展開する。
+     */
+    public async requestActiveIntervention(editor: vscode.TextEditor): Promise<string | undefined> {
+        if (!editor.selection || editor.selection.isEmpty) {
+            vscode.window.setStatusBarMessage(
+                '$(warning) コード範囲を選択してから実行してください。',
+                3000,
+            );
+            return undefined;
+        }
+
+        const instruction = await vscode.window.showInputBox({
+            title: 'vibeCodeEase: AIへの指示',
+            prompt: 'AIへの指示・推敲内容を入力してください（例: パフォーマンスを改善して）',
+            placeHolder: '指示内容...',
+        });
+
+        if (!instruction || instruction.trim() === '') {
+            return undefined;
+        }
+
+        return vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Window,
+                title: 'vibeCodeEase: AI提案を生成中...',
+                cancellable: false,
+            },
+            async () => {
+                const id = await this.requestActiveInterventionWithInstruction(
+                    editor,
+                    instruction.trim(),
+                );
+
+                if (id) {
+                    void vscode.commands.executeCommand('vibecodeease.refreshDecorations');
+                    void vscode.commands.executeCommand('vibecodeease.expandIntervention', id);
+                }
+
+                return id;
+            },
+        );
+    }
+
+    /**
+     * [Why/Intent] 指定された指示テキストと選択範囲のコードに基づき、
+     * 選択中のペルソナを反映した構造化提案をLLMゲートウェイへリクエストし、
+     * 20〜30文字以内のタイトルおよび初手セリフ付きで履歴ストアへ永続化して採番したIDを返却する。
+     */
+    public async requestActiveInterventionWithInstruction(
+        editor: vscode.TextEditor,
+        instruction: string,
+    ): Promise<string | undefined> {
+        if (!editor.selection || editor.selection.isEmpty) {
+            return undefined;
+        }
+
+        const selectedCode = editor.document.getText(editor.selection);
+        if (!selectedCode) {
+            return undefined;
+        }
+
+        const personaId = GlobalState.getInstance().personaId;
+        const personaPrompt = PERSONA_PROMPTS[personaId] ?? PERSONA_PROMPTS.mentor;
+
+        const prompt = [
+            personaPrompt,
+            '以下のコードについて、ユーザーの指示に基づきリファクタリング・改善案を作成してください。',
+            '【厳守ルール】: コメントアウトのみの修正やTODOコメント追加のみの提案は禁止です。proposedCodeには必ず実行可能な改善後コードを記述してください。',
+            `【指示】: ${instruction}`,
+            '【対象コード】:',
+            '```',
+            selectedCode,
+            '```',
+            '以下のJSON形式で回答してください:',
+            'title: 20〜30文字以内の簡潔な提案タイトル（介入一言）',
+            'summary: 選択中のペルソナの口調・観点に基づく提案理由と変更内容の解説',
+            'proposedCode: 改善後の置き換えコード（実行可能なコード）',
+        ].join('\n');
+
+        const response = await this._gateway.generateStructured<ActiveInterventionResponse>({
+            prompt,
+            responseSchema: ACTIVE_INTERVENTION_RESPONSE_SCHEMA,
+            token: new vscode.CancellationTokenSource().token,
+        });
+
+        const detail = this.createActiveDetail(editor, instruction, response);
+        const docUri = editor.document.uri.toString();
+        await this._historyStore.saveIntervention(docUri, detail);
+
+        return detail.id;
+    }
+
+    private createActiveDetail(
+        editor: vscode.TextEditor,
+        instruction: string,
+        response: ActiveInterventionResponse | undefined,
+    ): InterventionDetail {
+        const personaId = GlobalState.getInstance().personaId;
+        const selectedCode = editor.document.getText(editor.selection);
+        const interventionId = `int-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+        const now = new Date().toISOString();
+        const formattedTitle = formatInterventionOneLiner(response?.title ?? 'AIリファクタ提案');
+        const formattedSummary = formatPersonaSummary(personaId, response?.summary ?? instruction);
+
+        return {
+            id: interventionId,
+            title: formattedTitle,
+            summary: formattedSummary,
+            range: {
+                start: {
+                    line: editor.selection.start.line,
+                    character: editor.selection.start.character,
+                },
+                end: {
+                    line: editor.selection.end.line,
+                    character: editor.selection.end.character,
+                },
+            },
+            status: 'pending',
+            personaId,
+            originalCode: selectedCode,
+            proposedCode: response?.proposedCode ?? selectedCode,
+            createdAt: now,
+            updatedAt: now,
+            chatHistory: [
+                {
+                    id: `msg-init-${Date.now()}`,
+                    sender: 'ai',
+                    message: getPersonaOpeningMessage(personaId, formattedTitle),
+                    timestamp: now,
+                    personaId,
+                },
+            ],
+        };
+    }
+}
