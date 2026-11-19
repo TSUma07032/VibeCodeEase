@@ -152,6 +152,11 @@
           "type": "number",
           "default": 30,
           "description": "Communication interval in seconds (30-3600)"
+        },
+        "vibecodeease.scrollSync": {
+          "type": "boolean",
+          "default": true,
+          "description": "ユーザー作業エディタとAI作業サイドバーのスクロール位置を双方向に同期します"
         }
       }
     }

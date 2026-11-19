@@ -1,10 +1,10 @@
 /**
  * [Why/Intent] vibeCodeEase サイドバーのReact側ルートコンポーネント。
- * ExtensionからのIPCメッセージを購読し、初期状態（SidebarInitialView: 上部「AI作業コード」＋下部「トグル式介入掲示板リスト」＋開閉式設定）と
- * 介入対話パネル（SidebarDialogueView: チャット＆詳細画面）の画面遷移（sidebarMode）および状態管理を統括する。
- * 「詳細」ボタン押下時には、常に一番上の介入案ではなく、その時押された介入IDの詳細・チャット履歴を確実に展開する。
+ * ExtensionからのIPCメッセージを購読し、常時表示の左ペイン（SidebarInitialView: AI作業コード＋介入掲示板＋設定）と、
+ * 「詳細」押下時にサイドバーを一時拡大して右隣へ並べる右ペイン（SidebarDialogueView: before/after＋AIチャット）による
+ * 縦3ライン構成（ユーザー作業エディタ｜AI作業コード｜詳細＆チャット）および双方向スクロール同期を統括する。
  */
-import { useEffect, useState } from 'react';
+import { type CSSProperties, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { SidebarDialogueView } from './components/SidebarDialogueView';
 import { SidebarInitialView } from './components/SidebarInitialView';
@@ -19,15 +19,18 @@ import type {
     PersonaId,
 } from './types/onDemandIntervention';
 import type { ExtensionToWebviewInterventionMessage } from './types/onDemandIpcMessages';
+import {
+    computeScrollTopForLine,
+    findTopVisibleLine,
+} from './utils/scrollSync';
 import { vscode } from './utils/vscode';
+
+const WEBVIEW_SCROLL_SUPPRESS_MS = 250;
 
 /**
  * [Why/Intent] メインアプリケーションコンポーネント。
  */
 function App() {
-    const [sidebarMode, setSidebarMode] = useState<'initial' | 'dialogue'>(
-        'initial',
-    );
     const [selectedDetail, setSelectedDetail] =
         useState<InterventionDetail | null>(null);
     const [interventions, setInterventions] = useState<InterventionItem[]>([]);
@@ -44,15 +47,39 @@ function App() {
     );
     const [intervalSeconds, setIntervalSeconds] = useState<number>(60);
     const [model, setModel] = useState<string>('gemini-3.5-flash-lite');
+    const [scrollSyncEnabled, setScrollSyncEnabled] = useState<boolean>(true);
+    const [editorFontSize, setEditorFontSize] = useState<number | undefined>(
+        undefined,
+    );
+    const [editorLineHeight, setEditorLineHeight] = useState<
+        number | undefined
+    >(undefined);
+
+    // スクロール同期用の参照・ループ抑止ロック
+    const sidebarContainerRef = useRef<HTMLDivElement | null>(null);
+    const scrollSyncEnabledRef = useRef<boolean>(true);
+    const suppressWebviewScrollUntilRef = useRef<number>(0);
+    const lastSentTopLineRef = useRef<number | null>(null);
+    const scrollRafIdRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        scrollSyncEnabledRef.current = scrollSyncEnabled;
+    }, [scrollSyncEnabled]);
 
     // ローディング・エラー状態
     const [isRefining, setIsRefining] = useState<boolean>(false);
     const [refineError, setRefineError] = useState<string | null>(null);
     const [isChatLoading, setIsChatLoading] = useState<boolean>(false);
 
-    // 初期マウント時に1度だけ ready ハンドシェイクを送信する
+    // 初期マウント時に1度だけ ready ハンドシェイクを送信し、アンマウント時にrAFを破棄する
     useEffect(() => {
         vscode.postMessage({ command: 'ready' });
+        return () => {
+            if (scrollRafIdRef.current !== null) {
+                window.cancelAnimationFrame(scrollRafIdRef.current);
+                scrollRafIdRef.current = null;
+            }
+        };
     }, []);
 
     useEffect(() => {
@@ -86,13 +113,36 @@ function App() {
                     case 'SYNC_DOCUMENT':
                         setDocumentText(message.text);
                         setDocumentFileName(message.fileName);
+                        lastSentTopLineRef.current = null;
                         break;
+                    case 'SYNC_EDITOR_SCROLL': {
+                        if (!scrollSyncEnabledRef.current) {
+                            break;
+                        }
+                        const container = sidebarContainerRef.current;
+                        if (!container) {
+                            break;
+                        }
+                        const nextScrollTop = computeScrollTopForLine(
+                            container,
+                            message.topLine,
+                        );
+                        if (nextScrollTop === null) {
+                            break;
+                        }
+                        lastSentTopLineRef.current = message.topLine;
+                        if (Math.abs(container.scrollTop - nextScrollTop) > 1) {
+                            suppressWebviewScrollUntilRef.current =
+                                Date.now() + WEBVIEW_SCROLL_SUPPRESS_MS;
+                            container.scrollTop = nextScrollTop;
+                        }
+                        break;
+                    }
                     case 'EXPAND_INTERVENTION_DETAIL':
-                        // [Why/Intent] ホバーまたは掲示板の「詳細」押下時にバッチング遅延なく即座に該当IDの対話画面へ切り替える（RULE-007）
+                        // [Why/Intent] ホバーまたは掲示板・フローティングバーの「詳細」押下時にバッチング遅延なく即座に該当IDの詳細＆チャットペインを右隣へ展開する（RULE-007）
                         flushSync(() => {
                             setSelectedDetail(message.payload.detail);
                             setPersonaId(message.payload.persona);
-                            setSidebarMode('dialogue');
                         });
                         break;
                     case 'UPDATE_INTERVENTION_DETAIL':
@@ -182,10 +232,31 @@ function App() {
                         if ('personaId' in message && message.personaId) {
                             setPersonaId(message.personaId as PersonaId);
                         }
+                        if (
+                            'scrollSyncEnabled' in message &&
+                            typeof message.scrollSyncEnabled === 'boolean'
+                        ) {
+                            scrollSyncEnabledRef.current =
+                                message.scrollSyncEnabled;
+                            setScrollSyncEnabled(message.scrollSyncEnabled);
+                        }
+                        if (
+                            'editorFontSize' in message &&
+                            typeof message.editorFontSize === 'number' &&
+                            message.editorFontSize > 0
+                        ) {
+                            setEditorFontSize(message.editorFontSize);
+                        }
+                        if (
+                            'editorLineHeight' in message &&
+                            typeof message.editorLineHeight === 'number' &&
+                            message.editorLineHeight > 0
+                        ) {
+                            setEditorLineHeight(message.editorLineHeight);
+                        }
                         break;
                     case 'NAVIGATE_TO_SETTINGS':
                         setSelectedDetail(null);
-                        setSidebarMode('initial');
                         setIsSettingsOpen(true);
                         break;
                     case 'UPDATE_INTERVENTIONS':
@@ -266,6 +337,66 @@ function App() {
     };
 
     /**
+     * [Why/Intent] エディタとサイドバー間の双方向スクロール同期設定を更新し、
+     * ExtensionへUPDATE_QUICK_SETTINGSメッセージを送信してVS Code設定（scrollSync）へ永続化する。
+     */
+    const handleScrollSyncChange = (enabled: boolean) => {
+        scrollSyncEnabledRef.current = enabled;
+        setScrollSyncEnabled(enabled);
+        lastSentTopLineRef.current = null;
+        vscode.postMessage({
+            type: 'UPDATE_QUICK_SETTINGS',
+            payload: { scrollSyncEnabled: enabled },
+        });
+    };
+
+    /**
+     * [Why/Intent] ユーザーがサイドバー側で手動操作を開始した際、
+     * エディタ追従由来のスクロール抑止ロックを即座に解除し応答遅延をなくす。
+     */
+    const handleManualScrollIntent = () => {
+        suppressWebviewScrollUntilRef.current = 0;
+    };
+
+    /**
+     * [Why/Intent] サイドバーのスクロール位置を現在先頭のコード行番号へ変換し、
+     * rAFスロットリング付きでExtension（左エディタ）へ同期送信する。
+     */
+    const handleSidebarScroll = () => {
+        if (!scrollSyncEnabledRef.current) {
+            return;
+        }
+        if (Date.now() < suppressWebviewScrollUntilRef.current) {
+            return;
+        }
+        if (scrollRafIdRef.current !== null) {
+            return;
+        }
+        scrollRafIdRef.current = window.requestAnimationFrame(() => {
+            scrollRafIdRef.current = null;
+            if (!scrollSyncEnabledRef.current) {
+                return;
+            }
+            if (Date.now() < suppressWebviewScrollUntilRef.current) {
+                return;
+            }
+            const container = sidebarContainerRef.current;
+            if (!container) {
+                return;
+            }
+            const topLine = findTopVisibleLine(container);
+            if (topLine === null || topLine === lastSentTopLineRef.current) {
+                return;
+            }
+            lastSentTopLineRef.current = topLine;
+            vscode.postMessage({
+                type: 'SYNC_WEBVIEW_SCROLL',
+                payload: { topLine },
+            });
+        });
+    };
+
+    /**
      * [Why/Intent] 入力されたGemini APIキーをExtensionへ送信（UPDATE_API_KEY）し、
      * 安全なシークレットストア（SecretStorage）へ暗号化永続化する。
      */
@@ -318,7 +449,10 @@ function App() {
             chatHistory: existingChat,
         };
         setSelectedDetail(detail);
-        setSidebarMode('dialogue');
+        vscode.postMessage({
+            type: 'SET_DETAIL_PANEL_OPEN',
+            payload: { isOpen: true },
+        });
         vscode.postMessage({
             type: 'REQUEST_EXPAND_DETAIL',
             payload: { interventionId: id },
@@ -326,12 +460,15 @@ function App() {
     };
 
     /**
-     * [Why/Intent] 対話パネルから初期画面（AI作業スペース＋掲示板リスト）へ戻るハンドラ。
+     * [Why/Intent] 右側の詳細＆チャットペインを閉じ、サイドバー幅を元のサイズへ復元するハンドラ。
      */
-    const handleBackToInitial = () => {
+    const handleCloseDetail = () => {
         setSelectedDetail(null);
         setRefineError(null);
-        setSidebarMode('initial');
+        vscode.postMessage({
+            type: 'SET_DETAIL_PANEL_OPEN',
+            payload: { isOpen: false },
+        });
     };
 
     /**
@@ -430,24 +567,34 @@ function App() {
         });
     };
 
+    const isDetailOpen = selectedDetail !== null;
+
+    const layoutStyle: CSSProperties & Record<string, string | number | undefined> =
+        {
+            ...(editorFontSize !== undefined
+                ? { '--vce-editor-font-size': `${editorFontSize}px` }
+                : {}),
+            ...(editorLineHeight !== undefined
+                ? { '--vce-editor-line-height': `${editorLineHeight}px` }
+                : {}),
+        };
+
     return (
         <div
-            className="sidebar-container"
-            style={{
-                height: '100vh',
-                width: '100%',
-                maxWidth: '100%',
-                minWidth: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                boxSizing: 'border-box',
-                overflowX: 'hidden',
-                overflowY: 'auto',
-                scrollbarGutter: 'stable',
-            }}
+            data-testid="sidebar-split-layout"
+            className={`sidebar-container sidebar-split-layout${isDetailOpen ? ' is-detail-open' : ''}`}
+            style={layoutStyle}
         >
-            {/* メイン画面描画: sidebarMode による切り替え */}
-            {sidebarMode === 'initial' ? (
+            {/* 左ペイン（全体3ラインの中央）：AI作業コード＆介入掲示板（常時表示・スクロール同期対象） */}
+            <div
+                ref={sidebarContainerRef}
+                className="sidebar-workspace-pane"
+                data-testid="sidebar-scroll-container"
+                onScroll={handleSidebarScroll}
+                onWheel={handleManualScrollIntent}
+                onPointerDown={handleManualScrollIntent}
+                onTouchStart={handleManualScrollIntent}
+            >
                 <SidebarInitialView
                     personaId={personaId}
                     onPersonaChange={handlePersonaChange}
@@ -470,21 +617,32 @@ function App() {
                     onToggleSettings={() =>
                         setIsSettingsOpen((prev) => !prev)
                     }
+                    scrollSyncEnabled={scrollSyncEnabled}
+                    onScrollSyncChange={handleScrollSyncChange}
                 />
-            ) : selectedDetail ? (
-                <SidebarDialogueView
-                    detail={selectedDetail}
-                    onBack={handleBackToInitial}
-                    onRefine={handleRefine}
-                    isRefining={isRefining}
-                    refineError={refineError}
-                    onSendMessage={handleSendMessage}
-                    isChatLoading={isChatLoading}
-                    onApply={handleApply}
-                    onUndo={handleUndo}
-                    onReject={handleReject}
-                />
-            ) : null}
+            </div>
+
+            {/* 右ペイン（全体3ラインの右端）：「詳細」押下時のみ一時展開される before/after ＋ AIチャット画面 */}
+            {selectedDetail && (
+                <div
+                    className="sidebar-detail-pane"
+                    data-testid="sidebar-detail-pane"
+                >
+                    <SidebarDialogueView
+                        detail={selectedDetail}
+                        onBack={handleCloseDetail}
+                        closeButtonLabel="✕ 詳細を閉じる"
+                        onRefine={handleRefine}
+                        isRefining={isRefining}
+                        refineError={refineError}
+                        onSendMessage={handleSendMessage}
+                        isChatLoading={isChatLoading}
+                        onApply={handleApply}
+                        onUndo={handleUndo}
+                        onReject={handleReject}
+                    />
+                </div>
+            )}
         </div>
     );
 }

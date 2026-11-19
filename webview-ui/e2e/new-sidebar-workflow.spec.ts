@@ -100,9 +100,7 @@ test.describe('vibeCodeEase 新サイドバー UI/UX 実ブラウザ検証', () 
     );
   });
 
-  test('全面AI作業コード（新提案インライン＆過去提案右端アイコン押下でAI作業コード上にも展開）＋最下部掲示板トグル展開 ➜ 2番目の提案の「詳細」から対話ビュー遷移 ➜ チャット送信・破棄 ➜ 一覧へ戻る の一連フロー検証', async ({ page }) => {
-    const initialContainerBox = await page.locator('.sidebar-container').boundingBox();
-
+  test('AI作業コード（古い介入非表示・新提案ハイライト置換＆上側フローティング簡易バー）＋詳細押下で縦3ライン横並び展開 ➜ チャット送信・破棄 ➜ 詳細を閉じる 一連フロー検証', async ({ page }) => {
     // 1. VS Code からドキュメント同期＆複数の介入履歴状態同期イベントを受信（過去の適用済＋未対応の複数件）
     await page.evaluate(() => {
       window.dispatchEvent(
@@ -112,6 +110,7 @@ test.describe('vibeCodeEase 新サイドバー UI/UX 実ブラウザ検証', () 
             fileName: 'src/demo.ts',
             text: [
               'const oldVal = 1;',
+              'const helper = 2;',
               'export function greet(name) {',
               '  return name;',
               '}',
@@ -141,11 +140,11 @@ test.describe('vibeCodeEase 新サイドバー UI/UX 実ブラウザ検証', () 
                   id: 'prop-e2e-2',
                   title: '型アノテーションの追加',
                   summary: '明示的な型アノテーションを付与することを推奨します',
-                  range: { start: { line: 1, character: 0 }, end: { line: 3, character: 1 } },
+                  range: { start: { line: 2, character: 0 }, end: { line: 4, character: 1 } },
                   status: 'pending',
                   personaId: 'mentor',
-                  originalCode: 'function greet(name) { return name; }',
-                  proposedCode: 'function greet(name: string): string { return name; }',
+                  originalCode: 'export function greet(name) {\n  return name;\n}',
+                  proposedCode: 'export function greet(name: string): string {\n  return name;\n}',
                   createdAt: new Date().toISOString(),
                   updatedAt: new Date().toISOString(),
                 },
@@ -156,44 +155,43 @@ test.describe('vibeCodeEase 新サイドバー UI/UX 実ブラウザ検証', () 
       );
     });
 
-    // AI作業コード上で、過去の提案（prop-e2e-1）は行右端のちっちゃいアイコン（✓介入1）、
-    // 新しい提案（prop-e2e-2）はインラインボックスとして表示されること
-    const pastIcon1 = page.getByTestId('workspace-past-icon-prop-e2e-1');
-    await expect(pastIcon1).toBeVisible();
-    await expect(pastIcon1).toContainText('✓介入1');
-    await expect(page.getByTestId('workspace-pending-box-prop-e2e-2')).toBeVisible();
+    // 古い提案（prop-e2e-1）はコード右側に表示されず、新しい提案（prop-e2e-2）は赤(-)の削除行＋緑(+)の追加行と介入2ボタンが表示されること
+    await expect(page.getByTestId('workspace-past-icon-prop-e2e-1')).toHaveCount(0);
+    const pendingBtn2 = page.getByTestId('workspace-pending-btn-prop-e2e-2');
+    await expect(pendingBtn2).toBeVisible();
+    await expect(pendingBtn2).toContainText('介入2');
+    const deletionLine = page.locator('[data-diff-kind="deletion"]').first();
+    const additionLine = page.locator('[data-diff-kind="addition"]').first();
+    await expect(deletionLine).toBeVisible();
+    await expect(deletionLine.locator('.ai-workspace-diff-sign')).toHaveText('-');
+    await expect(additionLine).toBeVisible();
+    await expect(additionLine.locator('.ai-workspace-diff-sign')).toHaveText('+');
+    await expect(additionLine).toContainText('greet(name: string): string');
 
-    // 過去分アイコン（✓介入1）を押すと、新提案と同じように「AI作業コード側でも」インラインボックス（workspace-past-box-prop-e2e-1）が開くこと
-    await expect(page.getByTestId('workspace-past-box-prop-e2e-1')).toHaveCount(0);
-    await pastIcon1.click();
-    await expect(page.getByTestId('workspace-past-box-prop-e2e-1')).toBeVisible();
-    await expect(page.getByTestId('workspace-before-prop-e2e-1')).toContainText('- var oldVal = 1;');
-    await expect(page.getByTestId('workspace-after-prop-e2e-1')).toContainText('+ const oldVal = 1;');
-
-    // 最下部掲示板では過去分も含めて「介入1：...」「介入2：...」が並んで表示されること
-    await expect(page.getByText('介入1：過去のリファクタリング提案', { exact: true })).toBeVisible();
-    await expect(page.getByText('介入2：型アノテーションの追加', { exact: true })).toBeVisible();
-
-    // 2. 2番目の提案（介入2）をクリックするとトグルが開き、before / after / 採用・却下・詳細 が表示されること
-    await page.getByTestId('proposal-toggle-prop-e2e-2').click();
-    await expect(page.getByTestId('proposal-before-prop-e2e-2')).toContainText('- function greet(name) { return name; }');
-    await expect(page.getByTestId('proposal-after-prop-e2e-2')).toContainText('+ function greet(name: string): string { return name; }');
-    await expect(page.getByTestId('proposal-apply-prop-e2e-2')).toBeVisible();
-    await expect(page.getByTestId('proposal-reject-prop-e2e-2')).toBeVisible();
-    const detailBtn2 = page.getByTestId('proposal-detail-prop-e2e-2');
+    // 介入2ボタンを押すと行を押し出さず上側フローティング簡易バー（採用 / 却下 / 詳細）が開くこと
+    await pendingBtn2.click();
+    const popover = page.getByTestId('workspace-action-popover-prop-e2e-2');
+    await expect(popover).toBeVisible();
+    await expect(popover).toHaveAttribute('data-placement', 'top');
+    await expect(page.getByTestId('workspace-apply-prop-e2e-2')).toBeVisible();
+    await expect(page.getByTestId('workspace-reject-prop-e2e-2')).toBeVisible();
+    const detailBtn2 = page.getByTestId('workspace-detail-prop-e2e-2');
     await expect(detailBtn2).toBeVisible();
 
-    // 3. 2番目の「詳細」ボタンをクリックして対話ビューへ遷移（1番目ではなく2番目が開くこと！）
+    // 2. 「💬 詳細」ボタンをクリックして縦3ライン（AI作業コード＋右隣の詳細＆チャット）へ展開
     await detailBtn2.click();
 
-    // 対話ビューで2番目の提案内容が表示されること
-    await expect(page.getByRole('button', { name: '⬅️ 一覧・簡易設定に戻る' })).toBeVisible();
-    await expect(page.getByText('型アノテーションの追加', { exact: true })).toBeVisible();
-    await expect(page.getByText('明示的な型アノテーションを付与することを推奨します')).toBeVisible();
-    await expect(page.getByText('📝 変更理由')).toBeVisible();
-    await expect(page.getByText('🔍 変更差分')).toBeVisible();
-    await expect(page.getByText('💬 AIチャット（質問・相談）')).toBeVisible();
-    await expect(page.getByText(/こんにちは！やさしい解説メンターです/)).toBeVisible();
+    const dialoguePane = page.getByTestId('sidebar-dialogue-view');
+    await expect(page.getByTestId('sidebar-split-layout')).toHaveClass(/is-detail-open/);
+    await expect(page.getByTestId('sidebar-initial-view')).toBeVisible();
+    await expect(dialoguePane).toBeVisible();
+    await expect(dialoguePane.getByTestId('close-detail-pane-btn')).toBeVisible();
+    await expect(dialoguePane.getByText('型アノテーションの追加', { exact: true })).toBeVisible();
+    await expect(dialoguePane.getByText('明示的な型アノテーションを付与することを推奨します')).toBeVisible();
+    await expect(dialoguePane.getByText('📝 変更理由')).toBeVisible();
+    await expect(dialoguePane.getByText('🔍 変更差分')).toBeVisible();
+    await expect(dialoguePane.getByText('💬 AIチャット（質問・相談）')).toBeVisible();
+    await expect(dialoguePane.getByText(/こんにちは！やさしい解説メンターです/)).toBeVisible();
 
     // 廃止された要素が存在しないこと (Negative Assertions)
     await expect(page.getByText('💡 変更方針の修正')).toHaveCount(0);
@@ -202,24 +200,25 @@ test.describe('vibeCodeEase 新サイドバー UI/UX 実ブラウザ検証', () 
     await expect(page.getByTestId('diff-accept-btn')).toHaveCount(0);
     await expect(page.getByTestId('diff-discard-btn')).toHaveCount(0);
 
-    // 画面遷移前後でサイドバー横幅が一切変化していないこと
-    const dialogueContainerBox = await page.locator('.sidebar-container').boundingBox();
-    expect(dialogueContainerBox?.width).toBe(initialContainerBox?.width);
-
-    // 4. チャット入力と送信
+    // 3. チャット入力と送信
     const chatInput = page.getByPlaceholder('この変更について質問や相談を入力...');
     await expect(chatInput).toBeVisible();
     await chatInput.fill('どのような型を付けるべきですか？');
     await page.getByRole('button', { name: '送信' }).click();
 
-    // 5. 提案を却下して却下バナーが表示されること
+    // 4. 提案を却下して却下バナーが表示され、AI作業コードのハイライト・介入2ボタンが消えること
     await page.getByRole('button', { name: '✕ 破棄' }).click();
     await expect(page.getByTestId('dismissed-banner')).toBeVisible();
+    await expect(page.getByTestId('workspace-pending-btn-prop-e2e-2')).toHaveCount(0);
 
-    // VS Code へ SEND_CHAT_MESSAGE と DISCARD_INTERVENTION が prop-e2e-2 に対して送信されたことを検証
+    // VS Code へ SET_DETAIL_PANEL_OPEN / SEND_CHAT_MESSAGE / DISCARD_INTERVENTION が送信されたことを検証
     const messages = await page.evaluate(() => (window as unknown as MockWindow).__messagesToVsCode);
     expect(messages).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({
+          type: 'SET_DETAIL_PANEL_OPEN',
+          payload: { isOpen: true },
+        }),
         expect.objectContaining({
           type: 'SEND_CHAT_MESSAGE',
           payload: expect.objectContaining({
@@ -236,14 +235,21 @@ test.describe('vibeCodeEase 新サイドバー UI/UX 実ブラウザ検証', () 
       ])
     );
 
-    // 6. 「⬅️ 一覧・簡易設定に戻る」ボタンをクリック
-    await page.getByRole('button', { name: '⬅️ 一覧・簡易設定に戻る' }).click();
-
-    // 初期ビューに戻り、却下した prop-e2e-2 もAI作業コード右端のちっちゃい過去アイコン（✕介入2）に移行していることを検証
+    // 5. 「✕ 詳細を閉じる」ボタンをクリックして右ペインを閉じ、元のレイアウト復帰メッセージを送ること
+    await page.getByTestId('close-detail-pane-btn').click();
+    await expect(page.getByTestId('sidebar-dialogue-view')).toHaveCount(0);
+    await expect(page.getByTestId('sidebar-split-layout')).not.toHaveClass(/is-detail-open/);
     await expect(page.getByText('📋 提案・依頼リスト')).toBeVisible();
-    await expect(page.getByTestId('workspace-past-icon-prop-e2e-2')).toContainText('✕介入2');
-    await expect(page.getByText('✕ 破棄済').first()).toBeVisible();
-    await expect(page.getByRole('button', { name: '⬅️ 一覧・簡易設定に戻る' })).toHaveCount(0);
+
+    const afterCloseMessages = await page.evaluate(() => (window as unknown as MockWindow).__messagesToVsCode);
+    expect(afterCloseMessages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'SET_DETAIL_PANEL_OPEN',
+          payload: { isOpen: false },
+        }),
+      ])
+    );
 
     // ブラウザコンソールエラーが0件であること
     expect(consoleErrors).toEqual([]);

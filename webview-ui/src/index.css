@@ -73,3 +73,239 @@ code {
   border-radius: 3px;
   background-color: var(--vscode-textCodeBlock-background, rgba(128, 128, 128, 0.15));
 }
+
+/* [Why/Intent] スクロール同期設定チェックボックスのアクセシブルなスタイリング（十分なヒットターゲットとキーボードフォーカス表示を保証） */
+.scroll-sync-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-block-size: 44px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.scroll-sync-checkbox {
+  accent-color: var(--vscode-button-background, #007fd4);
+  inline-size: 1.25em;
+  aspect-ratio: 1;
+  margin: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.scroll-sync-checkbox:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: 2px;
+}
+
+.scroll-sync-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* [Why/Intent] 縦3ライン構成（左：ユーザーエディタ / 中：AI作業コード / 右：詳細＆AIチャット）を支えるWebview内2ペイン分割レイアウト */
+.sidebar-split-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  height: 100vh;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.sidebar-split-layout.is-detail-open {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.sidebar-workspace-pane {
+  height: 100%;
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  box-sizing: border-box;
+}
+
+.sidebar-detail-pane {
+  height: 100%;
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  border-left: 1px solid var(--vscode-panel-border, #454545);
+  background-color: var(--vscode-sideBar-background, #1e1e1e);
+  box-sizing: border-box;
+}
+
+/* [Why/Intent] AI作業コードの1行あたり縦幅・フォントサイズをVS Code作業エディタと一致させ、スクロール同期時の縦ズレを抑止する */
+.ai-workspace-code {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background-color: var(--vscode-editor-background, rgba(0, 0, 0, 0.2));
+  border: 1px solid var(--vscode-panel-border);
+  font-family: var(--vscode-editor-font-family, var(--mono, monospace));
+  font-size: var(--vce-editor-font-size, var(--vscode-editor-font-size, 14px));
+  font-weight: var(--vscode-editor-font-weight, normal);
+  line-height: var(--vce-editor-line-height, 19px);
+  overflow: visible;
+}
+
+.ai-workspace-line-group {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.ai-workspace-line-group.is-popover-open {
+  z-index: 30;
+}
+
+/* [Why/Intent] 新しい介入（pending）で消した行（赤 -）と生やした行（緑 +）を明るい濃い色で明確に強調表示する */
+.ai-workspace-line-group.is-pending-deletion {
+  margin: 0 -10px;
+  padding: 0 10px 0 7px;
+  border-left: 3px solid #f85149;
+  background-color: rgba(248, 81, 73, 0.24);
+  color: var(--vscode-editor-foreground, #ffffff);
+}
+
+.ai-workspace-line-group.is-pending-deletion .ai-workspace-line-number,
+.ai-workspace-line-group.is-pending-deletion .ai-workspace-diff-sign {
+  opacity: 0.95;
+  color: #ff8b85;
+  font-weight: 700;
+}
+
+.ai-workspace-line-group.is-pending-addition {
+  margin: 0 -10px;
+  padding: 0 10px 0 7px;
+  border-left: 3px solid #2ecc71;
+  background-color: rgba(46, 204, 113, 0.24);
+  color: var(--vscode-editor-foreground, #ffffff);
+}
+
+.ai-workspace-line-group.is-pending-addition .ai-workspace-line-number,
+.ai-workspace-line-group.is-pending-addition .ai-workspace-diff-sign {
+  opacity: 0.95;
+  color: #7ef2ad;
+  font-weight: 700;
+}
+
+.ai-workspace-line-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-block-size: var(--vce-editor-line-height, 19px);
+  line-height: var(--vce-editor-line-height, 19px);
+}
+
+.ai-workspace-line-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  line-height: inherit;
+}
+
+.ai-workspace-line-number {
+  width: 28px;
+  text-align: right;
+  opacity: 0.45;
+  user-select: none;
+  flex-shrink: 0;
+  line-height: inherit;
+}
+
+.ai-workspace-diff-sign {
+  width: 12px;
+  text-align: center;
+  user-select: none;
+  flex-shrink: 0;
+  line-height: inherit;
+}
+
+.ai-workspace-line-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  flex: 1;
+  line-height: inherit;
+}
+
+.ai-workspace-pending-btn {
+  padding: 0 7px;
+  font-family: var(--sans, sans-serif);
+  font-size: 0.78em;
+  font-weight: 600;
+  line-height: 1.25;
+  cursor: pointer;
+  border-radius: 10px;
+  border: 1px solid #2ecc71;
+  background-color: rgba(46, 204, 113, 0.3);
+  color: #eafff2;
+  white-space: nowrap;
+  align-self: center;
+  transition: background-color 0.15s ease;
+}
+
+.ai-workspace-pending-btn:hover,
+.ai-workspace-pending-btn[aria-expanded="true"] {
+  background-color: rgba(46, 204, 113, 0.5);
+}
+
+.ai-workspace-pending-btn:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: 2px;
+}
+
+/* [Why/Intent] 行を下に押し出さず（左右行高ピッチを維持したまま）該当行の直上に浮かせて表示する簡易アクションバー */
+.ai-workspace-action-popover {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 4px);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 210px;
+  max-width: min(320px, 100%);
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #2ecc71;
+  background-color: var(--vscode-editorWidget-background, #252526);
+  color: var(--vscode-foreground, #cccccc);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  font-family: var(--sans, sans-serif);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* 最上行など上側に余白がない場合のみ下側へ自動フリップして見切れを防止 */
+.ai-workspace-action-popover[data-placement="bottom"] {
+  bottom: auto;
+  top: calc(100% + 4px);
+}
+
+.ai-workspace-action-popover-title {
+  font-weight: 600;
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-workspace-action-popover-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
