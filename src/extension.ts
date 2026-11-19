@@ -233,4 +233,4 @@ class SetOnFixHelper {
 /**
  * [Why/Intent] VS Code拡張機能の非アクティベーション時のクリーンアップ関数。
  */
-export function deactivate(): void { }
+export function deactivate(): void {}

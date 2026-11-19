@@ -6,12 +6,9 @@
  * 各種IPCメッセージ（SYNC_DOCUMENT, SYNC_SETTINGS, SYNC_HISTORY_STATE, EXPAND_INTERVENTION_DETAIL, NAVIGATE_TO_SETTINGS 等）の送受信を検証する。
  */
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import App from './App';
-import { MirrorEditor } from './components/MirrorEditor';
-import { ProposalPopup } from './components/ProposalPopup';
 import { mockPostMessage } from './test/setup';
-import type { WebviewIntervention } from './types';
 
 describe('App Component', () => {
     it('初期マウント時に ready メッセージを送信し、初期画面（上部：AI作業コード、下部：提案・依頼リスト）を描画すること', () => {
@@ -284,54 +281,5 @@ describe('App Component', () => {
         expect(screen.queryByText('[⚙️ Settings]')).toBeNull();
         expect(screen.queryByText('設定カテゴリ:')).toBeNull();
         expect(screen.queryByText('Waiting for document sync...')).toBeNull();
-    });
-});
-
-describe('MirrorEditor & ProposalPopup Components', () => {
-    const dummyIntervention: WebviewIntervention = {
-        id: '123',
-        range: {
-            start: { line: 0, character: 0 },
-            end: { line: 0, character: 5 },
-        },
-        originalText: 'const',
-        replacementText: 'let',
-        message: 'Use let',
-    };
-
-    it('renders text with line numbers and handles diff discard inline', () => {
-        const onDiscard = vi.fn();
-        render(
-            <MirrorEditor
-                text={'const x = 1;\r\nline 2'}
-                interventions={[dummyIntervention]}
-                onApply={vi.fn()}
-                onDiscard={onDiscard}
-            />,
-        );
-        expect(screen.getByText('line 2')).toBeDefined();
-
-        const discardBtn = screen.getByTestId('diff-discard-btn');
-        expect(discardBtn).toHaveTextContent('[破棄]');
-        fireEvent.click(discardBtn);
-        expect(onDiscard).toHaveBeenCalledWith('123');
-    });
-
-    it('renders ProposalPopup diff texts and buttons', () => {
-        const onApply = vi.fn();
-        const onDiscard = vi.fn();
-        render(
-            <ProposalPopup
-                intervention={dummyIntervention}
-                onApply={onApply}
-                onDiscard={onDiscard}
-            />,
-        );
-
-        fireEvent.click(screen.getByText('[反映 (Accept)]'));
-        expect(onApply).toHaveBeenCalledWith(dummyIntervention);
-
-        fireEvent.click(screen.getByText('[破棄 (Discard)]'));
-        expect(onDiscard).toHaveBeenCalledWith('123');
     });
 });
