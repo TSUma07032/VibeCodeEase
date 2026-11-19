@@ -1,12 +1,19 @@
 /**
  * [Why/Intent] vibeCodeEase サイドバーの対話パネル画面コンポーネント。
- * 選択された提案の変更理由（サマリー）、💡変更方針の修正（Refine）、Diffプレビュー、
- * AI対話チャット（ペルソナ履歴明記）、および操作ボタングループ（適用・アンドゥ・却下）を統合提供する。
- * 最上部に「⬅️ 一覧・簡易設定に戻る」ボタンを備え、初期画面へ即座に復帰可能。
+ * 視認性を最優先し、「📝 変更理由（ペルソナ反映）」「🔍 変更差分（読み取り専用）」
+ * 「💬 AI対話チャット（ペルソナ別の初手セリフ付き）」の3要素に整理して提供する。
+ * 「✓ 採用」と「✕ 破棄」の2大アクションを直感的に提供し、
+ * 採用後・破棄後でもいつでもあとからやり直せるモードを完全装備する。
  */
 import React, { useState } from 'react';
-import { PERSONA_OPTIONS } from '../constants/sidebarOptions';
+import {
+    PERSONA_OPTIONS,
+    formatShortTitle,
+    getPersonaOpeningLine,
+    getStatusBadge,
+} from '../constants/sidebarOptions';
 import type {
+    ChatMessage,
     InterventionDetail,
     PersonaId,
 } from '../types/onDemandIntervention';
@@ -18,13 +25,13 @@ import { GithubDiffView } from './GithubDiffView';
 export interface SidebarDialogueViewProps {
     detail: InterventionDetail;
     onBack: () => void;
-    onRefine: (instruction: string) => void;
-    isRefining: boolean;
+    onRefine?: (instruction: string) => void;
+    isRefining?: boolean;
     refineError?: string | null;
     onSendMessage: (text: string) => void;
     isChatLoading: boolean;
-    onApply: (id: string) => void;
-    onUndo: (id: string) => void;
+    onApply?: (id: string) => void;
+    onUndo?: (id: string) => void;
     onReject: (id: string) => void;
 }
 
@@ -34,28 +41,12 @@ export interface SidebarDialogueViewProps {
 export const SidebarDialogueView: React.FC<SidebarDialogueViewProps> = ({
     detail,
     onBack,
-    onRefine,
-    isRefining,
-    refineError,
     onSendMessage,
     isChatLoading,
     onApply,
-    onUndo,
     onReject,
 }) => {
-    const [refineInstruction, setRefineInstruction] = useState('');
     const [chatInput, setChatInput] = useState('');
-
-    /**
-     * [Why/Intent] ユーザーが入力した方針修正指示（instruction）を親コンポーネントへ送信し、
-     * LLMによる提案コードとサマリーの再生成（Refine）をトリガーする。再生成処理中（isRefining）は二重実行を抑止する。
-     */
-    const handleRefineSubmit = () => {
-        if (!refineInstruction.trim() || isRefining) {
-            return;
-        }
-        onRefine(refineInstruction.trim());
-    };
 
     /**
      * [Why/Intent] ユーザーのAI対話メッセージを送信する。送信後は入力フォームを即時クリアし、
@@ -69,16 +60,9 @@ export const SidebarDialogueView: React.FC<SidebarDialogueViewProps> = ({
         setChatInput('');
     };
 
-    /**
-     * [Why/Intent] 提案ライフサイクル状態遷移モデル（pending ➔ applied ⇄ reverted / dismissed）に基づく各ボタンの活性化ルール：
-     * - isApplyEnabled: 未適用（pending）または一度取り消された（reverted）状態のみ適用可能。適用済（applied）や却下（dismissed）では無効化。
-     * - isUndoEnabled: エディタへ適用完了（applied）している状態のみ元に戻す（アンドゥ）可能。
-     * - isRejectEnabled: 明示的に却下（dismissed）されていない限り、いつでも却下して履歴から無効化可能。
-     */
-    const isApplyEnabled =
-        detail.status === 'pending' || detail.status === 'reverted';
-    const isUndoEnabled = detail.status === 'applied';
-    const isRejectEnabled = detail.status !== 'dismissed';
+    const isApplied = detail.status === 'applied';
+    const isDismissed = detail.status === 'dismissed' || detail.status === 'reverted';
+    const statusBadge = getStatusBadge(detail.status);
 
     const getPersonaLabel = (id?: PersonaId) => {
         if (!id) {
@@ -88,6 +72,23 @@ export const SidebarDialogueView: React.FC<SidebarDialogueViewProps> = ({
         return found ? found.label : `AI (${id})`;
     };
 
+    // 初手のセリフ（初期AIメッセージ）が履歴先頭にない場合はペルソナに応じた初手セリフを自動補完する
+    const rawHistory = detail.chatHistory ?? [];
+    const hasInitialAiGreeting =
+        rawHistory.length > 0 && rawHistory[0]?.sender === 'ai';
+    const displayMessages: ChatMessage[] = hasInitialAiGreeting
+        ? rawHistory
+        : [
+              {
+                  id: `opening-${detail.id}-${detail.personaId}`,
+                  sender: 'ai',
+                  message: getPersonaOpeningLine(detail.personaId, detail.title),
+                  timestamp: detail.createdAt || '',
+                  personaId: detail.personaId,
+              },
+              ...rawHistory,
+          ];
+
     return (
         <div
             data-testid="sidebar-dialogue-view"
@@ -96,13 +97,15 @@ export const SidebarDialogueView: React.FC<SidebarDialogueViewProps> = ({
                 flexDirection: 'column',
                 height: '100%',
                 width: '100%',
+                maxWidth: '100%',
+                minWidth: 0,
                 boxSizing: 'border-box',
                 overflowX: 'hidden',
                 overflowY: 'auto',
                 padding: '12px',
                 gap: '14px',
                 color: 'var(--vscode-foreground)',
-                fontSize: '12px',
+                fontSize: '13px',
             }}
         >
             {/* 最上部ヘッダー */}
@@ -112,7 +115,7 @@ export const SidebarDialogueView: React.FC<SidebarDialogueViewProps> = ({
                     flexDirection: 'column',
                     gap: '8px',
                     borderBottom: '1px solid var(--vscode-panel-border)',
-                    paddingBottom: '8px',
+                    paddingBottom: '10px',
                 }}
             >
                 <div
@@ -120,6 +123,7 @@ export const SidebarDialogueView: React.FC<SidebarDialogueViewProps> = ({
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
+                        gap: '8px',
                     }}
                 >
                     <button
@@ -131,20 +135,212 @@ export const SidebarDialogueView: React.FC<SidebarDialogueViewProps> = ({
                             color: 'var(--vscode-textLink-foreground)',
                             cursor: 'pointer',
                             fontSize: '12px',
+                            fontWeight: 500,
                             padding: '4px 0',
                             textAlign: 'left',
                         }}
                     >
                         ⬅️ 一覧・簡易設定に戻る
                     </button>
-                    <span style={{ fontSize: '11px', opacity: 0.7 }}>
-                        L{detail.range.start.line + 1} - L
-                        {detail.range.end.line + 1}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span
+                            style={{
+                                fontSize: '11px',
+                                padding: '2px 6px',
+                                borderRadius: '3px',
+                                backgroundColor:
+                                    'var(--vscode-badge-background, rgba(128,128,128,0.2))',
+                                color: 'var(--vscode-badge-foreground, inherit)',
+                            }}
+                        >
+                            L{detail.range.start.line + 1} - L{detail.range.end.line + 1}
+                        </span>
+
+                        {/* 採用・破棄のやり直しトグルボタングループ */}
+                        {isApplied ? (
+                            <>
+                                <button
+                                    type="button"
+                                    disabled
+                                    data-testid="applied-status-btn"
+                                    style={{
+                                        padding: '3px 8px',
+                                        fontSize: '11px',
+                                        fontWeight: 600,
+                                        cursor: 'default',
+                                        backgroundColor: 'rgba(78, 201, 176, 0.15)',
+                                        color: 'var(--vscode-testing-iconPassed, #4ec9b0)',
+                                        border: '1px solid var(--vscode-testing-iconPassed, #4ec9b0)',
+                                        borderRadius: '4px',
+                                    }}
+                                >
+                                    ✓ 採用中
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => onReject(detail.id)}
+                                    data-testid="rollback-to-discard-btn"
+                                    style={{
+                                        padding: '3px 9px',
+                                        fontSize: '11px',
+                                        fontWeight: 500,
+                                        cursor: 'pointer',
+                                        backgroundColor: 'transparent',
+                                        color: 'var(--vscode-errorForeground, #f48771)',
+                                        border: '1px solid var(--vscode-errorForeground, #f48771)',
+                                        borderRadius: '4px',
+                                    }}
+                                    title="コードを元に戻して破棄します"
+                                >
+                                    ✕ 破棄に戻す
+                                </button>
+                            </>
+                        ) : isDismissed ? (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={() => onApply?.(detail.id)}
+                                    data-testid="reapply-btn"
+                                    style={{
+                                        padding: '3px 9px',
+                                        fontSize: '11px',
+                                        fontWeight: 500,
+                                        cursor: 'pointer',
+                                        backgroundColor: 'var(--vscode-button-background)',
+                                        color: 'var(--vscode-button-foreground)',
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                    }}
+                                    title="コードをエディタに適用して採用します"
+                                >
+                                    ✓ 採用し直す
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled
+                                    data-testid="discarded-status-btn"
+                                    style={{
+                                        padding: '3px 8px',
+                                        fontSize: '11px',
+                                        fontWeight: 600,
+                                        cursor: 'default',
+                                        backgroundColor: 'rgba(244, 135, 113, 0.15)',
+                                        color: 'var(--vscode-errorForeground, #f48771)',
+                                        border: '1px solid var(--vscode-errorForeground, #f48771)',
+                                        borderRadius: '4px',
+                                    }}
+                                >
+                                    ✕ 破棄済
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={() => onApply?.(detail.id)}
+                                    data-testid="apply-proposal-btn"
+                                    style={{
+                                        padding: '3px 9px',
+                                        fontSize: '11px',
+                                        fontWeight: 500,
+                                        cursor: 'pointer',
+                                        backgroundColor: 'var(--vscode-button-background)',
+                                        color: 'var(--vscode-button-foreground)',
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                    }}
+                                    title="提案コードをエディタへ適用します"
+                                >
+                                    ✓ 採用
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => onReject(detail.id)}
+                                    data-testid="discard-proposal-btn"
+                                    style={{
+                                        padding: '3px 9px',
+                                        fontSize: '11px',
+                                        fontWeight: 500,
+                                        cursor: 'pointer',
+                                        backgroundColor: 'transparent',
+                                        color: 'var(--vscode-errorForeground, #f48771)',
+                                        border: '1px solid var(--vscode-errorForeground, #f48771)',
+                                        borderRadius: '4px',
+                                    }}
+                                    title="この提案を破棄します"
+                                >
+                                    ✕ 破棄
+                                </button>
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '8px',
+                    }}
+                >
+                    <div
+                        style={{
+                            fontWeight: 600,
+                            fontSize: '14px',
+                            lineHeight: 1.4,
+                            textDecoration: isDismissed ? 'line-through' : 'none',
+                            opacity: isDismissed ? 0.6 : 1,
+                        }}
+                    >
+                        {formatShortTitle(detail.title)}
+                    </div>
+                    <span
+                        style={{
+                            fontSize: '11px',
+                            padding: '1px 6px',
+                            borderRadius: '3px',
+                            border: `1px solid ${statusBadge.color}`,
+                            color: statusBadge.color,
+                            flexShrink: 0,
+                        }}
+                    >
+                        {statusBadge.label}
                     </span>
                 </div>
-                <div style={{ fontWeight: 'bold', fontSize: '14px' }}>
-                    {detail.title}
-                </div>
+
+                {/* 状態バナー（やり直し可能のガイド） */}
+                {isApplied && (
+                    <div
+                        data-testid="applied-banner"
+                        style={{
+                            padding: '6px 10px',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            backgroundColor: 'rgba(78, 201, 176, 0.12)',
+                            border: '1px solid var(--vscode-testing-iconPassed, #4ec9b0)',
+                            color: 'var(--vscode-testing-iconPassed, #4ec9b0)',
+                        }}
+                    >
+                        ✅ この提案はエディタに採用されています。「✕ 破棄に戻す」を押すと元に戻せます。
+                    </div>
+                )}
+                {isDismissed && (
+                    <div
+                        data-testid="dismissed-banner"
+                        style={{
+                            padding: '6px 10px',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            backgroundColor: 'rgba(244, 135, 113, 0.12)',
+                            border: '1px solid var(--vscode-errorForeground, #f48771)',
+                            color: 'var(--vscode-errorForeground, #f48771)',
+                        }}
+                    >
+                        ✕ この提案は破棄されています。「✓ 採用し直す」を押すといつでもエディタへ再適用できます。
+                    </div>
+                )}
             </div>
 
             {/* 📝 変更理由（サマリー） */}
@@ -152,120 +348,62 @@ export const SidebarDialogueView: React.FC<SidebarDialogueViewProps> = ({
                 style={{
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '4px',
-                    padding: '8px 10px',
-                    backgroundColor: 'var(--vscode-sideBar-background)',
-                    borderRadius: '4px',
+                    gap: '6px',
+                    padding: '10px 12px',
+                    backgroundColor: 'var(--vscode-editor-background, rgba(0, 0, 0, 0.15))',
+                    borderRadius: '6px',
                     border: '1px solid var(--vscode-panel-border)',
                 }}
             >
                 <div
-                    style={{ fontWeight: 600, fontSize: '11px', opacity: 0.8 }}
+                    style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '8px',
+                    }}
                 >
-                    📝 変更理由
+                    <span style={{ fontWeight: 600, fontSize: '12px' }}>
+                        📝 変更理由
+                    </span>
+                    <span
+                        style={{
+                            fontSize: '11px',
+                            opacity: 0.85,
+                            color: 'var(--vscode-descriptionForeground)',
+                        }}
+                    >
+                        {getPersonaLabel(detail.personaId)}
+                    </span>
                 </div>
-                <div style={{ lineHeight: 1.4 }}>{detail.summary}</div>
+                <div
+                    style={{
+                        fontSize: '13px',
+                        lineHeight: 1.6,
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                    }}
+                >
+                    {detail.summary}
+                </div>
             </div>
 
-            {/* 💡 変更方針の修正 (Refine) */}
+            {/* 🔍 差分（読み取り専用プレビュー） */}
             <div
                 style={{
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '6px',
-                    padding: '10px',
-                    backgroundColor: 'var(--vscode-sideBar-background)',
-                    borderRadius: '4px',
-                    border: '1px solid var(--vscode-panel-border)',
-                }}
-            >
-                <div style={{ fontWeight: 600 }}>💡 変更方針の修正</div>
-                {refineError && (
-                    <div
-                        style={{
-                            padding: '6px 8px',
-                            fontSize: '11px',
-                            color: 'var(--vscode-errorForeground)',
-                            backgroundColor: 'rgba(255, 0, 0, 0.1)',
-                            borderRadius: '3px',
-                            border: '1px solid var(--vscode-errorForeground)',
-                        }}
-                    >
-                        ⚠️ {refineError}
-                    </div>
-                )}
-                <div
-                    style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '6px',
-                    }}
-                >
-                    <input
-                        type="text"
-                        placeholder="こういう方向で変えて？"
-                        value={refineInstruction}
-                        onChange={(e) => setRefineInstruction(e.target.value)}
-                        disabled={isRefining}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                                handleRefineSubmit();
-                            }
-                        }}
-                        style={{
-                            padding: '6px 8px',
-                            backgroundColor: 'var(--vscode-input-background)',
-                            color: 'var(--vscode-input-foreground)',
-                            border: '1px solid var(--vscode-input-border)',
-                            borderRadius: '3px',
-                        }}
-                    />
-                    <button
-                        type="button"
-                        onClick={handleRefineSubmit}
-                        disabled={isRefining || !refineInstruction.trim()}
-                        style={{
-                            alignSelf: 'flex-start',
-                            padding: '5px 12px',
-                            backgroundColor:
-                                'var(--vscode-button-secondaryBackground)',
-                            color: 'var(--vscode-button-secondaryForeground)',
-                            border: 'none',
-                            borderRadius: '3px',
-                            cursor:
-                                isRefining || !refineInstruction.trim()
-                                    ? 'not-allowed'
-                                    : 'pointer',
-                            opacity:
-                                isRefining || !refineInstruction.trim()
-                                    ? 0.6
-                                    : 1,
-                        }}
-                    >
-                        {isRefining
-                            ? '🔄 再生成中...'
-                            : '🔄 この方針でコードを再生成'}
-                    </button>
-                </div>
-            </div>
-
-            {/* 🔍 Diffプレビュー */}
-            <div
-                style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
                 }}
             >
                 <div style={{ fontWeight: 600, fontSize: '12px' }}>
-                    🔍 差分プレビュー
+                    🔍 変更差分
                 </div>
                 <div
                     style={{
                         width: '100%',
                         overflowX: 'auto',
-                        border: '1px solid var(--vscode-panel-border)',
-                        borderRadius: '4px',
+                        borderRadius: '6px',
                     }}
                 >
                     <GithubDiffView
@@ -276,76 +414,11 @@ export const SidebarDialogueView: React.FC<SidebarDialogueViewProps> = ({
                             replacementText: detail.proposedCode,
                             message: detail.summary,
                         }}
-                        onApply={() => onApply(detail.id)}
+                        hideToolbar={true}
+                        onApply={() => onApply?.(detail.id)}
                         onDiscard={() => onReject(detail.id)}
                     />
                 </div>
-            </div>
-
-            {/* 🎛️ 操作ボタングループ */}
-            <div
-                style={{
-                    display: 'flex',
-                    gap: '6px',
-                    padding: '8px 0',
-                    borderTop: '1px solid var(--vscode-panel-border)',
-                    borderBottom: '1px solid var(--vscode-panel-border)',
-                }}
-            >
-                <button
-                    type="button"
-                    disabled={!isUndoEnabled}
-                    onClick={() => onUndo(detail.id)}
-                    style={{
-                        flex: 1,
-                        padding: '6px 8px',
-                        fontSize: '11px',
-                        cursor: isUndoEnabled ? 'pointer' : 'not-allowed',
-                        opacity: isUndoEnabled ? 1 : 0.5,
-                        backgroundColor:
-                            'var(--vscode-button-secondaryBackground)',
-                        color: 'var(--vscode-button-secondaryForeground)',
-                        border: 'none',
-                        borderRadius: '3px',
-                    }}
-                >
-                    ⏪ アンドゥ
-                </button>
-                <button
-                    type="button"
-                    disabled={!isApplyEnabled}
-                    onClick={() => onApply(detail.id)}
-                    style={{
-                        flex: 1,
-                        padding: '6px 8px',
-                        fontSize: '11px',
-                        cursor: isApplyEnabled ? 'pointer' : 'not-allowed',
-                        opacity: isApplyEnabled ? 1 : 0.5,
-                        backgroundColor: 'var(--vscode-button-background)',
-                        color: 'var(--vscode-button-foreground)',
-                        border: 'none',
-                        borderRadius: '3px',
-                    }}
-                >
-                    ⏩ 適用
-                </button>
-                <button
-                    type="button"
-                    disabled={!isRejectEnabled}
-                    onClick={() => onReject(detail.id)}
-                    style={{
-                        padding: '6px 12px',
-                        fontSize: '11px',
-                        cursor: isRejectEnabled ? 'pointer' : 'not-allowed',
-                        opacity: isRejectEnabled ? 1 : 0.5,
-                        backgroundColor: 'transparent',
-                        color: 'var(--vscode-errorForeground)',
-                        border: '1px solid var(--vscode-errorForeground)',
-                        borderRadius: '3px',
-                    }}
-                >
-                    🗑️ 却下
-                </button>
             </div>
 
             {/* 💬 AIチャット */}
@@ -353,26 +426,30 @@ export const SidebarDialogueView: React.FC<SidebarDialogueViewProps> = ({
                 style={{
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '8px',
+                    gap: '10px',
                     flex: 1,
-                    minHeight: '180px',
+                    minHeight: '220px',
+                    padding: '10px 12px',
+                    backgroundColor: 'var(--vscode-editor-background, rgba(0, 0, 0, 0.15))',
+                    borderRadius: '6px',
+                    border: '1px solid var(--vscode-panel-border)',
                 }}
             >
                 <div style={{ fontWeight: 600, fontSize: '12px' }}>
-                    💬 AI対話・質疑応答
+                    💬 AIチャット（質問・相談）
                 </div>
 
                 <div
                     style={{
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: '8px',
-                        maxHeight: '220px',
+                        gap: '10px',
+                        flex: 1,
                         overflowY: 'auto',
-                        padding: '4px',
+                        padding: '4px 2px',
                     }}
                 >
-                    {detail.chatHistory?.map((msg) => (
+                    {displayMessages.map((msg) => (
                         <div
                             key={msg.id}
                             style={{
@@ -382,10 +459,11 @@ export const SidebarDialogueView: React.FC<SidebarDialogueViewProps> = ({
                                     msg.sender === 'user'
                                         ? 'flex-end'
                                         : 'flex-start',
-                                maxWidth: '90%',
-                                padding: '6px 10px',
-                                borderRadius: '6px',
-                                fontSize: '11px',
+                                maxWidth: '92%',
+                                padding: '8px 12px',
+                                borderRadius: '8px',
+                                fontSize: '12.5px',
+                                lineHeight: 1.55,
                                 backgroundColor:
                                     msg.sender === 'user'
                                         ? 'var(--vscode-button-background)'
@@ -399,22 +477,28 @@ export const SidebarDialogueView: React.FC<SidebarDialogueViewProps> = ({
                         >
                             <div
                                 style={{
-                                    fontSize: '10px',
-                                    opacity: 0.7,
-                                    marginBottom: '2px',
+                                    fontSize: '11px',
+                                    opacity: 0.75,
+                                    marginBottom: '4px',
+                                    fontWeight: 500,
                                 }}
                             >
                                 {msg.sender === 'user'
                                     ? '👤 あなた'
-                                    : `🤖 ${getPersonaLabel(msg.personaId)}`}
+                                    : `🤖 ${getPersonaLabel(msg.personaId ?? detail.personaId)}`}
                             </div>
-                            <div style={{ whiteSpace: 'pre-wrap' }}>
+                            <div
+                                style={{
+                                    whiteSpace: 'pre-wrap',
+                                    wordBreak: 'break-word',
+                                }}
+                            >
                                 {msg.message}
                             </div>
                         </div>
                     ))}
                     {isChatLoading && (
-                        <div style={{ fontSize: '11px', opacity: 0.7 }}>
+                        <div style={{ fontSize: '12px', opacity: 0.75 }}>
                             ⏳ AIが回答を作成中...
                         </div>
                     )}
@@ -425,11 +509,13 @@ export const SidebarDialogueView: React.FC<SidebarDialogueViewProps> = ({
                         display: 'flex',
                         gap: '6px',
                         marginTop: 'auto',
+                        paddingTop: '6px',
+                        borderTop: '1px solid var(--vscode-panel-border)',
                     }}
                 >
                     <input
                         type="text"
-                        placeholder="質問や相談を入力..."
+                        placeholder="この変更について質問や相談を入力..."
                         value={chatInput}
                         onChange={(e) => setChatInput(e.target.value)}
                         onKeyDown={(e) => {
@@ -439,11 +525,13 @@ export const SidebarDialogueView: React.FC<SidebarDialogueViewProps> = ({
                         }}
                         style={{
                             flex: 1,
-                            padding: '6px 8px',
+                            minWidth: 0,
+                            padding: '7px 10px',
+                            fontSize: '12.5px',
                             backgroundColor: 'var(--vscode-input-background)',
                             color: 'var(--vscode-input-foreground)',
                             border: '1px solid var(--vscode-input-border)',
-                            borderRadius: '3px',
+                            borderRadius: '4px',
                         }}
                     />
                     <button
@@ -451,15 +539,18 @@ export const SidebarDialogueView: React.FC<SidebarDialogueViewProps> = ({
                         onClick={handleChatSend}
                         disabled={isChatLoading || !chatInput.trim()}
                         style={{
-                            padding: '6px 12px',
+                            padding: '7px 14px',
+                            fontSize: '12.5px',
+                            fontWeight: 500,
                             backgroundColor: 'var(--vscode-button-background)',
                             color: 'var(--vscode-button-foreground)',
                             border: 'none',
-                            borderRadius: '3px',
+                            borderRadius: '4px',
                             cursor:
                                 isChatLoading || !chatInput.trim()
                                     ? 'not-allowed'
                                     : 'pointer',
+                            opacity: isChatLoading || !chatInput.trim() ? 0.6 : 1,
                         }}
                     >
                         送信

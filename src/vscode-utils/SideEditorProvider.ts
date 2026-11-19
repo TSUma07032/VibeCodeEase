@@ -8,6 +8,11 @@ import { SharedAnalysisCache } from '../core/analyzer';
 import { InterventionManager } from '../core/interventionManager';
 import { LlmConfigRepository } from '../core/llm/llmConfigRepository';
 import { LlmGateway } from '../core/llm/llmGateway';
+import {
+    formatInterventionOneLiner,
+    formatPersonaSummary,
+    getPersonaOpeningMessage,
+} from '../core/llm/promptBuilder';
 import type { LlmBackgroundService } from '../core/llmBackgroundService';
 import { LlmInterventionService } from '../core/llmInterventionService';
 import { InterventionHistoryStore } from '../core/onDemand/interventionHistoryStore';
@@ -15,6 +20,7 @@ import { OnDemandIpcHandler } from '../core/onDemand/onDemandIpcHandler';
 import { LearningBackgroundService } from '../core/scaffolding/learningBackgroundService';
 import { LearningConfigStore } from '../core/scaffolding/learningConfigStore';
 import { LearningSessionStore } from '../core/scaffolding/learningSessionStore';
+import { GlobalState } from '../state/globalState';
 import type { LearningWebviewMessage } from '../types/learningScaffolding';
 import type { LearningSettingsWebviewMessage } from '../types/learningSettings';
 import type { InterventionDetail, PersonaId } from '../types/onDemandIntervention';
@@ -162,6 +168,8 @@ export class SideEditorProvider implements vscode.Disposable {
                         'vibecodeease.currentPersona',
                         settings.personaId,
                     );
+                    await GlobalState.getInstance().setPersonaId(settings.personaId);
+                    await this.applyPersonaToPendingInterventions(settings.personaId);
                 }
                 this.llmService.startTimerIfConfigured();
                 await this.sendSettingsSync();
@@ -174,6 +182,43 @@ export class SideEditorProvider implements vscode.Disposable {
             },
             expandDetail: async (interventionId: string) => {
                 await this.expandIntervention(interventionId);
+            },
+        });
+    }
+
+    /**
+     * [Why/Intent] ペルソナ変更時、現在ドキュメントの未対応（pending）提案のペルソナ・変更理由・初手セリフを最新ペルソナに同期する。
+     */
+    private async applyPersonaToPendingInterventions(personaId: PersonaId): Promise<void> {
+        const docUri = this._currentDocumentUri?.toString();
+        if (!docUri) {
+            return;
+        }
+        const history = await this.historyStore.getHistory(docUri);
+        for (const item of history.interventions) {
+            if (item.status !== 'pending') {
+                continue;
+            }
+            item.personaId = personaId;
+            const hasUserMessages = item.chatHistory.some((msg) => msg.sender === 'user');
+            if (!hasUserMessages) {
+                item.chatHistory = [
+                    {
+                        id: `msg-init-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                        sender: 'ai',
+                        message: getPersonaOpeningMessage(personaId, item.title),
+                        timestamp: new Date().toISOString(),
+                        personaId,
+                    },
+                ];
+            }
+            await this.historyStore.saveIntervention(docUri, item);
+        }
+        this.panel?.webview.postMessage({
+            type: 'SYNC_HISTORY_STATE',
+            payload: {
+                documentUri: docUri,
+                interventions: this.historyStore.getInterventions(docUri),
             },
         });
     }
@@ -203,6 +248,9 @@ export class SideEditorProvider implements vscode.Disposable {
         );
     }
 
+    /**
+     * [Why/Intent] SideEditorProviderのシングルトンインスタンスを取得する。
+     */
     public static getInstance(
         context?: vscode.ExtensionContext,
         llmService?: LlmBackgroundService,
@@ -214,6 +262,9 @@ export class SideEditorProvider implements vscode.Disposable {
         return SideEditorProvider.instance as SideEditorProvider;
     }
 
+    /**
+     * [Why/Intent] テスト環境用: シングルトンインスタンスを破棄・リセットする。
+     */
     public static resetInstanceForTesting(): void {
         SideEditorProvider.instance?.dispose();
         SideEditorProvider.instance = undefined;
@@ -234,11 +285,34 @@ export class SideEditorProvider implements vscode.Disposable {
     }
 
     /**
-     * [Why/Intent] Webviewパネルを右側（ViewColumn.Beside）に開くか、既存パネルを最前面に表示する
+     * [Why/Intent] Webviewパネル開閉前に現在のメインエディタURIを捕捉し、フォーカス移動によるURI喪失を防ぐ。
+     */
+    private captureTargetEditorUri(): void {
+        const active = vscode.window.activeTextEditor;
+        if (active && active.viewColumn !== vscode.ViewColumn.Beside) {
+            this._currentDocumentUri = active.document.uri;
+            return;
+        }
+        if (!this._currentDocumentUri) {
+            const visible = vscode.window.visibleTextEditors.find(
+                (e) =>
+                    e.viewColumn !== vscode.ViewColumn.Beside && e.document.uri.scheme === 'file',
+            );
+            if (visible) {
+                this._currentDocumentUri = visible.document.uri;
+            }
+        }
+    }
+
+    /**
+     * [Why/Intent] Webviewパネルを右側（ViewColumn.Beside）に開くか、既存パネルの列位置・幅を維持したまま表示する。
+     * 既存パネルに対して ViewColumn.Beside を再指定すると分割列の再計算によりサイドバー幅が変動するため、
+     * パネル既存時は自身の viewColumn を維持して reveal する。
      */
     public async openSideEditor(): Promise<void> {
+        this.captureTargetEditorUri();
         if (this.panel) {
-            this.panel.reveal(vscode.ViewColumn.Beside);
+            this.panel.reveal(this.panel.viewColumn);
         } else {
             this.panel = vscode.window.createWebviewPanel(
                 'vibecodeeaseSideEditor',
@@ -257,7 +331,7 @@ export class SideEditorProvider implements vscode.Disposable {
             );
             this.panel.onDidDispose(() => this.handlePanelDispose(), null, this.panelDisposables);
             this.panel.webview.onDidReceiveMessage(
-                (message: unknown) => void this.handleMessage(message),
+                (message: unknown) => this.handleMessage(message),
                 undefined,
                 this.panelDisposables,
             );
@@ -268,24 +342,73 @@ export class SideEditorProvider implements vscode.Disposable {
     }
 
     /**
-     * [Why/Intent] 指定された介入IDの詳細情報を履歴ストアから解決し、
-     * Beside Webviewパネルを展開してEXPAND_INTERVENTION_DETAILメッセージを送信する。
+     * [Why/Intent] 指定された介入IDとドキュメントURIから、該当する介入詳細を正確に解決するヘルパー。
+     * 以前の実装ではID不一致時に `allItems[0]`（一番上の介入案）へ無条件フォールバックしていたため、
+     * 2番目以降の「詳細」を押しても必ず一番上のチャットが開いてしまうバグが発生していた。
+     * 本メソッドではURI正規化検索および末尾識別子（source::category::line::char）一致のみを行い、
+     * 無関係な先頭要素への誤フォールバックを完全に排除する。
      */
-    public async expandIntervention(interventionId: string): Promise<void> {
-        await this.openSideEditor();
-        const docUri = this._currentDocumentUri?.toString() ?? '';
-        const history = await this.historyStore.getHistory(docUri);
-        let detail = history.interventions.find((item) => item.id === interventionId);
-        if (!detail) {
-            const allItems = this.historyStore.getInterventions(docUri);
-            detail = allItems.find((item) => item.id === interventionId) as
-                | InterventionDetail
-                | undefined;
+    private resolveInterventionTarget(
+        interventionId: string,
+        preferredUri: string,
+    ): { documentUri: string; detail: InterventionDetail } | undefined {
+        let found = this.historyStore.getInterventionById(interventionId, preferredUri);
+
+        if (!found && this._currentDocumentUri) {
+            const targetDoc = findTargetDocument(this._currentDocumentUri);
+            if (targetDoc) {
+                const results = SharedAnalysisCache.getInstance().getResults(targetDoc);
+                this.syncResultsToHistoryStore(targetDoc, results);
+                found = this.historyStore.getInterventionById(interventionId, preferredUri);
+            }
         }
+
+        if (!found && preferredUri && interventionId.includes('::')) {
+            const targetSuffix = interventionId.split('::').slice(1).join('::');
+            const allItems = this.historyStore.getInterventions(preferredUri);
+            const suffixMatch = allItems.find(
+                (item) => item.id.split('::').slice(1).join('::') === targetSuffix,
+            );
+            if (suffixMatch) {
+                found = this.historyStore.getInterventionById(suffixMatch.id, preferredUri);
+            }
+        }
+
+        return found;
+    }
+
+    /**
+     * [Why/Intent] 指定された介入IDの詳細情報を履歴ストアから横断解決し、
+     * サイドバーWebviewパネルへ即座に EXPAND_INTERVENTION_DETAIL メッセージを送信して対話画面へ切り替える。
+     * エディタホバーや一覧トグルの「詳細」から呼ばれた際、その時押された介入IDの詳細を確実に開く。
+     */
+    public async expandIntervention(interventionId: string, documentUri?: string): Promise<void> {
+        if (documentUri) {
+            this._currentDocumentUri = vscode.Uri.parse(documentUri);
+        } else {
+            this.captureTargetEditorUri();
+        }
+        const preferredUri = documentUri ?? this._currentDocumentUri?.toString() ?? '';
+        const found = this.resolveInterventionTarget(interventionId, preferredUri);
+
+        if (found) {
+            this._currentDocumentUri = vscode.Uri.parse(found.documentUri);
+            this.pendingInterventionDetail = found.detail;
+            this.pendingTab = undefined;
+        }
+
+        await this.openSideEditor();
+
+        const detail =
+            found?.detail ??
+            this.historyStore.getInterventionById(
+                interventionId,
+                this._currentDocumentUri?.toString(),
+            )?.detail;
 
         if (detail) {
             this.pendingInterventionDetail = detail;
-            this.panel?.webview.postMessage({
+            void this.panel?.webview.postMessage({
                 type: 'EXPAND_INTERVENTION_DETAIL',
                 payload: {
                     interventionId: detail.id,
@@ -293,6 +416,86 @@ export class SideEditorProvider implements vscode.Disposable {
                     detail,
                 },
             });
+        }
+    }
+
+    /**
+     * [Why/Intent] エディタホバーのトグル内「採用」リンク等から指定された介入IDのコードを即時適用し、
+     * 履歴ステータスを 'applied' に更新してデコレーションとWebview表示を同期する。
+     */
+    public async applyInterventionById(
+        interventionId: string,
+        documentUri?: string,
+    ): Promise<void> {
+        if (documentUri) {
+            this._currentDocumentUri = vscode.Uri.parse(documentUri);
+        } else {
+            this.captureTargetEditorUri();
+        }
+        const preferredUri = documentUri ?? this._currentDocumentUri?.toString() ?? '';
+        const found = this.resolveInterventionTarget(interventionId, preferredUri);
+        const targetUri = found?.documentUri ?? preferredUri;
+        const targetId = found?.detail.id ?? interventionId;
+
+        await this.onDemandIpcHandler.handleMessage(
+            {
+                type: 'APPLY_INTERVENTION',
+                payload: { interventionId: targetId },
+            },
+            targetUri,
+        );
+    }
+
+    /**
+     * [Why/Intent] エディタホバーやコマンドから指定された介入提案を破棄し、
+     * 適用済み（applied）だった場合は元のコードへロールバック復元した上でステータスを更新する。
+     */
+    public async discardIntervention(interventionId: string, documentUri?: string): Promise<void> {
+        this.captureTargetEditorUri();
+        const preferredUri = documentUri ?? this._currentDocumentUri?.toString() ?? '';
+        const found = this.resolveInterventionTarget(interventionId, preferredUri);
+        const targetUri = found?.documentUri ?? preferredUri;
+        const detail = found?.detail;
+        const targetId = detail?.id ?? interventionId;
+
+        if (detail?.status === 'applied') {
+            this._isApplyingIntervention = true;
+            try {
+                await this.onDemandIpcHandler._ctx.applyEditorEdit(
+                    targetUri,
+                    detail.proposedCode,
+                    detail.originalCode,
+                );
+            } finally {
+                this._isApplyingIntervention = false;
+            }
+        }
+
+        SharedAnalysisCache.getInstance().ignoreIssue(targetId);
+        const updated = await this.historyStore.updateStatus(targetUri, targetId, 'dismissed');
+
+        void vscode.commands
+            .executeCommand('vibecodeease.refreshDecorations')
+            .then(undefined, () => {});
+        vscode.window.setStatusBarMessage('$(trash) 提案を破棄しました', 3000);
+
+        if (this.panel && targetUri) {
+            this.panel.webview.postMessage({
+                type: 'SYNC_HISTORY_STATE',
+                payload: {
+                    documentUri: targetUri,
+                    interventions: this.historyStore.getInterventions(targetUri),
+                },
+            });
+            if (updated) {
+                this.panel.webview.postMessage({
+                    type: 'UPDATE_INTERVENTION_DETAIL',
+                    payload: {
+                        interventionId: updated.id,
+                        detail: updated,
+                    },
+                });
+            }
         }
     }
 
@@ -306,8 +509,7 @@ export class SideEditorProvider implements vscode.Disposable {
     /**
      * [Why/Intent] 設定パネルをWebview右側（Beside）に直接表示する。
      * パネル未作成時は作成後に ready ハンドシェイクで NAVIGATE_TO_SETTINGS を送信し、
-     * 既に存在する場合は reveal の上で即座に最新設定を同期し NAVIGATE_TO_SETTINGS をディスパッチする。
-     * マウント前連続実行によるフラグ消失レースコンディションを完全防止する。
+     * 既に存在する場合は現在の列位置・幅を維持したまま reveal して NAVIGATE_TO_SETTINGS をディスパッチする。
      */
     public async openSettings(): Promise<void> {
         this.pendingInterventionDetail = undefined;
@@ -315,7 +517,7 @@ export class SideEditorProvider implements vscode.Disposable {
         if (!this.panel) {
             await this.openSideEditor();
         } else {
-            this.panel.reveal(vscode.ViewColumn.Beside);
+            this.panel.reveal(this.panel.viewColumn);
             void this.sendSettingsSync();
             void this.panel.webview.postMessage({ type: 'NAVIGATE_TO_SETTINGS' });
         }
@@ -382,6 +584,10 @@ export class SideEditorProvider implements vscode.Disposable {
 
     private async sendSettingsSync(): Promise<void> {
         const s = await fetchSideEditorSettings(this.context);
+        const currentPersona =
+            this.context.workspaceState.get<PersonaId>('vibecodeease.currentPersona') ??
+            GlobalState.getInstance().personaId ??
+            'mentor';
         this.panel?.webview.postMessage({
             type: 'SYNC_SETTINGS',
             hasApiKey: Boolean(s.apiKey),
@@ -390,9 +596,7 @@ export class SideEditorProvider implements vscode.Disposable {
             frequency: s.frequency,
             intervalSeconds: s.intervalSeconds,
             model: s.model,
-            personaId:
-                this.context.workspaceState.get<PersonaId>('vibecodeease.currentPersona') ??
-                'mentor',
+            personaId: currentPersona,
         });
     }
 
@@ -449,23 +653,6 @@ export class SideEditorProvider implements vscode.Disposable {
 
         if ('command' in message && typeof (message as { command: string }).command === 'string') {
             const cmd = (message as { command: string }).command;
-            if (cmd === 'ready') {
-                if (this.pendingTab === 'settings' && this.panel) {
-                    // [Why/Intent] Webviewマウント完了前に openSettings が呼ばれていた場合、ready ハンドシェイクをトリガーに NAVIGATE_TO_SETTINGS を遅延送信し、フラグを消費・初期化する
-                    this.panel.webview.postMessage({ type: 'NAVIGATE_TO_SETTINGS' });
-                    this.pendingTab = undefined;
-                } else if (this.pendingInterventionDetail && this.panel) {
-                    this.panel.webview.postMessage({
-                        type: 'EXPAND_INTERVENTION_DETAIL',
-                        payload: {
-                            interventionId: this.pendingInterventionDetail.id,
-                            persona: this.pendingInterventionDetail.personaId,
-                            detail: this.pendingInterventionDetail,
-                        },
-                    });
-                }
-            }
-
             await dispatchLegacyCommand(message as WebviewToExtensionMessage, {
                 context: this.context,
                 llmService: this.llmService,
@@ -478,6 +665,25 @@ export class SideEditorProvider implements vscode.Disposable {
                 sendUpdateInterventions: (doc) => this.sendUpdateInterventions(doc),
                 applyIntervention: (msg) => this.handleApplyIntervention(msg),
             });
+
+            // [Why/Intent] readyハンドシェイク時は、初期リスト同期（dispatchLegacyCommand）が完了した後に
+            // EXPAND_INTERVENTION_DETAIL または NAVIGATE_TO_SETTINGS を送信し、選択中の詳細が上書きされるのを防ぐ。
+            if (cmd === 'ready') {
+                if (this.pendingTab === 'settings' && this.panel) {
+                    this.panel.webview.postMessage({ type: 'NAVIGATE_TO_SETTINGS' });
+                    this.pendingTab = undefined;
+                } else if (this.pendingInterventionDetail && this.panel) {
+                    this.panel.webview.postMessage({
+                        type: 'EXPAND_INTERVENTION_DETAIL',
+                        payload: {
+                            interventionId: this.pendingInterventionDetail.id,
+                            persona: this.pendingInterventionDetail.personaId,
+                            detail: this.pendingInterventionDetail,
+                        },
+                    });
+                    this.pendingInterventionDetail = undefined;
+                }
+            }
         }
     }
 
@@ -538,11 +744,11 @@ export class SideEditorProvider implements vscode.Disposable {
     }
 
     private syncWithActiveEditor(): void {
-        const editor = vscode.window.activeTextEditor;
-        if (editor && editor.viewColumn !== vscode.ViewColumn.Beside) {
-            this._currentDocumentUri = editor.document.uri;
-            this.sendSyncDocument(editor.document.fileName, editor.document.getText());
-            this.sendUpdateInterventions(editor.document);
+        this.captureTargetEditorUri();
+        const targetDoc = findTargetDocument(this._currentDocumentUri);
+        if (targetDoc) {
+            this.sendSyncDocument(targetDoc.fileName, targetDoc.getText());
+            this.sendUpdateInterventions(targetDoc);
         }
     }
 
@@ -552,22 +758,23 @@ export class SideEditorProvider implements vscode.Disposable {
     }
 
     /**
-     * [Why/Intent] バックグラウンド解析キャッシュ（SharedAnalysisCache）から得られた新規介入結果を抽出し、
-     * 未登録の項目のみ InterventionHistoryStore へ永続化保存する。
-     * タイトルの45文字閾値は、狭幅になりやすいVS Codeサイドバー（Besideペイン）内での視認性確保と
-     * カード一覧でのレイアウト崩れを防ぐための省略表示（truncate）上限値として規定されている。
+     * [Why/Intent] 解析結果を履歴ストアへ同期する。
+     * 1) 同一IDが既に存在する場合は即スキップし、2番目以降のアイテムが先頭アイテムを上書きするバグを防止する。
+     * 2) 過去分（applied / dismissed / reverted）は履歴掲示板に残すため重複除外対象から外し、
+     *    未適用の静的解析（pending & non-llm）のみをLLM推敲結果でアップグレードする。
      */
     private syncResultsToHistoryStore(
         document: vscode.TextDocument,
         results: ReturnType<typeof SharedAnalysisCache.prototype.getResults>,
     ): void {
         const docUri = document.uri.toString();
-        const existingIds = new Set(
-            this.historyStore.getInterventions(docUri).map((item) => item.id),
-        );
+        const existingItems = this.historyStore.getInterventions(docUri);
+        const existingIds = new Set(existingItems.map((item) => item.id));
         const now = new Date().toISOString();
         const currentPersona =
-            this.context.workspaceState.get<PersonaId>('vibecodeease.currentPersona') ?? 'mentor';
+            this.context.workspaceState.get<PersonaId>('vibecodeease.currentPersona') ??
+            GlobalState.getInstance().personaId ??
+            'mentor';
 
         for (const r of results) {
             const first = r.interventions[0];
@@ -578,16 +785,43 @@ export class SideEditorProvider implements vscode.Disposable {
             if (existingIds.has(id)) {
                 continue;
             }
-            const cleanReason = (first.message ?? '')
-                .replace(/^🤖\s*\*\*AI\s*提案\*\*:\s*/, '')
-                .trim();
-            const firstLine = cleanReason.split(/\r?\n/)[0] || 'AI改善提案';
-            const title = firstLine.length > 45 ? `${firstLine.slice(0, 45)}...` : firstLine;
+
+            const rawMessage = (first.message ?? '').trim();
+            const title = formatInterventionOneLiner(rawMessage);
+            const summary = formatPersonaSummary(currentPersona, rawMessage);
+
+            // 未対応（pending）の既存アイテムとのみ行重複を検査し、過去分（applied/dismissed）は掲示板履歴として保持する
+            const overlappingPending = existingItems.find(
+                (item) =>
+                    item.status === 'pending' &&
+                    item.range.start.line <= r.range.end.line &&
+                    item.range.end.line >= r.range.start.line,
+            );
+
+            if (overlappingPending) {
+                if (r.source === 'llm' && !overlappingPending.id.includes('::llm::')) {
+                    const existingFound = this.historyStore.getInterventionById(
+                        overlappingPending.id,
+                        docUri,
+                    );
+                    if (existingFound?.detail.status === 'pending') {
+                        const updatedDetail = existingFound.detail;
+                        updatedDetail.title = title;
+                        updatedDetail.summary = summary;
+                        updatedDetail.originalCode = first.originalText;
+                        updatedDetail.proposedCode = first.replacementText;
+                        updatedDetail.range = r.range;
+                        updatedDetail.updatedAt = now;
+                        void this.historyStore.saveIntervention(docUri, updatedDetail);
+                    }
+                }
+                continue;
+            }
 
             const detail: InterventionDetail = {
                 id,
-                title: `[${r.category}] ${title}`,
-                summary: cleanReason,
+                title,
+                summary,
                 range: r.range,
                 status: 'pending',
                 personaId: currentPersona,
@@ -595,8 +829,18 @@ export class SideEditorProvider implements vscode.Disposable {
                 proposedCode: first.replacementText,
                 createdAt: now,
                 updatedAt: now,
-                chatHistory: [],
+                chatHistory: [
+                    {
+                        id: `msg-init-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                        sender: 'ai',
+                        message: getPersonaOpeningMessage(currentPersona, title),
+                        timestamp: now,
+                        personaId: currentPersona,
+                    },
+                ],
             };
+            existingItems.push(detail);
+            existingIds.add(id);
             void this.historyStore.saveIntervention(docUri, detail);
         }
     }
@@ -630,6 +874,9 @@ export class SideEditorProvider implements vscode.Disposable {
         );
     }
 
+    /**
+     * [Why/Intent] Webviewパネルおよび登録済みのDisposableリソースをすべて破棄する。
+     */
     public dispose(): void {
         if (this.panel) {
             this.panel.dispose();

@@ -49,6 +49,10 @@
         "title": "vibeCodeEase: Expand Intervention Detail"
       },
       {
+        "command": "vibecodeease.applyInterventionById",
+        "title": "vibeCodeEase: Apply Intervention By ID"
+      },
+      {
         "command": "vibecodeease.discardIntervention",
         "title": "vibeCodeEase: Discard Intervention"
       },

@@ -5,6 +5,7 @@
 import * as vscode from 'vscode';
 import { GlobalState } from '../state/globalState';
 import type { LlmInterventionPlan } from '../types';
+import type { PersonaId } from '../types/onDemandIntervention';
 import type { PresetMode } from '../types/preset';
 import { LlmConfigRepository } from './llm/llmConfigRepository';
 import { GEMINI_SUPPORTED_MODELS } from './llm/llmConstants';
@@ -42,6 +43,7 @@ export interface CreatePlanOptions {
     modelSelector?: string;
     preferenceSummary?: string;
     presetMode?: PresetMode;
+    personaId?: PersonaId;
 }
 
 /**
@@ -62,7 +64,7 @@ export class LlmInterventionService {
     /**
      * [Why/Intent] 統一ゲートウェイまたは後方互換クライアントを注入してサービスを初期化する
      */
-    constructor(
+    public constructor(
         gatewayOrClient?: ILlmGateway | { generate: (opts: unknown) => Promise<unknown> },
         _vscodeLmClient?: unknown,
         secrets?: vscode.SecretStorage,
@@ -92,11 +94,11 @@ export class LlmInterventionService {
      */
     public async createPlan(options: CreatePlanOptions): Promise<LlmInterventionPlan> {
         assertNotSensitiveDocument(options.document);
-        const prompt = buildInterventionPrompt(
-            options.document,
-            options.preferenceSummary,
-            options.presetMode,
-        );
+        const personaId = options.personaId ?? GlobalState.getInstance().personaId;
+        const prompt = buildInterventionPrompt(options.document, options.preferenceSummary, {
+            presetMode: options.presetMode,
+            personaId,
+        });
         const rawResult = await this.gateway.generateStructured<unknown>({
             prompt,
             responseSchema: INTERVENTION_RESPONSE_SCHEMA,
@@ -111,11 +113,11 @@ export class LlmInterventionService {
      */
     public async createGeminiPlan(options: CreateGeminiPlanOptions): Promise<LlmInterventionPlan> {
         assertNotSensitiveDocument(options.document);
-        const prompt = buildInterventionPrompt(
-            options.document,
-            options.preferenceSummary,
-            options.presetMode,
-        );
+        const personaId = options.personaId ?? GlobalState.getInstance().personaId;
+        const prompt = buildInterventionPrompt(options.document, options.preferenceSummary, {
+            presetMode: options.presetMode,
+            personaId,
+        });
         const rawResult = await this.gateway.generateStructured<unknown>({
             prompt,
             responseSchema: INTERVENTION_RESPONSE_SCHEMA,

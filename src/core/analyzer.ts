@@ -1,7 +1,14 @@
+/**
+ * [Why/Intent] ルールベース静的解析（タイポ・空白・連続空行検出）および
+ * AST解析・LLMバックグラウンド解析結果を統合・重複排除・キャッシュ管理するモジュール。
+ */
 import * as vscode from 'vscode';
 import type { AnalysisResult, PainCategory } from '../types';
 import { AstAnalyzer } from './astAnalyzer';
 
+/**
+ * [Why/Intent] キーワードや記号のタイポ検出ルール定義インターフェース。
+ */
 export interface TypoRule {
     pattern: string;
     replacement: string;
@@ -72,10 +79,13 @@ const SYMBOL_TYPO_RULES: TypoRule[] = [
         pattern: '= >',
         replacement: '=>',
         category: 'SYNTAX_TYPO',
-        message: '$(lightbulb) **Did you mean:** `=>`? (アロー関数)',
+        message: 'アロー関数のスペース混入を修正\n`=>` の間にスペースが入っています。',
     },
 ];
 
+/**
+ * [Why/Intent] デフォルトのタイポ検出ルールセット。
+ */
 export const DEFAULT_TYPO_RULES: readonly TypoRule[] = [
     ...KEYWORD_TYPO_RULES,
     ...SYMBOL_TYPO_RULES,
@@ -86,15 +96,18 @@ interface CachedAnalysis {
     results: AnalysisResult[];
 }
 
+/**
+ * [Why/Intent] テキストベースのタイポ・行末スペース・連続空行を高速検出する静的アナライザクラス。
+ */
 export class CodeAnalyzer {
     private readonly rules: readonly TypoRule[];
 
-    constructor(rules: readonly TypoRule[] = DEFAULT_TYPO_RULES) {
+    public constructor(rules: readonly TypoRule[] = DEFAULT_TYPO_RULES) {
         this.rules = rules;
     }
 
     /**
-     * 入力されたコードテキストを解析し、タイポや構文エラーなどの問題を検出する
+     * [Why/Intent] 入力されたコードテキストを解析し、タイポや構文エラーなどの問題を検出する。
      * @param text 解析対象のコード文字列全体
      * @param languageId 解析対象のファイルの言語ID（例: 'python', 'typescript'）
      * @returns 検出された問題のリスト (AnalysisResult[])
@@ -133,7 +146,8 @@ export class CodeAnalyzer {
                 {
                     originalText: lineText.slice(trailingStart),
                     replacementText: '',
-                    message: '$(lightbulb) **末尾の余分なスペース**を削除できます。',
+                    message:
+                        '行末の余分なスペースを削除\n末尾の不要な空白文字を削除して整形できます。',
                 },
             ],
         };
@@ -163,6 +177,8 @@ export class CodeAnalyzer {
             while (matchIndex !== -1) {
                 const afterIndex = matchIndex + rule.pattern.length;
                 if (this.isWordBoundaryMatch(lineText, matchIndex, rule.pattern)) {
+                    const cleanOriginal = rule.pattern.trim();
+                    const cleanReplacement = rule.replacement.trim();
                     results.push({
                         category: rule.category,
                         level: 'SUGGESTION',
@@ -176,7 +192,7 @@ export class CodeAnalyzer {
                                 replacementText: rule.replacement,
                                 message:
                                     rule.message ??
-                                    `$(lightbulb) **Did you mean:** \`${rule.replacement}\`?`,
+                                    `タイポ修正: ${cleanOriginal} → ${cleanReplacement}\nキーワードの綴り誤りの可能性があります。\`${cleanReplacement}\` への修正を検討してください。`,
                             },
                         ],
                     });
@@ -216,32 +232,36 @@ export class CodeAnalyzer {
         return results;
     }
 
+    /**
+     * [Why/Intent] 3行以上の連続空行ブロックに対し、行ごとに重複した提案を出さず1つの範囲として集約提案する。
+     */
     private addEmptyLineResults(
         results: AnalysisResult[],
         emptyStart: number,
         emptyCount: number,
     ): void {
-        for (let j = emptyStart + 2; j < emptyStart + emptyCount; j++) {
-            results.push({
-                category: 'INDENTATION_FORMATTING',
-                level: 'SUGGESTION',
-                range: {
-                    start: { line: j, character: 0 },
-                    end: { line: j, character: 0 },
+        results.push({
+            category: 'INDENTATION_FORMATTING',
+            level: 'SUGGESTION',
+            range: {
+                start: { line: emptyStart + 2, character: 0 },
+                end: { line: emptyStart + emptyCount - 1, character: 0 },
+            },
+            interventions: [
+                {
+                    originalText: '',
+                    replacementText: '',
+                    message:
+                        '連続した空行を2行以内に整理\n連続した空行が多すぎます。2行以内にまとめると読みやすくなります。',
                 },
-                interventions: [
-                    {
-                        originalText: '',
-                        replacementText: '',
-                        message:
-                            '$(lightbulb) **連続した空行**が多すぎます。2行以内にまとめると読みやすくなります。',
-                    },
-                ],
-            });
-        }
+            ],
+        });
     }
 }
 
+/**
+ * [Why/Intent] 静的解析・AST解析・LLM解析結果を統合し、同一・重複箇所の排除と却下済みIDのフィルタリングを行う共有キャッシュクラス。
+ */
 export class SharedAnalysisCache {
     private static instance: SharedAnalysisCache;
     private analyzer: CodeAnalyzer;
@@ -263,6 +283,9 @@ export class SharedAnalysisCache {
         this.ignoredIssues = new Set<string>();
     }
 
+    /**
+     * [Why/Intent] SharedAnalysisCacheのシングルトンインスタンスを取得する。
+     */
     public static getInstance(): SharedAnalysisCache {
         if (!SharedAnalysisCache.instance) {
             SharedAnalysisCache.instance = new SharedAnalysisCache();
@@ -271,8 +294,9 @@ export class SharedAnalysisCache {
     }
 
     /**
-     * アクティブなドキュメントの解析結果を返す。
-     * 静的解析（ルールベース）・AST解析・LLM結果の3つをマージして返す。
+     * [Why/Intent] アクティブなドキュメントの解析結果を返す。
+     * 静的解析（ルールベース）・AST解析・LLM結果の3つをマージし、
+     * 同一行・重複行への多重推薦を優先度順（LLM > AST > Static）で排除して返す。
      */
     public getResults(document: vscode.TextDocument): AnalysisResult[] {
         const uri = document.uri.toString();
@@ -283,37 +307,54 @@ export class SharedAnalysisCache {
             const languageId = document.languageId;
             const fileName = document.fileName;
 
-            // 静的解析 (ルールベース) → source: 'static'
             const staticResults = this.analyzer
                 .analyze(text, languageId)
                 .map((r) => ({ ...r, source: 'static' as const }));
 
-            // AST 解析 (TS/JS のみ) → source: 'ast'
             const astResults = this.astAnalyzer
                 .analyze(text, fileName, languageId)
                 .map((r) => ({ ...r, source: 'ast' as const }));
 
             cached = {
                 version: document.version,
-                results: [...staticResults, ...astResults],
+                results: [...astResults, ...staticResults],
             };
             this.cache.set(uri, cached);
         }
 
-        // LLM 結果をマージ（バージョン関係なく最新を使う）
         const external = this.externalResults.get(uri) ?? [];
-        const allResults = [...cached.results, ...external];
+        return this.deduplicateAndFilterResults(uri, [...external, ...cached.results]);
+    }
 
-        // 却下された問題をフィルタリング
-        return allResults.filter((r) => {
+    private deduplicateAndFilterResults(
+        uri: string,
+        prioritized: AnalysisResult[],
+    ): AnalysisResult[] {
+        const filtered: AnalysisResult[] = [];
+        for (const r of prioritized) {
             const id = `${uri}::${r.source ?? 'static'}::${r.category}::${r.range.start.line}::${r.range.start.character}`;
-            return !this.ignoredIssues.has(id);
-        });
+            if (this.ignoredIssues.has(id)) {
+                continue;
+            }
+            const hasLineOverlap = filtered.some(
+                (accepted) =>
+                    accepted.range.start.line <= r.range.end.line &&
+                    accepted.range.end.line >= r.range.start.line,
+            );
+            if (!hasLineOverlap) {
+                filtered.push(r);
+            }
+        }
+
+        return filtered.sort(
+            (a, b) =>
+                a.range.start.line - b.range.start.line ||
+                a.range.start.character - b.range.start.character,
+        );
     }
 
     /**
-     * LLM バックグラウンドサービスから呼ばれる。
-     * 指定URIの外部解析結果（source: 'llm'）を上書き保存する。
+     * [Why/Intent] LLM バックグラウンドサービスから呼ばれ、指定URIの外部解析結果（source: 'llm'）を上書き保存する。
      */
     public mergeExternalResults(uri: string, results: AnalysisResult[]): void {
         this.externalResults.set(
@@ -323,22 +364,37 @@ export class SharedAnalysisCache {
         this._onDidChange.fire();
     }
 
+    /**
+     * [Why/Intent] 外部LLM結果が登録されている全ドキュメントURIの一覧を返す。
+     */
     public getAllExternalUris(): string[] {
         return Array.from(this.externalResults.keys());
     }
 
-    /** 外部結果（LLM）のみをクリア */
+    /**
+     * [Why/Intent] 指定URIの外部結果（LLM）のみをクリアする。
+     */
     public clearExternalResults(uri: string): void {
         this.externalResults.delete(uri);
         this._onDidChange.fire();
     }
 
-    /** 特定の問題（LiveIssueのID相当）を無視リストに追加する */
+    /**
+     * [Why/Intent] 特定の問題（LiveIssueのID相当）を無視リストに追加する。
+     */
     public ignoreIssue(id: string): void {
         this.ignoredIssues.add(id);
         this._onDidChange.fire();
     }
 
+    public unignoreIssue(id: string): void {
+        this.ignoredIssues.delete(id);
+        this._onDidChange.fire();
+    }
+
+    /**
+     * [Why/Intent] キャッシュ・外部結果・無視リストをすべて初期化する。
+     */
     public clear(): void {
         this.cache.clear();
         this.externalResults.clear();

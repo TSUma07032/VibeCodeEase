@@ -1,12 +1,17 @@
 /**
  * [Why/Intent] vibeCodeEase サイドバーのReact側ルートコンポーネント。
- * ExtensionからのIPCメッセージを購読し、初期状態（SidebarInitialView）と
- * 介入対話パネル（SidebarDialogueView）の画面遷移（sidebarMode）および状態管理を統括する。
- * 重複エディタ（MirrorEditor）や常設TabBar、旧SettingsPanelを完全撤去し、軽量なサイドバーUIを提供する。
+ * ExtensionからのIPCメッセージを購読し、初期状態（SidebarInitialView: 上部「AI作業コード」＋下部「トグル式介入掲示板リスト」＋開閉式設定）と
+ * 介入対話パネル（SidebarDialogueView: チャット＆詳細画面）の画面遷移（sidebarMode）および状態管理を統括する。
+ * 「詳細」ボタン押下時には、常に一番上の介入案ではなく、その時押された介入IDの詳細・チャット履歴を確実に展開する。
  */
 import { useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { SidebarDialogueView } from './components/SidebarDialogueView';
 import { SidebarInitialView } from './components/SidebarInitialView';
+import {
+    formatShortTitle,
+    getPersonaOpeningLine,
+} from './constants/sidebarOptions';
 import type { ExtensionToWebviewMessage } from './types';
 import type {
     InterventionDetail,
@@ -26,6 +31,9 @@ function App() {
     const [selectedDetail, setSelectedDetail] =
         useState<InterventionDetail | null>(null);
     const [interventions, setInterventions] = useState<InterventionItem[]>([]);
+    const [documentText, setDocumentText] = useState<string>('');
+    const [documentFileName, setDocumentFileName] = useState<string>('');
+    const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
     // 簡易設定およびAPIキー状態
     const [hasApiKey, setHasApiKey] = useState<boolean>(false);
@@ -41,6 +49,11 @@ function App() {
     const [isRefining, setIsRefining] = useState<boolean>(false);
     const [refineError, setRefineError] = useState<string | null>(null);
     const [isChatLoading, setIsChatLoading] = useState<boolean>(false);
+
+    // 初期マウント時に1度だけ ready ハンドシェイクを送信する
+    useEffect(() => {
+        vscode.postMessage({ command: 'ready' });
+    }, []);
 
     useEffect(() => {
         const handleMessage = (
@@ -70,13 +83,31 @@ function App() {
 
             if ('type' in message) {
                 switch (message.type) {
+                    case 'SYNC_DOCUMENT':
+                        setDocumentText(message.text);
+                        setDocumentFileName(message.fileName);
+                        break;
                     case 'EXPAND_INTERVENTION_DETAIL':
-                        setSelectedDetail(message.payload.detail);
-                        setPersonaId(message.payload.persona);
-                        setSidebarMode('dialogue');
+                        // [Why/Intent] ホバーまたは掲示板の「詳細」押下時にバッチング遅延なく即座に該当IDの対話画面へ切り替える（RULE-007）
+                        flushSync(() => {
+                            setSelectedDetail(message.payload.detail);
+                            setPersonaId(message.payload.persona);
+                            setSidebarMode('dialogue');
+                        });
                         break;
                     case 'UPDATE_INTERVENTION_DETAIL':
-                        setSelectedDetail(message.payload.detail);
+                        setSelectedDetail((prev) =>
+                            prev && prev.id === message.payload.interventionId
+                                ? message.payload.detail
+                                : prev,
+                        );
+                        setInterventions((prev) =>
+                            prev.map((item) =>
+                                item.id === message.payload.interventionId
+                                    ? message.payload.detail
+                                    : item,
+                            ),
+                        );
                         break;
                     case 'SET_REFINE_LOADING':
                         setIsRefining(message.payload.isLoading);
@@ -118,7 +149,16 @@ function App() {
                                     (i) => i.id === prev.id,
                                 );
                             if (matching) {
-                                return { ...prev, status: matching.status };
+                                return {
+                                    ...prev,
+                                    status: matching.status,
+                                    originalCode:
+                                        matching.originalCode ??
+                                        prev.originalCode,
+                                    proposedCode:
+                                        matching.proposedCode ??
+                                        prev.proposedCode,
+                                };
                             }
                             return prev;
                         });
@@ -144,36 +184,36 @@ function App() {
                         }
                         break;
                     case 'NAVIGATE_TO_SETTINGS':
-                        // [Why/Intent] 設定へのナビゲーション要求時は詳細選択を解除し、初期画面（SidebarInitialView: 簡易設定＋APIキー）を表示する
                         setSelectedDetail(null);
                         setSidebarMode('initial');
+                        setIsSettingsOpen(true);
                         break;
                     case 'UPDATE_INTERVENTIONS':
-                        if (interventions.length === 0) {
-                            setInterventions(
-                                message.interventions.map((intv) => ({
+                        setInterventions((prev) => {
+                            if (prev.length === 0) {
+                                return message.interventions.map((intv) => ({
                                     id: intv.id,
-                                    title: intv.message
-                                        .replace(/^🤖\s*\*\*AI\s*提案\*\*:\s*/, '')
-                                        .slice(0, 50),
+                                    title: formatShortTitle(intv.message),
                                     summary: intv.message,
                                     range: intv.range,
                                     status: 'pending',
-                                    personaId,
+                                    personaId: 'mentor',
                                     createdAt: '',
                                     updatedAt: '',
-                                })),
-                            );
-                        }
+                                    originalCode: intv.originalText,
+                                    proposedCode: intv.replacementText,
+                                }));
+                            }
+                            return prev;
+                        });
                         break;
                 }
             }
         };
 
         window.addEventListener('message', handleMessage);
-        vscode.postMessage({ command: 'ready' });
         return () => window.removeEventListener('message', handleMessage);
-    }, [interventions.length, personaId]);
+    }, []);
 
     /**
      * [Why/Intent] 選択されたペルソナ属性をローカル状態へ即座に反映し、
@@ -237,29 +277,45 @@ function App() {
     };
 
     /**
-     * [Why/Intent] 提案アイテムが選択された際、ローカルの履歴リストや直近の介入情報からフォールバック詳細を
-     * 即時構築して画面遷移（setSidebarMode('dialogue')）させる「楽観的UIレンダリング」を行う。
-     * Extensionとの往復通信（REQUEST_EXPAND_DETAIL）を待たずに即時に対話ビューを描画することで、
-     * ユーザーの体感レイテンシを最小化し、その後サーバーからの最新詳細通知で内容を完全同期する。
+     * [Why/Intent] AI作業コードまたは掲示板のトグル内で「詳細」ボタンが押された際、
+     * その時押された介入ID（id）の originalCode / proposedCode / chatHistory を保持した詳細データを構築して
+     * チャット対話画面（setSidebarMode('dialogue')）へ即時遷移させ、Extensionへも該当IDの展開要求を送信する。
      */
     const handleSelectIntervention = (id: string) => {
         const item = interventions.find((i) => i.id === id);
         const now = new Date().toISOString();
+        const activePersona = item?.personaId ?? personaId;
+        const shortTitle = formatShortTitle(item?.title ?? 'AI提案');
+        const existingChat =
+            item?.chatHistory && item.chatHistory.length > 0
+                ? item.chatHistory
+                : [
+                      {
+                          id: `opening-${id}`,
+                          sender: 'ai' as const,
+                          message: getPersonaOpeningLine(
+                              activePersona,
+                              shortTitle,
+                          ),
+                          timestamp: now,
+                          personaId: activePersona,
+                      },
+                  ];
         const detail: InterventionDetail = {
             id,
-            title: item?.title ?? 'AI提案',
+            title: shortTitle,
             summary: item?.summary ?? '',
             range: item?.range ?? {
                 start: { line: 0, character: 0 },
                 end: { line: 0, character: 0 },
             },
             status: item?.status ?? 'pending',
-            personaId,
-            originalCode: '',
-            proposedCode: '',
+            personaId: activePersona,
+            originalCode: item?.originalCode ?? '',
+            proposedCode: item?.proposedCode ?? '',
             createdAt: item?.createdAt || now,
             updatedAt: item?.updatedAt || now,
-            chatHistory: [],
+            chatHistory: existingChat,
         };
         setSelectedDetail(detail);
         setSidebarMode('dialogue');
@@ -270,8 +326,7 @@ function App() {
     };
 
     /**
-     * [Why/Intent] 対話パネルから初期画面（一覧・簡易設定）へ戻るハンドラ。
-     * 詳細選択およびエラーバナーを解除し、一覧ビューへ復元する。
+     * [Why/Intent] 対話パネルから初期画面（AI作業スペース＋掲示板リスト）へ戻るハンドラ。
      */
     const handleBackToInitial = () => {
         setSelectedDetail(null);
@@ -280,8 +335,7 @@ function App() {
     };
 
     /**
-     * [Why/Intent] ユーザーからの方針修正指示（instruction）をExtensionへ送信（REFINE_INTERVENTION）し、
-     * LLMによるコードと理由の再推敲をトリガーする。
+     * [Why/Intent] ユーザーからの方針修正指示（instruction）をExtensionへ送信（REFINE_INTERVENTION）する。
      */
     const handleRefine = (instruction: string) => {
         if (!selectedDetail) {
@@ -300,7 +354,6 @@ function App() {
     /**
      * [Why/Intent] ユーザーが入力したチャットメッセージをローカルのchatHistoryへ即時追加する「楽観的チャット表示」を行い、
      * 直ちにExtensionへIPC送信（SEND_CHAT_MESSAGE）する。
-     * これによりメッセージ送信直後のユーザー体感レスポンスを滑らかにし、後続のAI応答（RECEIVE_CHAT_MESSAGE）を待機する。
      */
     const handleSendMessage = (text: string) => {
         if (!selectedDetail) {
@@ -334,6 +387,14 @@ function App() {
      * [Why/Intent] 対象提案のコード置換適用要求をExtensionへ発行する（APPLY_INTERVENTION）。
      */
     const handleApply = (id: string) => {
+        setInterventions((prev) =>
+            prev.map((item) =>
+                item.id === id ? { ...item, status: 'applied' } : item,
+            ),
+        );
+        setSelectedDetail((prev) =>
+            prev && prev.id === id ? { ...prev, status: 'applied' } : prev,
+        );
         vscode.postMessage({
             type: 'APPLY_INTERVENTION',
             payload: { interventionId: id },
@@ -352,8 +413,17 @@ function App() {
 
     /**
      * [Why/Intent] 対象提案を却下・無効化する要求をExtensionへ発行する（DISCARD_INTERVENTION）。
+     * ローカル状態も即座に 'dismissed' へ更新し、「却下された感」の強いUIフィードバックを即時反映する。
      */
     const handleReject = (id: string) => {
+        setInterventions((prev) =>
+            prev.map((item) =>
+                item.id === id ? { ...item, status: 'dismissed' } : item,
+            ),
+        );
+        setSelectedDetail((prev) =>
+            prev && prev.id === id ? { ...prev, status: 'dismissed' } : prev,
+        );
         vscode.postMessage({
             type: 'DISCARD_INTERVENTION',
             payload: { interventionId: id },
@@ -366,11 +436,14 @@ function App() {
             style={{
                 height: '100vh',
                 width: '100%',
+                maxWidth: '100%',
+                minWidth: 0,
                 display: 'flex',
                 flexDirection: 'column',
                 boxSizing: 'border-box',
                 overflowX: 'hidden',
                 overflowY: 'auto',
+                scrollbarGutter: 'stable',
             }}
         >
             {/* メイン画面描画: sidebarMode による切り替え */}
@@ -388,7 +461,15 @@ function App() {
                     apiKeyLength={apiKeyLength}
                     onSaveApiKey={handleSaveApiKey}
                     interventions={interventions}
+                    documentText={documentText}
+                    documentFileName={documentFileName}
                     onSelectIntervention={handleSelectIntervention}
+                    onApplyIntervention={handleApply}
+                    onRejectIntervention={handleReject}
+                    isSettingsOpen={isSettingsOpen}
+                    onToggleSettings={() =>
+                        setIsSettingsOpen((prev) => !prev)
+                    }
                 />
             ) : selectedDetail ? (
                 <SidebarDialogueView

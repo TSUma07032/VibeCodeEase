@@ -1,14 +1,17 @@
+/**
+ * [Why/Intent] TypeScript Compiler API を使った AST ベースの静的解析エンジン。
+ * TS / JS ファイルに適用し、構文木レベルで非推奨構文・デバッグログ残留・命名規則違反・空catchブロックを検出し、
+ * コメントアウト頼みではない実行可能な改善コードを提案する。
+ */
 import * as ts from 'typescript';
 import type { AnalysisResult } from '../types';
 
 /**
- * TypeScript Compiler API を使った AST ベースの静的解析。
- * TS / JS ファイルにのみ適用し、ルールベース解析では検出できない
- * 「構文構造を理解した」問題を検出する。
+ * [Why/Intent] TypeScript AST を走査して構文構造上の改善箇所を検出するアナライザクラス。
  */
 export class AstAnalyzer {
     /**
-     * テキストを AST 解析し、問題を AnalysisResult[] として返す。
+     * [Why/Intent] テキストを AST 解析し、問題を AnalysisResult[] として返す。
      * @param text ファイルのテキスト
      * @param fileName 言語判定・エラーロケーションのためのファイル名
      * @param languageId 'typescript' | 'javascript' | 'typescriptreact' | 'javascriptreact'
@@ -38,23 +41,20 @@ export class AstAnalyzer {
         return results;
     }
 
-    // ─── ルール: var 宣言の検出 ──────────────────────────────────────
     /**
-     * `var` 宣言を検出し `const` / `let` への移行を提案する。
+     * [Why/Intent] `var` 宣言を検出し `const` / `let` への移行を提案する。
      */
     private _detectVarUsage(sourceFile: ts.SourceFile, results: AnalysisResult[]): void {
         const visit = (node: ts.Node) => {
             if (ts.isVariableStatement(node)) {
                 const declList = node.declarationList;
                 if (!(declList.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const))) {
-                    // var 宣言（キーワード部分のみを置換範囲にする）
                     const varStartPos = declList.getStart(sourceFile);
                     const hasTrailingSpace =
                         sourceFile.text.slice(varStartPos, varStartPos + 4) === 'var ';
                     const spanLength = hasTrailingSpace ? 4 : 3;
                     const start = sourceFile.getLineAndCharacterOfPosition(varStartPos);
                     const end = sourceFile.getLineAndCharacterOfPosition(varStartPos + spanLength);
-                    // 初期化子があれば const、なければ let を提案
                     const hasInit = declList.declarations.every((d) => d.initializer !== undefined);
                     const suggestion = hasInit ? 'const' : 'let';
 
@@ -70,7 +70,7 @@ export class AstAnalyzer {
                             {
                                 originalText: hasTrailingSpace ? 'var ' : 'var',
                                 replacementText: hasTrailingSpace ? `${suggestion} ` : suggestion,
-                                message: `🌲 **\`var\` は非推奨**: \`${suggestion}\` の使用を検討してください。スコープが明確になり、意図しない再代入を防げます。`,
+                                message: `varを${suggestion}に変更してスコープを明確化\n\`var\` は非推奨です。\`${suggestion}\` を使用するとブロックスコープが明確になり、意図しない再代入を防げます。`,
                             },
                         ],
                     });
@@ -81,9 +81,8 @@ export class AstAnalyzer {
         ts.forEachChild(sourceFile, visit);
     }
 
-    // ─── ルール: console.log の検出 ─────────────────────────────────
     /**
-     * `console.log(...)` 呼び出しを検出し、デバッグコードを残していないか警告する。
+     * [Why/Intent] `console.log(...)` 呼び出しを検出し、コメントアウトではなく不要なデバッグ呼び出しの削除を提案する。
      */
     private _detectConsoleLog(sourceFile: ts.SourceFile, results: AnalysisResult[]): void {
         const visit = (node: ts.Node) => {
@@ -112,8 +111,8 @@ export class AstAnalyzer {
                     interventions: [
                         {
                             originalText: callText,
-                            replacementText: `/* ${callText} */`,
-                            message: `🌲 **デバッグ用コード** \`console.${methodName}\` が残っています。本番コードでは削除を検討してください。`,
+                            replacementText: '',
+                            message: `デバッグ用のconsole.${methodName}呼び出しを削除\nデバッグ用コード \`console.${methodName}\` が残っています。本番コードでは削除を検討してください。`,
                         },
                     ],
                 });
@@ -123,17 +122,13 @@ export class AstAnalyzer {
         ts.forEachChild(sourceFile, visit);
     }
 
-    // ─── ルール: 命名規則（関数・変数名） ───────────────────────────
     /**
-     * 関数宣言と変数宣言の名前が camelCase か PascalCase かを検証する。
-     * snake_case や SCREAMING_SNAKE_CASE は JS の一般的な慣習に外れる。
-     * ただし定数 (CONST) の SCREAMING_SNAKE は許容する。
+     * [Why/Intent] 関数宣言と変数宣言の名前が snake_case の場合に camelCase への変換を提案する。
      */
     private _detectNamingConventions(sourceFile: ts.SourceFile, results: AnalysisResult[]): void {
         const snakeCasePattern = /^[a-z][a-z0-9]*(_[a-z][a-z0-9]*)+$/;
 
         const visit = (node: ts.Node) => {
-            // 関数宣言: function my_function() {}
             if (ts.isFunctionDeclaration(node) && node.name) {
                 const name = node.name.text;
                 if (snakeCasePattern.test(name)) {
@@ -154,14 +149,13 @@ export class AstAnalyzer {
                             {
                                 originalText: name,
                                 replacementText: camel,
-                                message: `🌲 **命名規則**: JS では関数名に \`camelCase\` を使います。\`${name}\` → \`${camel}\` はいかがですか？`,
+                                message: `関数名をcamelCase（${camel}）に統一\nJS/TSでは関数名に \`camelCase\` を使います。\`${name}\` → \`${camel}\` への変更を検討してください。`,
                             },
                         ],
                     });
                 }
             }
 
-            // 変数宣言: let my_variable = ...
             if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
                 const name = node.name.text;
                 if (snakeCasePattern.test(name)) {
@@ -182,7 +176,7 @@ export class AstAnalyzer {
                             {
                                 originalText: name,
                                 replacementText: camel,
-                                message: `🌲 **命名規則**: JS では変数名に \`camelCase\` を使います。\`${name}\` → \`${camel}\` はいかがですか？`,
+                                message: `変数名をcamelCase（${camel}）に統一\nJS/TSでは変数名に \`camelCase\` を使います。\`${name}\` → \`${camel}\` への変更を検討してください。`,
                             },
                         ],
                     });
@@ -194,10 +188,8 @@ export class AstAnalyzer {
         ts.forEachChild(sourceFile, visit);
     }
 
-    // ─── ルール: 空の catch ブロック ─────────────────────────────────
     /**
-     * `catch(e) {}` のような空の catch ブロックを検出する。
-     * エラーを無視する実装はデバッグを困難にする。
+     * [Why/Intent] 空の catch ブロックを検出し、TODOコメントではなく実行可能なエラーログ出力コードを提案する。
      */
     private _detectEmptyBlock(sourceFile: ts.SourceFile, results: AnalysisResult[]): void {
         const visit = (node: ts.Node) => {
@@ -205,6 +197,9 @@ export class AstAnalyzer {
                 const block = node.catchClause.block;
                 const start = sourceFile.getLineAndCharacterOfPosition(block.getStart(sourceFile));
                 const end = sourceFile.getLineAndCharacterOfPosition(block.getEnd());
+                const varDecl = node.catchClause.variableDeclaration;
+                const errName =
+                    varDecl && ts.isIdentifier(varDecl.name) ? varDecl.name.text : 'error';
 
                 results.push({
                     category: 'SYNTAX_ERROR_HANDLING',
@@ -217,9 +212,8 @@ export class AstAnalyzer {
                     interventions: [
                         {
                             originalText: block.getText(sourceFile),
-                            replacementText: '{ /* TODO: エラーハンドリングを追加 */ }',
-                            message:
-                                '🌲 **空の catch ブロック**: エラーを無視しています。少なくとも `console.error(e)` を入れるか、エラーを再スローすることを検討してください。',
+                            replacementText: `{ console.error(${errName}); }`,
+                            message: `空のcatch節にエラーログ出力を追加\n空の catch ブロックはエラーを無視してしまいます。少なくとも \`console.error(${errName})\` を入れるか、エラーを再スローすることを検討してください。`,
                         },
                     ],
                 });

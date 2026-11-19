@@ -43,7 +43,9 @@ export interface ChatMessage {
 }
 
 /**
- * [Why/Intent] 介入項目のサマリー情報を保持するデータ構造定義。
+ * [Why/Intent] 介入項目のサマリーおよびトグル展開時の before/after 差分情報を保持するデータ構造定義。
+ * 一覧画面（掲示板）でトグルを開いた際に即座に before/after コードを表示できるよう、
+ * originalCode / proposedCode / chatHistory をオプショナルで保持する。
  */
 export interface InterventionItem {
     id: string;
@@ -54,6 +56,9 @@ export interface InterventionItem {
     personaId: PersonaId;
     createdAt: string;
     updatedAt: string;
+    originalCode?: string;
+    proposedCode?: string;
+    chatHistory?: ChatMessage[];
 }
 
 /**

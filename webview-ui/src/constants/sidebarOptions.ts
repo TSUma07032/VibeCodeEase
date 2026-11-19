@@ -8,22 +8,43 @@ import type {
 } from '../types/onDemandIntervention';
 
 /**
- * [Why/Intent] ユーザーが選択可能な5大ペルソナの一覧定義（識別子、表示ラベル、説明文）。
+ * [Why/Intent] 介入一言（タイトル）の最大文字数上限（20〜30字以内）。
+ */
+export const MAX_SIDEBAR_TITLE_LENGTH = 30;
+
+/**
+ * [Why/Intent] ユーザーが選択可能な5大ペルソナの一覧定義（直感的でわかりやすい日本語名と説明文）。
  */
 export const PERSONA_OPTIONS: Array<{
     id: PersonaId;
     label: string;
     description: string;
 }> = [
-    { id: 'mentor', label: 'AI (メンター)', description: '教育的で丁寧な解説とヒント' },
-    { id: 'concise', label: 'AI (簡潔・要点)', description: '無駄のない最短の修正コード' },
+    {
+        id: 'mentor',
+        label: '🌱 やさしい解説メンター（丁寧な基礎解説）',
+        description: '初心者にもわかりやすく変更理由と背景を丁寧に解説します',
+    },
+    {
+        id: 'concise',
+        label: '⚡ 最短修正・要点のみ（結論ファースト）',
+        description: '前置きを省き、変更コードと核心の理由だけを端的に提示します',
+    },
     {
         id: 'architect',
-        label: 'AI (シニア・設計)',
-        description: '保守性・拡張性・クリーンアーキテクチャ重視',
+        label: '🏗️ 設計・保守性レビュー（構造・読みやすさ）',
+        description: '責務の分離・保守性・将来の拡張性の観点から助言します',
     },
-    { id: 'qa_security', label: 'AI (QA・セキュリティ)', description: 'エッジケース・脆弱性・堅牢性重視' },
-    { id: 'tutor', label: 'AI (思考促進チューター)', description: 'ステップバイステップの易しい指導' },
+    {
+        id: 'qa_security',
+        label: '🛡️ バグ・安全性チェック（例外・境界値対策）',
+        description: 'エラー処理漏れ・null安全性・バグや脆弱性の防止を重視します',
+    },
+    {
+        id: 'tutor',
+        label: '💡 ヒントで自力解決サポート（考え方をガイド）',
+        description: '答えを丸投げせず、問いかけとヒントで理解を深めます',
+    },
 ];
 
 /**
@@ -50,6 +71,52 @@ export const FREQUENCY_OPTIONS: Array<{
 ];
 
 /**
+ * [Why/Intent] 介入一言（タイトル）から不要なカテゴリプレフィックスやMarkdown記号を除去し、
+ * 20〜30文字以内（最大30文字）に収めるフォーマッタ。
+ */
+export function formatShortTitle(rawTitle: string): string {
+    const cleaned = rawTitle
+        .replace(/^\[[A-Z_]+\]\s*/g, '')
+        .replace(/^\$\([a-z-]+\)\s*/gi, '')
+        .replace(/^(?:🤖|🌲|💡|🌱|⚡|🏗️|🛡️)+\s*/gu, '')
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/^(AI\s*提案|Did you mean)\s*[:：]?\s*/i, '')
+        .split(/\r?\n/)[0]
+        .trim();
+
+    if (!cleaned) {
+        return 'コード改善の提案';
+    }
+    if (cleaned.length <= MAX_SIDEBAR_TITLE_LENGTH) {
+        return cleaned;
+    }
+    return `${cleaned.slice(0, MAX_SIDEBAR_TITLE_LENGTH - 1)}…`;
+}
+
+/**
+ * [Why/Intent] 対話画面の初手セリフ（初期AIメッセージ）を選択中のペルソナに合わせて生成する。
+ */
+export function getPersonaOpeningLine(
+    personaId?: PersonaId,
+    title?: string,
+): string {
+    const shortTitle = formatShortTitle(title ?? 'この箇所');
+    switch (personaId) {
+        case 'concise':
+            return `⚡ 「${shortTitle}」の最短修正案です。差分と要点を確認し、疑問点があれば端的にどうぞ。`;
+        case 'architect':
+            return `🏗️ 設計・保守性レビューの観点から「${shortTitle}」を提案しました。責務の分離や将来の拡張性について議論したい点があればお知らせください。`;
+        case 'qa_security':
+            return `🛡️ バグ・安全性チェックの観点から「${shortTitle}」を検出しました。境界値や例外発生時の挙動について確認したい点はありますか？`;
+        case 'tutor':
+            return `💡 ヒントで自力解決サポートです！「${shortTitle}」について、元のコードのままだとどんな場面で困りそうか、一緒に考えてみませんか？`;
+        default:
+            return `🌱 こんにちは！やさしい解説メンターです。「${shortTitle}」について、より分かりやすく安全な書き方を提案しました。気になる点があれば何でも聞いてくださいね！`;
+    }
+}
+
+/**
  * [Why/Intent] 提案ステータスに応じたバッジ表示ラベルとカラー定義を返すヘルパー。
  */
 export function getStatusBadge(status: InterventionItem['status']): {
@@ -59,22 +126,18 @@ export function getStatusBadge(status: InterventionItem['status']): {
     switch (status) {
         case 'applied':
             return {
-                label: '✅ 適用済',
+                label: '✓ 採用済',
                 color: 'var(--vscode-testing-iconPassed, #4ec9b0)',
             };
         case 'reverted':
-            return {
-                label: '↩️ 取消済',
-                color: 'var(--vscode-descriptionForeground, #888888)',
-            };
         case 'dismissed':
             return {
-                label: '🗑️ 却下',
+                label: '✕ 破棄済',
                 color: 'var(--vscode-errorForeground, #f48771)',
             };
         default:
             return {
-                label: '🟡 未確認',
+                label: '💡 未対応',
                 color: 'var(--vscode-editorWarning-foreground, #cca700)',
             };
     }

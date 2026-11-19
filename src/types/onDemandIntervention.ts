@@ -42,7 +42,9 @@ export interface ChatMessage {
 }
 
 /**
- * [Why/Intent] エディタ上の装飾や目次QuickPick表示に必要な介入サマリー情報。
+ * [Why/Intent] エディタ上のホバー掲示板やサイドバー一覧のトグル展開に必要な介入サマリー・差分情報。
+ * 過去の介入も含めて一覧上で before/after 差分を即座にトグル表示できるよう、
+ * オプショナルで originalCode / proposedCode / chatHistory を保持可能とする。
  */
 export interface InterventionItem {
     id: string;
@@ -53,6 +55,9 @@ export interface InterventionItem {
     personaId: PersonaId;
     createdAt: string;
     updatedAt: string;
+    originalCode?: string;
+    proposedCode?: string;
+    chatHistory?: ChatMessage[];
 }
 
 /**

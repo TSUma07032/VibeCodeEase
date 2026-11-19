@@ -1,7 +1,10 @@
 /**
  * [Why/Intent] 非侵襲オンデマンド・インライン機能の拡張機能ホスト単体テストスイート。
- * InterventionHistoryStore（JSON永続化とCRUD）、InlineInterventionDecorator（装飾計算）、
- * PromptBuilder（5大ペルソナプロンプト注入厳格検証）、およびActiveInterventionService（正常系・異常系）を検証する。
+ * InterventionHistoryStore（JSON永続化、CRUD、パーセントエンコード差異を吸収するID/URI照合）、
+ * InlineInterventionHoverProvider（過去履歴を含む掲示板トグル表示・before/after差分・採用/却下/詳細リンク生成）、
+ * parseInterventionCommandArgs（VS Code Markdown command URIの位置引数・配列引数両対応）、
+ * InlineInterventionDecorator（装飾計算）、PromptBuilder（5大ペルソナプロンプト注入厳格検証）、
+ * およびActiveInterventionService（正常系・異常系）を検証する。
  */
 import * as assert from 'node:assert';
 import * as fs from 'node:fs';
@@ -12,7 +15,9 @@ import type { ILlmGateway } from '../core/llm/llmGateway';
 import { PromptBuilder } from '../core/llm/promptBuilder';
 import { ActiveInterventionService } from '../core/onDemand/activeInterventionService';
 import { InlineInterventionDecorator } from '../core/onDemand/inlineInterventionDecorator';
+import { InlineInterventionHoverProvider } from '../core/onDemand/inlineInterventionHoverProvider';
 import { InterventionHistoryStore } from '../core/onDemand/interventionHistoryStore';
+import { parseInterventionCommandArgs } from '../extension';
 import type { InterventionDetail, InterventionItem } from '../types/onDemandIntervention';
 
 suite('OnDemand Inline Unit Tests', () => {
@@ -74,6 +79,112 @@ suite('OnDemand Inline Unit Tests', () => {
 
         const history = await store.getHistory(docUri);
         assert.strictEqual(history.interventions[0].status, 'dismissed');
+    });
+
+    test('InterventionHistoryStore: Windowsドライブレターや日本語パスを含むエンコード済みIDとデコード済みIDの双方で2番目以降の介入を正確に取得できること', async () => {
+        const encodedDocUri =
+            'file:///c%3A/Users/tubas/%E3%83%89%E3%82%AD%E3%83%A5%E3%83%A1%E3%83%B3%E3%83%88/demo.ts';
+        const decodedDocUri = 'file:///c:/Users/tubas/ドキュメント/demo.ts';
+
+        const firstItem: InterventionDetail = {
+            ...sampleDetail,
+            id: `${encodedDocUri}:1:0-2:5:100`,
+            title: '1番目の介入案',
+        };
+        const secondItem: InterventionDetail = {
+            ...sampleDetail,
+            id: `${encodedDocUri}:10:0-12:5:200`,
+            title: '2番目の介入案',
+        };
+
+        await store.saveIntervention(encodedDocUri, firstItem);
+        await store.saveIntervention(encodedDocUri, secondItem);
+
+        // VS Code Markdown command URI でパーセントエンコーディングがデコードされた状態のID・URIで検索しても2番目がヒットすること
+        const decodedSecondId = `${decodedDocUri}:10:0-12:5:200`;
+        const resolved = store.getInterventionById(decodedSecondId, decodedDocUri);
+        assert.ok(resolved, 'デコード後のIDでも2番目の介入が取得できること');
+        assert.strictEqual(resolved?.detail.title, '2番目の介入案');
+    });
+
+    test('parseInterventionCommandArgs: 位置引数 (id, uri) と配列引数 ([id, uri]) の双方を正しく解釈できること', () => {
+        // 1. VS Code が JSON 配列クエリを展開して位置引数として渡した場合
+        const spreadResult = parseInterventionCommandArgs('int-2', 'file:///workspace/demo.ts');
+        assert.strictEqual(spreadResult.id, 'int-2');
+        assert.strictEqual(spreadResult.uri, 'file:///workspace/demo.ts');
+
+        // 2. 配列1個として渡された場合
+        const arrayResult = parseInterventionCommandArgs(['int-2', 'file:///workspace/demo.ts']);
+        assert.strictEqual(arrayResult.id, 'int-2');
+        assert.strictEqual(arrayResult.uri, 'file:///workspace/demo.ts');
+    });
+
+    test('InlineInterventionHoverProvider: 過去の介入を含む掲示板トグルリスト（介入1/介入2、before/after、採用・却下・詳細）を生成し、各詳細リンクが固有IDを持つこと', async () => {
+        const docUri = 'file:///workspace/hover-test.ts';
+        const item1: InterventionDetail = {
+            ...sampleDetail,
+            id: 'int-hover-1',
+            title: '過去の介入要約1',
+            status: 'applied',
+            originalCode: 'var a = 1;',
+            proposedCode: 'const a = 1;',
+        };
+        const item2: InterventionDetail = {
+            ...sampleDetail,
+            id: 'int-hover-2',
+            title: '現在の介入要約2',
+            status: 'pending',
+            originalCode: 'let b = 2;',
+            proposedCode: 'const b = 2;',
+        };
+
+        await store.saveIntervention(docUri, item1);
+        await store.saveIntervention(docUri, item2);
+
+        const hoverProvider = new InlineInterventionHoverProvider(store);
+        const mockDocument = {
+            uri: vscode.Uri.parse(docUri),
+        } as unknown as vscode.TextDocument;
+
+        const hover = await hoverProvider.provideHover(
+            mockDocument,
+            new vscode.Position(10, 0),
+            {} as vscode.CancellationToken,
+        );
+        assert.ok(hover, 'ホバーが生成されること');
+        if (!hover) {
+            assert.fail('ホバーが生成されること');
+        }
+        const md = (hover.contents[0] as vscode.MarkdownString).value;
+
+        // 掲示板形式で介入1（過去分）と介入2が並んでいること
+        assert.ok(md.includes('介入1：過去の介入要約1'), '介入1の要約が含まれること');
+        assert.ok(md.includes('介入2：現在の介入要約2'), '介入2の要約が含まれること');
+
+        // トグル (<details><summary>) と before (-) / after (+) と 採用・却下・詳細 が含まれること
+        assert.ok(md.includes('<details>'), '<details> トグルが含まれること');
+        assert.ok(md.includes('**before**'), 'before セクションが含まれること');
+        assert.ok(md.includes('- var a = 1;'), '介入1の before 差分が含まれること');
+        assert.ok(md.includes('- let b = 2;'), '介入2の before 差分が含まれること');
+        assert.ok(md.includes('**after**'), 'after セクションが含まれること');
+        assert.ok(md.includes('+ const a = 1;'), '介入1の after 差分が含まれること');
+        assert.ok(md.includes('+ const b = 2;'), '介入2の after 差分が含まれること');
+        assert.ok(
+            md.includes('[採用](command:vibecodeease.applyInterventionById?'),
+            '採用リンクが含まれること',
+        );
+        assert.ok(
+            md.includes('[却下](command:vibecodeease.dismissIntervention?'),
+            '却下リンクが含まれること',
+        );
+        assert.ok(
+            md.includes('[詳細](command:vibecodeease.expandIntervention?'),
+            '詳細リンクが含まれること',
+        );
+
+        // 介入1と介入2の詳細リンクにそれぞれのIDがエンコードされていること
+        assert.ok(md.includes(encodeURIComponent(JSON.stringify(['int-hover-1', docUri]))));
+        assert.ok(md.includes(encodeURIComponent(JSON.stringify(['int-hover-2', docUri]))));
     });
 
     test('InterventionHistoryStore: チャット履歴を追加して永続化できること', async () => {

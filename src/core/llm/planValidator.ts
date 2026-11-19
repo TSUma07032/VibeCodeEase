@@ -1,8 +1,13 @@
+/**
+ * [Why/Intent] LLMが生成した介入計画（LlmInterventionPlan）のスキーマ検証、
+ * ドキュメント上の正確なRange位置解決、コメントアウトのみ修正の排除、
+ * および重複・オーバーラップする変更箇所の排除を行うバリデータモジュール。
+ */
 import * as vscode from 'vscode';
 import { type LlmEdit, type LlmInterventionPlan, LlmInterventionPlanSchema } from '../../types';
 
 /**
- * 渡された文字列の改行コード（CRLF / LF）を考慮して正規化後オフセットから元の文字列オフセットへ変換する
+ * [Why/Intent] 渡された文字列の改行コード（CRLF / LF）を考慮して正規化後オフセットから元の文字列オフセットへ変換する。
  */
 export function toOriginalOffset(text: string, normalizedOffset: number): number {
     let normalizedIndex = 0;
@@ -19,13 +24,59 @@ export function toOriginalOffset(text: string, normalizedOffset: number): number
 }
 
 /**
- * ドキュメント内から変更前テキストの正確な Range を近傍検索するためのパラメータ
+ * [Why/Intent] ドキュメント内から変更前テキストの正確な Range を近傍検索するためのパラメータ。
  */
 export interface FindOriginalTextRangeParams {
     document: vscode.TextDocument;
     oldText: string;
     hintLine: number;
     hintCharacter: number;
+}
+
+/**
+ * [Why/Intent] コード文字列からブロックコメント・行コメントおよび空白類を除去し、
+ * 実行可能なコードトークン列のみを抽出するヘルパー。
+ */
+function stripCommentsAndWhitespace(code: string): string {
+    return code
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\/\/.*$/gm, '')
+        .replace(/^\s*#.*$/gm, '')
+        .replace(/\s+/g, '')
+        .trim();
+}
+
+/**
+ * [Why/Intent] 修正案が「既存コードのコメントアウトのみ」または「コメント（TODO等）の追加・変更のみで実コードが変わらない修正」
+ * または「変更前後で同一内容」であるかを判定する。
+ */
+export function isCommentOnlyEdit(oldText: string, newText: string): boolean {
+    if (oldText.trim() === newText.trim()) {
+        return true;
+    }
+
+    const hasCommentSyntax = /\/\/|\/\*|\*\/|^\s*#/m.test(newText);
+    if (!hasCommentSyntax) {
+        return false;
+    }
+
+    const strippedOld = stripCommentsAndWhitespace(oldText);
+    const strippedNew = stripCommentsAndWhitespace(newText);
+
+    // newText がコメントのみで構成されている場合（既存コードをコメントアウトしただけ等）
+    if (newText.trim().length > 0 && strippedNew.length === 0) {
+        return true;
+    }
+
+    // コメントを除いた実行コード部分が変更前後で全く同じ場合（TODOコメントを足しただけ等）
+    return strippedOld === strippedNew;
+}
+
+/**
+ * [Why/Intent] 2つの編集範囲が行単位で重複（オーバーラップ）しているかを判定する。
+ */
+function isOverlappingEdit(a: LlmEdit, b: LlmEdit): boolean {
+    return a.startLine <= b.endLine && a.endLine >= b.startLine;
 }
 
 /**
@@ -63,9 +114,30 @@ function resolveSingleEdit(raw: LlmEdit, document: vscode.TextDocument): LlmEdit
     };
 }
 
+function throwValidationError(
+    value: unknown,
+    errors: Array<{ path: (string | number)[]; message: string }>,
+): never {
+    const hasMissingKeys = errors.some((e) => e.message === 'Required');
+    const hasTopKeys =
+        value !== null && typeof value === 'object' && 'summary' in value && 'edits' in value;
+    if (hasMissingKeys && !hasTopKeys) {
+        throw new Error('LLMの介入プランに必要な項目がありません。');
+    }
+    const hasEmptyOldText = errors.some(
+        (e) =>
+            e.path.includes('oldText') &&
+            e.message === 'String must contain at least 1 character(s)',
+    );
+    if (hasEmptyOldText) {
+        throw new Error('LLMの変更案にoldTextがありません。');
+    }
+    throw new Error('LLMの変更案に不正な値があります。');
+}
+
 /**
  * [Why/Intent] LLMから受け取った生のオブジェクトを検証し、TextDocument上の正確な位置にマップされた LlmInterventionPlan を構築する。
- * 不正な形式やドキュメント不一致があれば例外をスローして不正な編集の適用を防ぐ。
+ * コメントアウトのみの修正や重複する変更箇所は自動的に除外し、不正な形式やドキュメント不一致があれば例外をスローする。
  */
 export function validatePlan(value: unknown, document: vscode.TextDocument): LlmInterventionPlan {
     if (!value || typeof value !== 'object') {
@@ -74,30 +146,19 @@ export function validatePlan(value: unknown, document: vscode.TextDocument): Llm
 
     const result = LlmInterventionPlanSchema.safeParse(value);
     if (!result.success) {
-        const hasMissingKeys = result.error.errors.some((e) => e.message === 'Required');
-        if (
-            hasMissingKeys &&
-            !(value !== null && typeof value === 'object' && 'summary' in value && 'edits' in value)
-        ) {
-            throw new Error('LLMの介入プランに必要な項目がありません。');
-        }
-        if (
-            result.error.errors.some(
-                (e) =>
-                    e.path.includes('oldText') &&
-                    e.message === 'String must contain at least 1 character(s)',
-            )
-        ) {
-            throw new Error('LLMの変更案にoldTextがありません。');
-        }
-        throw new Error('LLMの変更案に不正な値があります。');
+        throwValidationError(value, result.error.errors);
     }
 
     const candidate = result.data;
-
     const edits: LlmEdit[] = [];
     for (const edit of candidate.edits) {
         const resolved = resolveSingleEdit(edit, document);
+        if (isCommentOnlyEdit(resolved.oldText, resolved.newText)) {
+            continue;
+        }
+        if (edits.some((existing) => isOverlappingEdit(existing, resolved))) {
+            continue;
+        }
         edits.push(resolved);
     }
 
@@ -145,7 +206,7 @@ function getClampedHintOffset(
 }
 
 /**
- * 現在のドキュメントから元のテキストを検索し、正しいRangeを返す
+ * [Why/Intent] 現在のドキュメントから元のテキストを検索し、正しいRangeを返す。
  */
 export function findOriginalTextRange(
     params: FindOriginalTextRangeParams,

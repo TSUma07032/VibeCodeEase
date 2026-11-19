@@ -62,7 +62,7 @@ export class LlmBackgroundService implements vscode.Disposable {
         return this._isPaused;
     }
 
-    constructor(
+    public constructor(
         readonly _secrets: vscode.SecretStorage,
         llmService?: LlmInterventionService,
     ) {
@@ -149,7 +149,7 @@ export class LlmBackgroundService implements vscode.Disposable {
         this.onDidUpdateDashboard.fire({ type: 'LLM_DASHBOARD_INIT', ...this.getDashboardState() });
     }
 
-    /** [Why/Intent] ユーザー設定のプロバイダに応じたプラン作成処理へ委譲する */
+    /** [Why/Intent] ユーザー設定のプロバイダおよび選択中ペルソナに応じたプラン作成処理へ委譲する */
     private async executeLlmPlan(
         document: vscode.TextDocument,
         token: vscode.CancellationToken,
@@ -166,6 +166,7 @@ export class LlmBackgroundService implements vscode.Disposable {
             token,
             modelSelector: state.llmModel,
             presetMode: state.presetMode,
+            personaId: state.personaId,
         });
     }
 
@@ -329,6 +330,9 @@ export class LlmBackgroundService implements vscode.Disposable {
         await this.performAnalysis(document, token);
     }
 
+    /**
+     * [Why/Intent] 登録済みのリスナー・タイマー・EventEmitterを破棄する
+     */
     public dispose(): void {
         for (const d of this._disposables) {
             d.dispose();

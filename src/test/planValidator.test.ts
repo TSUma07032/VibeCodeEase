@@ -1,6 +1,11 @@
+/**
+ * [Why/Intent] PlanValidator の単体テストスイート。
+ * オフセット変換、位置解決、コメントアウトのみ修正の排除（isCommentOnlyEdit）、
+ * および重複・オーバーラップする変更箇所の排除を検証する。
+ */
 import * as assert from 'node:assert';
 import * as vscode from 'vscode';
-import { toOriginalOffset, validatePlan } from '../core/llm/planValidator';
+import { isCommentOnlyEdit, toOriginalOffset, validatePlan } from '../core/llm/planValidator';
 
 function createMockDocument(content: string): vscode.TextDocument {
     const lines = content.split(/\r?\n/);
@@ -56,6 +61,36 @@ suite('PlanValidator Test Suite', () => {
         });
     });
 
+    suite('isCommentOnlyEdit', () => {
+        test('コメントアウトのみ・TODOコメント追加のみの修正を true と判定し、実コード変更は false と判定すること', () => {
+            assert.strictEqual(
+                isCommentOnlyEdit('console.log(x);', '// console.log(x);'),
+                true,
+                '行コメントアウトのみの修正は禁止されること',
+            );
+            assert.strictEqual(
+                isCommentOnlyEdit('console.log(x);', '/* console.log(x); */'),
+                true,
+                'ブロックコメントアウトのみの修正は禁止されること',
+            );
+            assert.strictEqual(
+                isCommentOnlyEdit('{}', '{ /* TODO: エラーハンドリングを追加 */ }'),
+                true,
+                'TODOコメント追加のみの修正は禁止されること',
+            );
+            assert.strictEqual(
+                isCommentOnlyEdit('var x = 1;', 'const x = 1;'),
+                false,
+                '実行コードの変更は許可されること',
+            );
+            assert.strictEqual(
+                isCommentOnlyEdit('console.log(x);', ''),
+                false,
+                '不要コードの削除（空文字）は許可されること',
+            );
+        });
+    });
+
     suite('validatePlan', () => {
         test('正常な介入プランを検証・位置解決できること', () => {
             const doc = createMockDocument('function hello() {\n  functon test() {}\n}');
@@ -83,6 +118,49 @@ suite('PlanValidator Test Suite', () => {
             assert.strictEqual(result.edits[0].category, 'SYNTAX_TYPO');
             assert.strictEqual(result.edits[0].startLine, 1);
             assert.strictEqual(result.edits[0].startCharacter, 2);
+        });
+
+        test('コメントアウトのみの編集および同一行の重複編集が除外されること', () => {
+            const doc = createMockDocument('var x = 1;\nconsole.log(x);');
+            const rawPlan = {
+                summary: 'Clean up',
+                edits: [
+                    {
+                        startLine: 0,
+                        startCharacter: 0,
+                        endLine: 0,
+                        endCharacter: 10,
+                        oldText: 'var x = 1;',
+                        newText: 'const x = 1;',
+                        category: 'VAR_FUNC_MANAGEMENT',
+                        reason: 'varをconstに変更',
+                    },
+                    {
+                        startLine: 0,
+                        startCharacter: 0,
+                        endLine: 0,
+                        endCharacter: 3,
+                        oldText: 'var',
+                        newText: 'let',
+                        category: 'VAR_FUNC_MANAGEMENT',
+                        reason: '重複する同一行提案',
+                    },
+                    {
+                        startLine: 1,
+                        startCharacter: 0,
+                        endLine: 1,
+                        endCharacter: 15,
+                        oldText: 'console.log(x);',
+                        newText: '/* console.log(x); */',
+                        category: 'VAR_FUNC_MANAGEMENT',
+                        reason: 'コメントアウトのみの提案',
+                    },
+                ],
+            };
+
+            const result = validatePlan(rawPlan, doc);
+            assert.strictEqual(result.edits.length, 1);
+            assert.strictEqual(result.edits[0].newText, 'const x = 1;');
         });
 
         test('oldTextが複数箇所に出現する場合、startLineに最も近い箇所が選択されること', () => {

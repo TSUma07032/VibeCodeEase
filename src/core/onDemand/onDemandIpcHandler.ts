@@ -8,6 +8,7 @@ import type {
     ExtensionToWebviewInterventionMessage,
     WebviewToExtensionInterventionMessage,
 } from '../../types/onDemandIpcMessages';
+import { SharedAnalysisCache } from '../analyzer';
 import type { ILlmGateway } from '../llm/llmGateway';
 import {
     CHAT_RESPONSE_SCHEMA,
@@ -68,8 +69,21 @@ export class OnDemandIpcHandler {
         documentUri: string,
         interventionId: string,
     ): Promise<InterventionDetail | undefined> {
+        const found = this._ctx.historyStore.getInterventionById(interventionId, documentUri);
+        if (found) {
+            return found.detail;
+        }
         const history = await this._ctx.historyStore.getHistory(documentUri);
         return history.interventions.find((item) => item.id === interventionId);
+    }
+
+    private resolveDocumentUri(documentUri: string, interventionId: string): string {
+        if (documentUri) {
+            return documentUri;
+        }
+        return (
+            this._ctx.historyStore.getInterventionById(interventionId)?.documentUri ?? documentUri
+        );
     }
 
     private sendSyncHistory(documentUri: string): void {
@@ -92,20 +106,33 @@ export class OnDemandIpcHandler {
      * ドキュメント変更リスナーからの二重検知や不要な循環推敲ループの誘発を確実に防止する。
      */
     private async handleApply(documentUri: string, interventionId: string): Promise<void> {
-        const detail = await this.findDetail(documentUri, interventionId);
+        const targetUri = this.resolveDocumentUri(documentUri, interventionId);
+        const detail = await this.findDetail(targetUri, interventionId);
         if (!detail) {
             return;
         }
 
         this._isApplyingIntervention = true;
         try {
-            await this._ctx.applyEditorEdit(documentUri, detail.originalCode, detail.proposedCode);
-            await this._ctx.historyStore.updateStatus(documentUri, interventionId, 'applied');
+            await this._ctx.applyEditorEdit(targetUri, detail.originalCode, detail.proposedCode);
+            SharedAnalysisCache.getInstance().unignoreIssue(interventionId);
+            const updated = await this._ctx.historyStore.updateStatus(
+                targetUri,
+                interventionId,
+                'applied',
+            );
+            if (updated) {
+                this._ctx.postMessage({
+                    type: 'UPDATE_INTERVENTION_DETAIL',
+                    payload: { interventionId, detail: updated },
+                });
+            }
         } finally {
             this._isApplyingIntervention = false;
         }
 
-        this.sendSyncHistory(documentUri);
+        vscode.window.setStatusBarMessage('$(check) 提案を採用しました', 3000);
+        this.sendSyncHistory(targetUri);
     }
 
     /**
@@ -113,29 +140,72 @@ export class OnDemandIpcHandler {
      * 置換処理中は `_isApplyingIntervention` 排他フラグを保護し、ドキュメント変更リスナーによる循環ループを防ぐ。
      */
     private async handleUndo(documentUri: string, interventionId: string): Promise<void> {
-        const detail = await this.findDetail(documentUri, interventionId);
+        const targetUri = this.resolveDocumentUri(documentUri, interventionId);
+        const detail = await this.findDetail(targetUri, interventionId);
         if (!detail) {
             return;
         }
 
         this._isApplyingIntervention = true;
         try {
-            await this._ctx.applyEditorEdit(documentUri, detail.proposedCode, detail.originalCode);
-            await this._ctx.historyStore.updateStatus(documentUri, interventionId, 'reverted');
+            await this._ctx.applyEditorEdit(targetUri, detail.proposedCode, detail.originalCode);
+            const updated = await this._ctx.historyStore.updateStatus(
+                targetUri,
+                interventionId,
+                'reverted',
+            );
+            if (updated) {
+                this._ctx.postMessage({
+                    type: 'UPDATE_INTERVENTION_DETAIL',
+                    payload: { interventionId, detail: updated },
+                });
+            }
         } finally {
             this._isApplyingIntervention = false;
         }
 
-        this.sendSyncHistory(documentUri);
+        vscode.window.setStatusBarMessage('$(trash) 提案を取り消しました', 3000);
+        this.sendSyncHistory(targetUri);
     }
 
     /**
-     * [Why/Intent] 提案を却下し、履歴ストア内のステータスを 'dismissed' へ更新する。
-     * 更新後はWebviewおよびエディタ装飾へ最新状態を同期伝播させる。
+     * [Why/Intent] 提案を破棄し、解析キャッシュの無視リストへ追加するとともに履歴ストア内のステータスを 'dismissed' へ更新する。
+     * 既に適用済み（applied）だった場合は元のコードへロールバック復元し、あとからのやり直し（採用/破棄の相互遷移）を完全保証する。
      */
     private async handleDiscard(documentUri: string, interventionId: string): Promise<void> {
-        await this._ctx.historyStore.updateStatus(documentUri, interventionId, 'dismissed');
-        this.sendSyncHistory(documentUri);
+        const targetUri = this.resolveDocumentUri(documentUri, interventionId);
+        const detail = await this.findDetail(targetUri, interventionId);
+        if (!detail) {
+            return;
+        }
+
+        this._isApplyingIntervention = true;
+        try {
+            if (detail.status === 'applied') {
+                await this._ctx.applyEditorEdit(
+                    targetUri,
+                    detail.proposedCode,
+                    detail.originalCode,
+                );
+            }
+            SharedAnalysisCache.getInstance().ignoreIssue(interventionId);
+            const updated = await this._ctx.historyStore.updateStatus(
+                targetUri,
+                interventionId,
+                'dismissed',
+            );
+            if (updated) {
+                this._ctx.postMessage({
+                    type: 'UPDATE_INTERVENTION_DETAIL',
+                    payload: { interventionId, detail: updated },
+                });
+            }
+        } finally {
+            this._isApplyingIntervention = false;
+        }
+
+        vscode.window.setStatusBarMessage('$(trash) 提案を破棄しました', 3000);
+        this.sendSyncHistory(targetUri);
     }
 
     /**
@@ -226,17 +296,18 @@ export class OnDemandIpcHandler {
      */
     private async handleChat(params: ChatParams): Promise<void> {
         const { documentUri, interventionId, text } = params;
+        const targetUri = this.resolveDocumentUri(documentUri, interventionId);
         this._ctx.postMessage({
             type: 'SET_CHAT_LOADING',
             payload: { interventionId, isLoading: true },
         });
 
-        await this._ctx.historyStore.addChatMessage(documentUri, interventionId, {
+        await this._ctx.historyStore.addChatMessage(targetUri, interventionId, {
             sender: 'user',
             message: text,
         });
 
-        const detail = await this.findDetail(documentUri, interventionId);
+        const detail = await this.findDetail(targetUri, interventionId);
         if (!detail) {
             this._ctx.postMessage({
                 type: 'SET_CHAT_LOADING',
@@ -245,7 +316,7 @@ export class OnDemandIpcHandler {
             return;
         }
 
-        await this.executeChatQuery({ ...params, detail });
+        await this.executeChatQuery({ ...params, documentUri: targetUri, detail });
     }
 
     /**
@@ -257,13 +328,14 @@ export class OnDemandIpcHandler {
         payload: { interventionId: string; userInstruction: string; personaId: PersonaId },
     ): Promise<void> {
         const { interventionId, userInstruction, personaId } = payload;
+        const targetUri = this.resolveDocumentUri(documentUri, interventionId);
         this._ctx.postMessage({
             type: 'SET_REFINE_LOADING',
             payload: { interventionId, isLoading: true },
         });
 
         try {
-            const detail = await this.findDetail(documentUri, interventionId);
+            const detail = await this.findDetail(targetUri, interventionId);
             if (!detail) {
                 return;
             }
@@ -281,21 +353,17 @@ export class OnDemandIpcHandler {
             const newCode = response?.proposedCode ?? detail.proposedCode;
             const newSummary = response?.summary ?? detail.summary;
 
-            const updated = await this._ctx.historyStore.updateProposal(
-                documentUri,
-                interventionId,
-                {
-                    proposedCode: newCode,
-                    summary: newSummary,
-                },
-            );
+            const updated = await this._ctx.historyStore.updateProposal(targetUri, interventionId, {
+                proposedCode: newCode,
+                summary: newSummary,
+            });
 
             if (updated) {
                 this._ctx.postMessage({
                     type: 'UPDATE_INTERVENTION_DETAIL',
                     payload: { interventionId, detail: updated },
                 });
-                this.sendSyncHistory(documentUri);
+                this.sendSyncHistory(targetUri);
             }
         } catch {
             this._ctx.postMessage({

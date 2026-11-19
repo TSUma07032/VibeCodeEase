@@ -1,7 +1,10 @@
 /**
  * [Why/Intent] SidebarDialogueView コンポーネントの単体テストスイート。
- * ⬅️ 戻るボタン、サマリー表示、💡 方針修正（Refine）フォーム、Diffプレビュー、
- * AIチャット（ペルソナ履歴表示）、および操作ボタングループの各アクションとローディング/エラー制御を検証する。
+ * ⬅️ 戻るボタン、📝 変更理由（ペルソナ反映）、🔍 読み取り専用Diffプレビュー、
+ * 💬 AIチャット（ペルソナ別の初手セリフ自動表示＋履歴表示＋送信）、
+ * および「✓ 採用」「✕ 破棄」の2大アクションと、採用後・破棄後からのやり直しモードを網羅検証する。
+ * また、廃止された「変更方針の修正（Refine）」「⏪ アンドゥ」「⏩ 適用」「差分内の[採用]/[破棄]」が存在しないことを
+ * Negative Assertion（RULE-005）で厳格に検証する。
  */
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -43,12 +46,9 @@ describe('SidebarDialogueView Test Suite', () => {
             <SidebarDialogueView
                 detail={mockDetail}
                 onBack={onBack}
-                onRefine={vi.fn()}
-                isRefining={false}
                 onSendMessage={vi.fn()}
                 isChatLoading={false}
                 onApply={vi.fn()}
-                onUndo={vi.fn()}
                 onReject={vi.fn()}
             />,
         );
@@ -59,135 +59,129 @@ describe('SidebarDialogueView Test Suite', () => {
         expect(onBack).toHaveBeenCalledTimes(1);
     });
 
-    it('サマリー表示と変更方針修正（Refine）フォームの入力・再生成が機能すること', () => {
-        const onRefine = vi.fn();
+    it('変更理由・読み取り専用差分が表示され、廃止された「変更方針の修正」「アンドゥ」「適用」「採用/破棄」が存在しないこと（RULE-005）', () => {
         render(
             <SidebarDialogueView
                 detail={mockDetail}
                 onBack={vi.fn()}
-                onRefine={onRefine}
-                isRefining={false}
                 onSendMessage={vi.fn()}
                 isChatLoading={false}
                 onApply={vi.fn()}
-                onUndo={vi.fn()}
                 onReject={vi.fn()}
             />,
         );
 
+        // 変更理由と差分の存在確認
+        expect(screen.getByText('📝 変更理由')).toBeInTheDocument();
         expect(screen.getByText(/useMemoを使用して重い計算をキャッシュします/)).toBeInTheDocument();
+        expect(screen.getByText('🔍 変更差分')).toBeInTheDocument();
+        expect(screen.getByText('- const total = calculate(items);')).toBeInTheDocument();
+        expect(
+            screen.getByText('+ const total = useMemo(() => calculate(items), [items]);'),
+        ).toBeInTheDocument();
 
-        const input = screen.getByPlaceholderText(/こういう方向で変えて/i);
-        fireEvent.change(input, { target: { value: 'useCallbackにして' } });
-
-        const regenerateBtn = screen.getByRole('button', { name: /コードを再生成/i });
-        fireEvent.click(regenerateBtn);
-
-        expect(onRefine).toHaveBeenCalledWith('useCallbackにして');
+        // Negative Assertions: 廃止されたUI要素が存在しないこと
+        expect(screen.queryByText(/変更方針の修正/i)).toBeNull();
+        expect(screen.queryByPlaceholderText(/こういう方向で変えて/i)).toBeNull();
+        expect(screen.queryByRole('button', { name: /アンドゥ/i })).toBeNull();
+        expect(screen.queryByRole('button', { name: /⏩ 適用/i })).toBeNull();
+        expect(screen.queryByTestId('diff-toolbar')).toBeNull();
+        expect(screen.queryByTestId('diff-accept-btn')).toBeNull();
+        expect(screen.queryByTestId('diff-discard-btn')).toBeNull();
     });
 
-    it('isRefiningがtrueの時に再生成ボタンがdisabledになること', () => {
-        render(
-            <SidebarDialogueView
-                detail={mockDetail}
-                onBack={vi.fn()}
-                onRefine={vi.fn()}
-                isRefining={true}
-                onSendMessage={vi.fn()}
-                isChatLoading={false}
-                onApply={vi.fn()}
-                onUndo={vi.fn()}
-                onReject={vi.fn()}
-            />,
-        );
-
-        const regenerateBtn = screen.getByRole('button', { name: /再生成中|コードを再生成/i });
-        expect(regenerateBtn).toBeDisabled();
-    });
-
-    it('refineErrorが渡された場合にエラーメッセージが表示されること', () => {
-        render(
-            <SidebarDialogueView
-                detail={mockDetail}
-                onBack={vi.fn()}
-                onRefine={vi.fn()}
-                isRefining={false}
-                refineError="AIによる再推敲に失敗しました"
-                onSendMessage={vi.fn()}
-                isChatLoading={false}
-                onApply={vi.fn()}
-                onUndo={vi.fn()}
-                onReject={vi.fn()}
-            />,
-        );
-
-        expect(screen.getByText(/AIによる再推敲に失敗しました/)).toBeInTheDocument();
-    });
-
-    it('操作ボタン（適用・アンドゥ・却下）のクリックで対応コールバックが呼ばれること', () => {
+    it('「✓ 採用」と「✕ 破棄」ボタンが動作し、採用後・破棄後でもやり直しトグルが可能であること', () => {
         const onApply = vi.fn();
-        const onUndo = vi.fn();
         const onReject = vi.fn();
-
         const { rerender } = render(
             <SidebarDialogueView
-                detail={mockDetail} // pending
+                detail={mockDetail}
                 onBack={vi.fn()}
-                onRefine={vi.fn()}
-                isRefining={false}
                 onSendMessage={vi.fn()}
                 isChatLoading={false}
                 onApply={onApply}
-                onUndo={onUndo}
                 onReject={onReject}
             />,
         );
 
-        const applyBtn = screen.getByRole('button', { name: /適用/i });
+        // 1. pending状態: 「✓ 採用」と「✕ 破棄」の両方が表示
+        const applyBtn = screen.getByTestId('apply-proposal-btn');
+        const discardBtn = screen.getByTestId('discard-proposal-btn');
+        expect(applyBtn).toBeInTheDocument();
+        expect(discardBtn).toBeInTheDocument();
+
         fireEvent.click(applyBtn);
         expect(onApply).toHaveBeenCalledWith('intv-1');
 
-        const rejectBtn = screen.getByRole('button', { name: /却下/i });
-        fireEvent.click(rejectBtn);
+        fireEvent.click(discardBtn);
         expect(onReject).toHaveBeenCalledWith('intv-1');
 
-        // applied状態にしてアンドゥを検証
+        // 2. applied状態に遷移: 「✓ 採用中」バッジと「✕ 破棄に戻す」ボタンが表示される
         rerender(
             <SidebarDialogueView
                 detail={{ ...mockDetail, status: 'applied' }}
                 onBack={vi.fn()}
-                onRefine={vi.fn()}
-                isRefining={false}
                 onSendMessage={vi.fn()}
                 isChatLoading={false}
                 onApply={onApply}
-                onUndo={onUndo}
                 onReject={onReject}
             />,
         );
 
-        const undoBtn = screen.getByRole('button', { name: /元に戻す|アンドゥ/i });
-        fireEvent.click(undoBtn);
-        expect(onUndo).toHaveBeenCalledWith('intv-1');
+        expect(screen.getByTestId('applied-banner')).toBeInTheDocument();
+        expect(screen.getByTestId('applied-status-btn')).toBeInTheDocument();
+        const rollbackBtn = screen.getByTestId('rollback-to-discard-btn');
+        expect(rollbackBtn).toBeInTheDocument();
+        fireEvent.click(rollbackBtn);
+        expect(onReject).toHaveBeenCalledWith('intv-1');
+
+        // 3. dismissed状態に遷移: 「✕ 破棄済」バッジと「✓ 採用し直す」ボタンが表示される
+        rerender(
+            <SidebarDialogueView
+                detail={{ ...mockDetail, status: 'dismissed' }}
+                onBack={vi.fn()}
+                onSendMessage={vi.fn()}
+                isChatLoading={false}
+                onApply={onApply}
+                onReject={onReject}
+            />,
+        );
+
+        expect(screen.getByTestId('dismissed-banner')).toBeInTheDocument();
+        expect(screen.getByTestId('discarded-status-btn')).toBeInTheDocument();
+        const reapplyBtn = screen.getByTestId('reapply-btn');
+        expect(reapplyBtn).toBeInTheDocument();
+        fireEvent.click(reapplyBtn);
+        expect(onApply).toHaveBeenCalledWith('intv-1');
     });
 
-    it('ペルソナ履歴付きチャットメッセージが正しく描画されること', () => {
+    it('ペルソナに応じた初手のセリフとチャットメッセージが描画され、新規メッセージを送信できること', () => {
+        const onSendMessage = vi.fn();
         render(
             <SidebarDialogueView
                 detail={mockDetail}
                 onBack={vi.fn()}
-                onRefine={vi.fn()}
-                isRefining={false}
-                onSendMessage={vi.fn()}
+                onSendMessage={onSendMessage}
                 isChatLoading={false}
                 onApply={vi.fn()}
-                onUndo={vi.fn()}
                 onReject={vi.fn()}
             />,
         );
 
+        // 初手のセリフ（mentor）が自動補完されていること
+        expect(
+            screen.getByText(/こんにちは！やさしい解説メンターです/i),
+        ).toBeInTheDocument();
+
+        // 履歴のメッセージが表示されていること
         expect(screen.getByText(/依存配列はどう設定すべき？/)).toBeInTheDocument();
         expect(screen.getByText(/items を渡せば大丈夫です！/)).toBeInTheDocument();
-        expect(screen.getByText(/メンター/i)).toBeInTheDocument();
+        expect(screen.getAllByText(/メンター/i).length).toBeGreaterThan(0);
+
+        // チャット送信
+        const chatInput = screen.getByPlaceholderText(/質問や相談を入力/i);
+        fireEvent.change(chatInput, { target: { value: 'パフォーマンスへの影響は？' } });
+        fireEvent.click(screen.getByRole('button', { name: '送信' }));
+        expect(onSendMessage).toHaveBeenCalledWith('パフォーマンスへの影響は？');
     });
 });

@@ -1,8 +1,9 @@
 /**
  * [Why/Intent] App ルートコンポーネントの統合単体テストスイート。
- * 廃止された旧TabBar・MirrorEditor・旧SettingsPanelの非存在検証、
- * 初期画面（SidebarInitialView）から対話パネル（SidebarDialogueView）への画面遷移（sidebarMode）、
- * 各種IPCメッセージ（SYNC_SETTINGS, SYNC_HISTORY_STATE, EXPAND_INTERVENTION_DETAIL, NAVIGATE_TO_SETTINGS 等）の送受信を検証する。
+ * 廃止された旧TabBar・旧SettingsPanelの非存在検証、
+ * 初期画面（SidebarInitialView: 上部「💻 AI作業コード」＋下部「📋 提案・依頼リスト（掲示板）」）から
+ * 2番目以降の「詳細」ボタンによる対話パネル（SidebarDialogueView）への画面遷移、
+ * 各種IPCメッセージ（SYNC_DOCUMENT, SYNC_SETTINGS, SYNC_HISTORY_STATE, EXPAND_INTERVENTION_DETAIL, NAVIGATE_TO_SETTINGS 等）の送受信を検証する。
  */
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -13,15 +14,20 @@ import { mockPostMessage } from './test/setup';
 import type { WebviewIntervention } from './types';
 
 describe('App Component', () => {
-    it('初期マウント時に ready メッセージを送信し、初期画面（SidebarInitialView）を描画すること', () => {
+    it('初期マウント時に ready メッセージを送信し、初期画面（上部：AI作業コード、下部：提案・依頼リスト）を描画すること', () => {
         render(<App />);
         expect(mockPostMessage).toHaveBeenCalledWith({ command: 'ready' });
         expect(screen.getByTestId('sidebar-initial-view')).toBeInTheDocument();
-        expect(screen.getByText('⚡ 簡易設定')).toBeInTheDocument();
-        expect(screen.getByText('🔑 Gemini API Key')).toBeInTheDocument();
+        expect(screen.getByTestId('ai-workspace-code')).toBeInTheDocument();
+        expect(
+            screen.getByTestId('intervention-bulletin-board'),
+        ).toBeInTheDocument();
+        expect(screen.getByText('💻 AI作業コード')).toBeInTheDocument();
+        expect(screen.getByText('📋 提案・依頼リスト')).toBeInTheDocument();
+        expect(screen.getByTestId('toggle-settings-btn')).toBeInTheDocument();
     });
 
-    it('SYNC_SETTINGS 受信時に簡易設定およびAPIキー状態が更新されること', () => {
+    it('SYNC_SETTINGS 受信および「⚙️ 設定」ボタン押下時に簡易設定およびAPIキー状態が表示されること', () => {
         render(<App />);
         act(() => {
             window.dispatchEvent(
@@ -39,12 +45,28 @@ describe('App Component', () => {
             );
         });
 
+        fireEvent.click(screen.getByTestId('toggle-settings-btn'));
+        expect(screen.getByText('⚡ 簡易設定')).toBeInTheDocument();
+        expect(screen.getByText('🔑 Gemini API Key')).toBeInTheDocument();
         expect(screen.getByText(/設定済/i)).toBeInTheDocument();
     });
 
-    it('SYNC_HISTORY_STATE 受信時に提案リストが描画され、アイテムクリックで SidebarDialogueView へ遷移すること', () => {
+    it('SYNC_DOCUMENT と SYNC_HISTORY_STATE 受信時に上部AI作業コード（新提案インライン＋過去提案ちっちゃいアイコン）と下部掲示板が描画され、2番目の「詳細」で2番目のチャットが開くこと', () => {
         render(<App />);
         act(() => {
+            window.dispatchEvent(
+                new MessageEvent('message', {
+                    data: {
+                        type: 'SYNC_DOCUMENT',
+                        fileName: 'c:/workspace/src/demo.ts',
+                        text: [
+                            'const oldVal = 1;',
+                            'const a = calc();',
+                            'JSON.parse(raw);',
+                        ].join('\n'),
+                    },
+                }),
+            );
             window.dispatchEvent(
                 new MessageEvent('message', {
                     data: {
@@ -58,12 +80,30 @@ describe('App Component', () => {
                                     summary: 'useMemoを使用します',
                                     range: {
                                         start: { line: 0, character: 0 },
-                                        end: { line: 5, character: 0 },
+                                        end: { line: 0, character: 15 },
+                                    },
+                                    status: 'applied',
+                                    personaId: 'mentor',
+                                    originalCode: 'var oldVal = 1;',
+                                    proposedCode: 'const oldVal = 1;',
+                                    createdAt: '2026-11-05T00:00:00Z',
+                                    updatedAt: '2026-11-05T00:00:00Z',
+                                },
+                                {
+                                    id: 'int-2',
+                                    title: 'エラーハンドリングの追加',
+                                    summary: 'try-catchで安全に保護します',
+                                    range: {
+                                        start: { line: 2, character: 0 },
+                                        end: { line: 2, character: 15 },
                                     },
                                     status: 'pending',
                                     personaId: 'mentor',
-                                    createdAt: '2026-11-05T00:00:00Z',
-                                    updatedAt: '2026-11-05T00:00:00Z',
+                                    originalCode: 'JSON.parse(raw);',
+                                    proposedCode:
+                                        'try { JSON.parse(raw); } catch {}',
+                                    createdAt: '2026-11-05T00:01:00Z',
+                                    updatedAt: '2026-11-05T00:01:00Z',
                                 },
                             ],
                         },
@@ -72,16 +112,41 @@ describe('App Component', () => {
             );
         });
 
-        expect(screen.getByText('不要な再計算のメモ化')).toBeInTheDocument();
+        // AI作業コード上に、過去の提案（int-1）は右端のちっちゃいアイコン、新しい提案（int-2）はインラインボックスとして表示されること
+        expect(
+            screen.getByTestId('workspace-past-icon-int-1'),
+        ).toHaveTextContent('✓介入1');
+        expect(
+            screen.getByTestId('workspace-pending-box-int-2'),
+        ).toBeInTheDocument();
 
-        // アイテムをクリックして対話画面へ遷移
-        fireEvent.click(screen.getByText('不要な再計算のメモ化'));
+        // 下部掲示板には過去分も含めて両方並ぶこと
+        expect(
+            screen.getByText('介入1：不要な再計算のメモ化'),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByText('介入2：エラーハンドリングの追加'),
+        ).toBeInTheDocument();
+
+        // 2番目の介入（介入2）をクリックしてトグルを展開
+        fireEvent.click(screen.getByTestId('proposal-toggle-int-2'));
+        expect(screen.getByTestId('proposal-body-int-2')).toBeInTheDocument();
+
+        // 2番目の「詳細」ボタンをクリックして対話画面へ遷移
+        fireEvent.click(screen.getByTestId('proposal-detail-int-2'));
 
         expect(mockPostMessage).toHaveBeenCalledWith({
             type: 'REQUEST_EXPAND_DETAIL',
-            payload: { interventionId: 'int-1' },
+            payload: { interventionId: 'int-2' },
         });
         expect(screen.getByTestId('sidebar-dialogue-view')).toBeInTheDocument();
+        // 1番目ではなく2番目のタイトル・要約が表示されていること
+        expect(
+            screen.getByText('エラーハンドリングの追加'),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByText('try-catchで安全に保護します'),
+        ).toBeInTheDocument();
     });
 
     it('EXPAND_INTERVENTION_DETAIL 受信時に SidebarDialogueView へ切り替わり詳細が描画されること', () => {
@@ -164,7 +229,7 @@ describe('App Component', () => {
         expect(screen.queryByTestId('sidebar-dialogue-view')).toBeNull();
     });
 
-    it('NAVIGATE_TO_SETTINGS 受信時に詳細表示を解除して SidebarInitialView（簡易設定＋APIキー画面）を表示すること', () => {
+    it('NAVIGATE_TO_SETTINGS 受信時に詳細表示を解除して SidebarInitialView の設定パネルを開いた状態で表示すること', () => {
         render(<App />);
         act(() => {
             window.dispatchEvent(
@@ -209,10 +274,11 @@ describe('App Component', () => {
         });
 
         expect(screen.getByTestId('sidebar-initial-view')).toBeInTheDocument();
+        expect(screen.getByTestId('sidebar-settings-panel')).toBeInTheDocument();
         expect(screen.queryByTestId('sidebar-dialogue-view')).toBeNull();
     });
 
-    it('撤去された旧UI（TabBar、MirrorEditor、旧SettingsPanel）が存在しないこと', () => {
+    it('撤去された旧UI（TabBar、旧SettingsPanel）が存在しないこと', () => {
         render(<App />);
         expect(screen.queryByText('[💻 Code]')).toBeNull();
         expect(screen.queryByText('[⚙️ Settings]')).toBeNull();

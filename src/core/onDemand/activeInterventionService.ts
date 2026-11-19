@@ -1,11 +1,18 @@
 /**
  * [Why/Intent] ユーザー逆指名（右クリックコンテキストメニュー ➜ showInputBox ➜ 提案生成）を
- * 統括するサービス。選択範囲の検証、LLM呼出、UUID採番、履歴保存、Webview展開連携を行う。
+ * 統括するサービス。選択範囲の検証、現在のペルソナに応じたLLM呼出、UUID採番、履歴保存、Webview展開連携を行う。
  */
 import * as vscode from 'vscode';
+import { GlobalState } from '../../state/globalState';
 import type { InterventionDetail } from '../../types/onDemandIntervention';
 import type { ILlmGateway } from '../llm/llmGateway';
-import { ACTIVE_INTERVENTION_RESPONSE_SCHEMA } from '../llm/promptBuilder';
+import {
+    ACTIVE_INTERVENTION_RESPONSE_SCHEMA,
+    formatInterventionOneLiner,
+    formatPersonaSummary,
+    getPersonaOpeningMessage,
+    PERSONA_PROMPTS,
+} from '../llm/promptBuilder';
 import type { InterventionHistoryStore } from './interventionHistoryStore';
 
 /**
@@ -70,7 +77,8 @@ export class ActiveInterventionService {
 
     /**
      * [Why/Intent] 指定された指示テキストと選択範囲のコードに基づき、
-     * LLMゲートウェイへ構造化提案の生成をリクエストし、履歴ストアへ永続化して採番したIDを返却する。
+     * 選択中のペルソナを反映した構造化提案をLLMゲートウェイへリクエストし、
+     * 20〜30文字以内のタイトルおよび初手セリフ付きで履歴ストアへ永続化して採番したIDを返却する。
      */
     public async requestActiveInterventionWithInstruction(
         editor: vscode.TextEditor,
@@ -85,17 +93,22 @@ export class ActiveInterventionService {
             return undefined;
         }
 
+        const personaId = GlobalState.getInstance().personaId;
+        const personaPrompt = PERSONA_PROMPTS[personaId] ?? PERSONA_PROMPTS.mentor;
+
         const prompt = [
+            personaPrompt,
             '以下のコードについて、ユーザーの指示に基づきリファクタリング・改善案を作成してください。',
+            '【厳守ルール】: コメントアウトのみの修正やTODOコメント追加のみの提案は禁止です。proposedCodeには必ず実行可能な改善後コードを記述してください。',
             `【指示】: ${instruction}`,
             '【対象コード】:',
             '```',
             selectedCode,
             '```',
             '以下のJSON形式で回答してください:',
-            'title: 簡潔な提案タイトル',
-            'summary: 提案理由と変更内容のサマリー',
-            'proposedCode: 改善後の置き換えコード',
+            'title: 20〜30文字以内の簡潔な提案タイトル（介入一言）',
+            'summary: 選択中のペルソナの口調・観点に基づく提案理由と変更内容の解説',
+            'proposedCode: 改善後の置き換えコード（実行可能なコード）',
         ].join('\n');
 
         const response = await this._gateway.generateStructured<ActiveInterventionResponse>({
@@ -104,13 +117,29 @@ export class ActiveInterventionService {
             token: new vscode.CancellationTokenSource().token,
         });
 
+        const detail = this.createActiveDetail(editor, instruction, response);
+        const docUri = editor.document.uri.toString();
+        await this._historyStore.saveIntervention(docUri, detail);
+
+        return detail.id;
+    }
+
+    private createActiveDetail(
+        editor: vscode.TextEditor,
+        instruction: string,
+        response: ActiveInterventionResponse | undefined,
+    ): InterventionDetail {
+        const personaId = GlobalState.getInstance().personaId;
+        const selectedCode = editor.document.getText(editor.selection);
         const interventionId = `int-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
         const now = new Date().toISOString();
+        const formattedTitle = formatInterventionOneLiner(response?.title ?? 'AIリファクタ提案');
+        const formattedSummary = formatPersonaSummary(personaId, response?.summary ?? instruction);
 
-        const detail: InterventionDetail = {
+        return {
             id: interventionId,
-            title: response?.title ?? 'AIリファクタ提案',
-            summary: response?.summary ?? instruction,
+            title: formattedTitle,
+            summary: formattedSummary,
             range: {
                 start: {
                     line: editor.selection.start.line,
@@ -122,17 +151,20 @@ export class ActiveInterventionService {
                 },
             },
             status: 'pending',
-            personaId: 'concise',
+            personaId,
             originalCode: selectedCode,
             proposedCode: response?.proposedCode ?? selectedCode,
             createdAt: now,
             updatedAt: now,
-            chatHistory: [],
+            chatHistory: [
+                {
+                    id: `msg-init-${Date.now()}`,
+                    sender: 'ai',
+                    message: getPersonaOpeningMessage(personaId, formattedTitle),
+                    timestamp: now,
+                    personaId,
+                },
+            ],
         };
-
-        const docUri = editor.document.uri.toString();
-        await this._historyStore.saveIntervention(docUri, detail);
-
-        return interventionId;
     }
 }
