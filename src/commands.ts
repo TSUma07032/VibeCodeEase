@@ -39,6 +39,8 @@ function registerSwitchModeCommand(actionLogService: ActionLogService): vscode.D
         const selected = await vscode.window.showQuickPick(items, {
             title: 'vibeCodeEase: 動作モード選択',
             placeHolder: 'vibeCodeEase の動作モードを選択してください',
+            matchOnDescription: true,
+            matchOnDetail: true,
         });
 
         if (selected) {

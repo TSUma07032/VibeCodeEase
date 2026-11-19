@@ -289,12 +289,11 @@ function registerSensitiveGuardTests(): void {
 }
 
 /**
- * [Why/Intent] LlmConfigRepository の SecretStorage / Configuration 協調動作テスト登録
+ * [Why/Intent] LlmConfigRepository が SecretStorage からのみ APIキーを取得するテスト登録
  */
 function registerConfigRepositoryTests(): void {
-    test('LlmConfigRepository が SecretStorage を最優先とし、未設定時は Configuration へフォールバックすること', async () => {
+    test('LlmConfigRepository が SecretStorage のみから APIキーを取得すること', async () => {
         const configMock = mockVscodeConfiguration({
-            'vibecodeease.geminiApiKey': 'config-fallback-key',
             'vibecodeease.llmProvider': 'gemini',
             'vibecodeease.llmModel': 'gemini-3.5-flash-lite',
         });
@@ -303,11 +302,11 @@ function registerConfigRepositoryTests(): void {
             const secrets = new InMemorySecretStorage();
             const repo = new LlmConfigRepository(secrets);
 
-            // SecretStorage が空の時、Configuration からフォールバック取得
-            const fallbackKey = await repo.getApiKey();
-            assert.strictEqual(fallbackKey, 'config-fallback-key');
+            // SecretStorage が空の時、undefinedを返す
+            const emptyKey = await repo.getApiKey();
+            assert.strictEqual(emptyKey, undefined);
 
-            // SecretStorage にキーを設定すると、SecretStorage が最優先となる
+            // SecretStorage にキーを設定すると取得できる
             let eventFired = false;
             repo.onDidChangeConfig(() => {
                 eventFired = true;
@@ -316,9 +315,9 @@ function registerConfigRepositoryTests(): void {
             assert.strictEqual(await repo.getApiKey(), 'secret-priority-key');
             assert.strictEqual(eventFired, true);
 
-            // 空文字を渡すと SecretStorage から削除され、再度 Configuration へフォールバック
+            // 空文字を渡すと SecretStorage から削除され、undefinedを返す
             await repo.setApiKey('');
-            assert.strictEqual(await repo.getApiKey(), 'config-fallback-key');
+            assert.strictEqual(await repo.getApiKey(), undefined);
 
             const currentConfig = repo.getLlmConfig();
             assert.strictEqual(currentConfig.provider, 'gemini');

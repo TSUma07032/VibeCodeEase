@@ -40,3 +40,12 @@
 ## 2026-10-27 - コマンド実行時のポップアップ通知をステータスバーメッセージに変更
 **学び:** コマンド（例：`helloWorld`）実行時の単なる情報通知に `showInformationMessage` を使用すると、ユーザーの作業領域を塞ぎ、閉じる操作を強いるためUXが低下する。
 **アクション:** ユーザーのインタラクティブな確認を必要としない単なる情報通知は、作業フローを阻害しないように `setStatusBarMessage`（アイコン付き・数秒で消える設定）を使用する。
+## 2024-11-07 - Hoverツールチップのネイティブアイコン対応
+**学び:** 拡張機能のHoverツールチップ内で絵文字の代わりにVS Code標準のProduct Icons（例：`$(sparkle)`）を使用するには、`MarkdownString`の`supportThemeIcons`プロパティを`true`に設定する必要がある。これにより、エディタ全体のデザインと言語が統一され、より自然なUXが提供できる。
+**アクション:** 次回以降、Hoverや各種通知で視覚的な合図が必要な場合は、OS依存の絵文字を避け、標準アイコン（`$(icon-name)`）と`supportThemeIcons = true`の組み合わせを徹底する。
+## 2024-11-08 - 提案生成プログレスの非侵入型UIへの改善
+**学び:** `vscode.window.withProgress` で時間のかかる処理を実行する際、`ProgressLocation.Notification` を使用すると画面右下にポップアップが表示され続け、開発者の視界を遮りフローを阻害する。
+**アクション:** 開発者の作業を邪魔しないよう、進捗表示には常に `ProgressLocation.Window` を優先し、ステータスバーでの控えめな通知を採用する。
+## 2024-11-11 - QuickPickの検索性向上
+**学び:** `vscode.window.showQuickPick`はデフォルトで`label`のみを検索対象とするため、ユーザーが詳細な情報（`description`や`detail`）を元に項目を検索できないという課題がある。
+**アクション:** `showQuickPick`を使用する際は、常に`matchOnDescription: true`および`matchOnDetail: true`を設定し、検索性と開発者体験（DX）を向上させる。

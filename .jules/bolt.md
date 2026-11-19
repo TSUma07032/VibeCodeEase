@@ -1,4 +1,4 @@
-﻿## 2024-06-11 - Fast Substring Matching on Hot Paths
+## 2024-06-11 - Fast Substring Matching on Hot Paths
 **Learning:** In VS Code extensions, Providers like `CodeActionProvider` can run very frequently (on every keystroke or cursor movement). Using `String.prototype.match(/.../)` for simple static string searches introduces measurable regex engine overhead compared to simple substring search via `String.prototype.indexOf()`.
 **Action:** Always prefer `indexOf` or `includes` over regular expressions for static substring matching, especially in hot paths like Language Providers, to minimize event loop blocking time.
 ## 2024-08-11 - Early Returns in Code Action Providers
@@ -47,3 +47,18 @@
 ## 2024-11-25 - Early Break Optimization on Cache Updates
 **学び:** `InterventionManager.handleDocumentChange`において、`includes`の使用と不要なループの走査によるパフォーマンスの低下が確認されました。ソート済みの配列の特性を活かしていない全件走査が存在していました。
 **アクション:** ホットパス内の`includes`を`indexOf`に置き換え、ソート済み配列(`results`)に対する探索では`result.range.start.line > change.range.end.line`の時点で早期に`break`を行うことで処理時間を最適化します。
+## 2026-10-18 - 頻繁な文字列補間と配列アロケーションの排除 (O(n) String Generation)
+**学び:** 言語プロバイダーが頻繁に呼び出すキャッシュ取得処理（`SharedAnalysisCache.getResults`）の内部において、無視対象リスト(`ignoredIssues`)のフィルタリングのために毎度 $O(N)$ の要素すべてに対して `${uri}::${source}...` のような文字列補間を行いIDを再計算すると、イベントループでの大量のメモリアロケーションとGCを誘発しパフォーマンスを著しく低下させる。また、外部結果がない場合でも常に `[...cached, ...external]` でスプレッド演算子による新しい配列生成を行うことはオーバーヘッドとなる。
+**アクション:** 配列要素の走査等において計算コストの高い一意なID生成が必要な場合は、オブジェクト自身（`_id`等の非表示プロパティ）に生成結果をメモ化し、再計算を避けるパターンを適用する。また、不要な配列アロケーションは事前に長さをチェックしゼロであれば元の配列をそのまま返すことで回避する。
+## 2024-11-26 - Fast Trailing Spaces Detection on Hot Paths
+**学び:** `CodeAnalyzer` などの頻繁に実行される解析処理において、`lineText.match(/^(.*\S)( +)$/)` のような正規表現を毎行実行することはパフォーマンスの低下を招く。特に長い行や大量の行が存在する場合、正規表現エンジンのオーバーヘッドは大きくなる。
+**アクション:** 単純な末尾の空白検知などの用途では、正規表現を避け、文字列の後方からのループ処理（`charCodeAt` と `while`）による軽量な走査を優先することで、イベントループのブロッキングを最小限に抑え処理時間を大幅に削減（今回のベンチマークでは約179msから約25msへ改善）する。
+## 2026-10-19 - Fast Newline Counting in Hot Paths
+**学び:** `change.text.match(/\n/g)` を用いて追加行数を計算する処理は、大量の配列アロケーションと正規表現のオーバーヘッドによりイベントループをブロックし、パフォーマンス低下を招く。また、ネストされたループ内で不変な計算（追加行数の計算など）を繰り返すことは非効率である。
+**アクション:** イベントループ等のホットパス内では高コストな配列割当を避け、`indexOf`を用いた軽量な走査を行う。また、ループ内で不変な条件は必ず外側にホイストし、無駄な再計算を防ぐ。
+## 2024-11-27 - O(N) String Interpolation Elimination via Property Memoization
+**学び:** `InterventionManager.generateIssueId` において、頻繁に呼び出されるメソッド内で毎度文字列補間を行うと、無駄なメモリアロケーションが発生しパフォーマンスが劣化する。また引数(`documentUri`)の変更を考慮しない単一プロパティ(`_id`)へのキャッシュは不具合(stale cache)の原因となる。
+**アクション:** 一意なIDの生成が必要な場合は、オブジェクト自身（`_id`と`_uri`等）に依存する引数と共に生成結果をメモ化し、再計算を避けるパターンを適用することで、安全に実行時間を大幅に削減（今回のベンチマークでは約46msから約9msへ改善）する。
+## 2026-11-20 - Fast Substring Extraction with indexOf on Hot Paths
+**学び:** `extractReplacementFromDiagnostic` など、高頻度で実行されるエラー処理ループ内で `String.prototype.match` と正規表現を用いると、パースとアロケーションによるオーバーヘッドでパフォーマンスが低下する。
+**アクション:** 単一の文字列境界（引用符など）に囲まれた部分文字列を抽出する場合、正規表現を避け、`indexOf` を用いた文字スキャンと `substring` による切り出しを優先することで、イベントループのブロッキングを最小化する。

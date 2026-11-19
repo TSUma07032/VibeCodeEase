@@ -126,6 +126,7 @@ export class InlineInterventionHoverProvider implements vscode.HoverProvider {
         const md = new vscode.MarkdownString(mdLines.join('\n'));
         md.isTrusted = true;
         md.supportHtml = true;
+        md.supportThemeIcons = true;
 
         return new vscode.Hover(md);
     }
